@@ -1,0 +1,57 @@
+# Build results
+bin/
+obj/
+out/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# VS Code settings
+.vscode/
+
+# Rider settings
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Entity Framework Migrations build artifacts
+Migrations/
+
+# ASP.NET Core secrets
+secrets.json
+
+# Publish output
+publish/
+*.publish.xml
+
+# npm packages (if using Node.js for frontend)
+node_modules/
+
+# Environment files
+.env
+.env.*
+
+# Database files
+*.mdf
+*.ldf
+
+# Test results
+TestResults/
+*.trx
+
+# Others
+*.swp
+*.bak
+*.tmp
+
+# Ignore sensitive config (if you ever add them)
+appsettings.Development.json
+appsettings.Local.json
