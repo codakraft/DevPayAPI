@@ -1,0 +1,5 @@
+C:\Users\ayobamiea\Desktop\work\Lending\LendingSolution\LendingSolution.Infrastructure\obj\Debug\net6.0\LendingSolution.Infrastructure.csproj.AssemblyReference.cache
+C:\Users\ayobamiea\Desktop\work\Lending\LendingSolution\LendingSolution.Infrastructure\obj\Debug\net6.0\LendingSolution.Infrastructure.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\ayobamiea\Desktop\work\Lending\LendingSolution\LendingSolution.Infrastructure\obj\Debug\net6.0\LendingSolution.Infrastructure.AssemblyInfoInputs.cache
+C:\Users\ayobamiea\Desktop\work\Lending\LendingSolution\LendingSolution.Infrastructure\obj\Debug\net6.0\LendingSolution.Infrastructure.AssemblyInfo.cs
+C:\Users\ayobamiea\Desktop\work\Lending\LendingSolution\LendingSolution.Infrastructure\obj\Debug\net6.0\LendingSolution.Infrastructure.csproj.CoreCompileInputs.cache

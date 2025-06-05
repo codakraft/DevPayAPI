@@ -1,0 +1,13 @@
+C:\Users\ayobamiea\Desktop\work\Lending\LendingSolution\LendingSolution.Core\bin\Debug\net8.0\LendingSolution.Core.deps.json
+C:\Users\ayobamiea\Desktop\work\Lending\LendingSolution\LendingSolution.Core\bin\Debug\net8.0\LendingSolution.Core.dll
+C:\Users\ayobamiea\Desktop\work\Lending\LendingSolution\LendingSolution.Core\bin\Debug\net8.0\LendingSolution.Core.pdb
+C:\Users\ayobamiea\Desktop\work\Lending\LendingSolution\LendingSolution.Core\obj\Debug\net8.0\LendingSolution.Core.csproj.AssemblyReference.cache
+C:\Users\ayobamiea\Desktop\work\Lending\LendingSolution\LendingSolution.Core\obj\Debug\net8.0\LendingSolution.Core.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\ayobamiea\Desktop\work\Lending\LendingSolution\LendingSolution.Core\obj\Debug\net8.0\LendingSolution.Core.AssemblyInfoInputs.cache
+C:\Users\ayobamiea\Desktop\work\Lending\LendingSolution\LendingSolution.Core\obj\Debug\net8.0\LendingSolution.Core.AssemblyInfo.cs
+C:\Users\ayobamiea\Desktop\work\Lending\LendingSolution\LendingSolution.Core\obj\Debug\net8.0\LendingSolution.Core.csproj.CoreCompileInputs.cache
+C:\Users\ayobamiea\Desktop\work\Lending\LendingSolution\LendingSolution.Core\obj\Debug\net8.0\LendingSolution.Core.dll
+C:\Users\ayobamiea\Desktop\work\Lending\LendingSolution\LendingSolution.Core\obj\Debug\net8.0\refint\LendingSolution.Core.dll
+C:\Users\ayobamiea\Desktop\work\Lending\LendingSolution\LendingSolution.Core\obj\Debug\net8.0\LendingSolution.Core.pdb
+C:\Users\ayobamiea\Desktop\work\Lending\LendingSolution\LendingSolution.Core\obj\Debug\net8.0\ref\LendingSolution.Core.dll
+C:\Users\ayobamiea\Desktop\work\Lending\LendingSolution\LendingSolution.Core\obj\Debug\net8.0\LendingSolution.Core.sourcelink.json
