@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\ayobamiea\\Desktop\\work\\Lending\\LendingSolution\\LendingSolution.Application\\LendingSolution.Application.csproj": {}
+    "C:\\Users\\ayobamiea\\Desktop\\LendingSolution\\LendingSolution.Application\\LendingSolution.Application.csproj": {}
   },
   "projects": {
-    "C:\\Users\\ayobamiea\\Desktop\\work\\Lending\\LendingSolution\\LendingSolution.Application\\LendingSolution.Application.csproj": {
+    "C:\\Users\\ayobamiea\\Desktop\\LendingSolution\\LendingSolution.Application\\LendingSolution.Application.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\ayobamiea\\Desktop\\work\\Lending\\LendingSolution\\LendingSolution.Application\\LendingSolution.Application.csproj",
+        "projectUniqueName": "C:\\Users\\ayobamiea\\Desktop\\LendingSolution\\LendingSolution.Application\\LendingSolution.Application.csproj",
         "projectName": "LendingSolution.Application",
-        "projectPath": "C:\\Users\\ayobamiea\\Desktop\\work\\Lending\\LendingSolution\\LendingSolution.Application\\LendingSolution.Application.csproj",
+        "projectPath": "C:\\Users\\ayobamiea\\Desktop\\LendingSolution\\LendingSolution.Application\\LendingSolution.Application.csproj",
         "packagesPath": "C:\\Users\\ayobamiea\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\ayobamiea\\Desktop\\work\\Lending\\LendingSolution\\LendingSolution.Application\\obj\\",
+        "outputPath": "C:\\Users\\ayobamiea\\Desktop\\LendingSolution\\LendingSolution.Application\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\ayobamiea\\AppData\\Roaming\\NuGet\\NuGet.Config"
@@ -26,11 +26,11 @@
           "net8.0": {
             "targetAlias": "net8.0",
             "projectReferences": {
-              "C:\\Users\\ayobamiea\\Desktop\\work\\Lending\\LendingSolution\\LendingSolution.Core\\LendingSolution.Core.csproj": {
-                "projectPath": "C:\\Users\\ayobamiea\\Desktop\\work\\Lending\\LendingSolution\\LendingSolution.Core\\LendingSolution.Core.csproj"
+              "C:\\Users\\ayobamiea\\Desktop\\LendingSolution\\LendingSolution.Core\\LendingSolution.Core.csproj": {
+                "projectPath": "C:\\Users\\ayobamiea\\Desktop\\LendingSolution\\LendingSolution.Core\\LendingSolution.Core.csproj"
               },
-              "C:\\Users\\ayobamiea\\Desktop\\work\\Lending\\LendingSolution\\LendingSolution.Infrastructure\\LendingSolution.Infrastructure.csproj": {
-                "projectPath": "C:\\Users\\ayobamiea\\Desktop\\work\\Lending\\LendingSolution\\LendingSolution.Infrastructure\\LendingSolution.Infrastructure.csproj"
+              "C:\\Users\\ayobamiea\\Desktop\\LendingSolution\\LendingSolution.Infrastructure\\LendingSolution.Infrastructure.csproj": {
+                "projectPath": "C:\\Users\\ayobamiea\\Desktop\\LendingSolution\\LendingSolution.Infrastructure\\LendingSolution.Infrastructure.csproj"
               }
             }
           }
@@ -94,14 +94,14 @@
         }
       }
     },
-    "C:\\Users\\ayobamiea\\Desktop\\work\\Lending\\LendingSolution\\LendingSolution.Core\\LendingSolution.Core.csproj": {
+    "C:\\Users\\ayobamiea\\Desktop\\LendingSolution\\LendingSolution.Core\\LendingSolution.Core.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\ayobamiea\\Desktop\\work\\Lending\\LendingSolution\\LendingSolution.Core\\LendingSolution.Core.csproj",
+        "projectUniqueName": "C:\\Users\\ayobamiea\\Desktop\\LendingSolution\\LendingSolution.Core\\LendingSolution.Core.csproj",
         "projectName": "LendingSolution.Core",
-        "projectPath": "C:\\Users\\ayobamiea\\Desktop\\work\\Lending\\LendingSolution\\LendingSolution.Core\\LendingSolution.Core.csproj",
+        "projectPath": "C:\\Users\\ayobamiea\\Desktop\\LendingSolution\\LendingSolution.Core\\LendingSolution.Core.csproj",
         "packagesPath": "C:\\Users\\ayobamiea\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\ayobamiea\\Desktop\\work\\Lending\\LendingSolution\\LendingSolution.Core\\obj\\",
+        "outputPath": "C:\\Users\\ayobamiea\\Desktop\\LendingSolution\\LendingSolution.Core\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\ayobamiea\\AppData\\Roaming\\NuGet\\NuGet.Config"
@@ -181,14 +181,14 @@
         }
       }
     },
-    "C:\\Users\\ayobamiea\\Desktop\\work\\Lending\\LendingSolution\\LendingSolution.Infrastructure\\LendingSolution.Infrastructure.csproj": {
+    "C:\\Users\\ayobamiea\\Desktop\\LendingSolution\\LendingSolution.Infrastructure\\LendingSolution.Infrastructure.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\ayobamiea\\Desktop\\work\\Lending\\LendingSolution\\LendingSolution.Infrastructure\\LendingSolution.Infrastructure.csproj",
+        "projectUniqueName": "C:\\Users\\ayobamiea\\Desktop\\LendingSolution\\LendingSolution.Infrastructure\\LendingSolution.Infrastructure.csproj",
         "projectName": "LendingSolution.Infrastructure",
-        "projectPath": "C:\\Users\\ayobamiea\\Desktop\\work\\Lending\\LendingSolution\\LendingSolution.Infrastructure\\LendingSolution.Infrastructure.csproj",
+        "projectPath": "C:\\Users\\ayobamiea\\Desktop\\LendingSolution\\LendingSolution.Infrastructure\\LendingSolution.Infrastructure.csproj",
         "packagesPath": "C:\\Users\\ayobamiea\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\ayobamiea\\Desktop\\work\\Lending\\LendingSolution\\LendingSolution.Infrastructure\\obj\\",
+        "outputPath": "C:\\Users\\ayobamiea\\Desktop\\LendingSolution\\LendingSolution.Infrastructure\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\ayobamiea\\AppData\\Roaming\\NuGet\\NuGet.Config"
@@ -203,8 +203,8 @@
           "net8.0": {
             "targetAlias": "net8.0",
             "projectReferences": {
-              "C:\\Users\\ayobamiea\\Desktop\\work\\Lending\\LendingSolution\\LendingSolution.Core\\LendingSolution.Core.csproj": {
-                "projectPath": "C:\\Users\\ayobamiea\\Desktop\\work\\Lending\\LendingSolution\\LendingSolution.Core\\LendingSolution.Core.csproj"
+              "C:\\Users\\ayobamiea\\Desktop\\LendingSolution\\LendingSolution.Core\\LendingSolution.Core.csproj": {
+                "projectPath": "C:\\Users\\ayobamiea\\Desktop\\LendingSolution\\LendingSolution.Core\\LendingSolution.Core.csproj"
               }
             }
           }

@@ -965,11 +965,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\ayobamiea\\Desktop\\work\\Lending\\LendingSolution\\LendingSolution.Core\\LendingSolution.Core.csproj",
+      "projectUniqueName": "C:\\Users\\ayobamiea\\Desktop\\LendingSolution\\LendingSolution.Core\\LendingSolution.Core.csproj",
       "projectName": "LendingSolution.Core",
-      "projectPath": "C:\\Users\\ayobamiea\\Desktop\\work\\Lending\\LendingSolution\\LendingSolution.Core\\LendingSolution.Core.csproj",
+      "projectPath": "C:\\Users\\ayobamiea\\Desktop\\LendingSolution\\LendingSolution.Core\\LendingSolution.Core.csproj",
       "packagesPath": "C:\\Users\\ayobamiea\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\ayobamiea\\Desktop\\work\\Lending\\LendingSolution\\LendingSolution.Core\\obj\\",
+      "outputPath": "C:\\Users\\ayobamiea\\Desktop\\LendingSolution\\LendingSolution.Core\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "C:\\Users\\ayobamiea\\AppData\\Roaming\\NuGet\\NuGet.Config"
