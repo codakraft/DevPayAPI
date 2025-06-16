@@ -39,11 +39,11 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 // Enable Swagger in development environment
-if (app.Environment.IsDevelopment())
-{
+// if (app.Environment.IsDevelopment())
+// {
     app.UseSwagger();
     app.UseSwaggerUI();
-}
+// }
 
 
 app.MapControllers();
