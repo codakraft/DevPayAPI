@@ -1,10 +1,11 @@
 # Build results
-bin/
-obj/
-out/
+*/bin/
+*/obj/
+*/out/
 *.dll
 *.pdb
 
+.planner
 
 # User-specific files
 *.user
