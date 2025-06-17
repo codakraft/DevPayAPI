@@ -61,9 +61,14 @@ namespace LendingSolution.API.Extensions
             });
         }
 
-        public static void ConfigureNpgsqlContext(this IServiceCollection services, IConfiguration configuration) =>
+        // public static void ConfigureNpgsqlContext(this IServiceCollection services, IConfiguration configuration) =>
+        //     services.AddDbContext<ApplicationDbContext>(opt =>
+        //             opt.UseNpgsql(configuration.GetConnectionString("DefaultConnection")));
+
+        public static void ConfigureSqlContext(this IServiceCollection services, IConfiguration configuration) =>
             services.AddDbContext<ApplicationDbContext>(opt =>
-                    opt.UseNpgsql(configuration.GetConnectionString("DefaultConnection")));
+                opt.UseSqlServer(configuration.GetConnectionString("DefaultConnection")));
+
 
         // Identity and Authentication
         public static void AddJwtConfiguration(this IServiceCollection services, IConfiguration configuration) =>
@@ -130,7 +135,7 @@ namespace LendingSolution.API.Extensions
                 return new ServiceManager(contextAccessor, userManager, configuration, tokenService, db);
             });
         }
-        
+
         public static void ConfigureRemita(this IServiceCollection services, IConfiguration configuration)
         {
             services.Configure<RemitaSettings>(configuration.GetSection("Remita"));

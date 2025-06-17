@@ -3,11 +3,13 @@ using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Application.Services.Implementations;
 using LendingSolution.Core.Settings;
 using LendingSolution.API.Extensions;
+using LendingSolution.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddAuthentication();
-builder.Services.ConfigureNpgsqlContext(builder.Configuration);
+builder.Services.ConfigureSqlContext(builder.Configuration);
 builder.Services.ConfigureIdentity();
 builder.Services.AddJwtConfiguration(builder.Configuration);
 builder.Services.ConfigureJwt(builder.Configuration);
@@ -25,7 +27,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddCors(opt =>
 {
     opt.AddPolicy("AllowAll", builder =>
-    {
+    { 
         builder.AllowAnyOrigin()
                .AllowAnyMethod()
                .AllowAnyHeader();
@@ -33,6 +35,13 @@ builder.Services.AddCors(opt =>
 });
 
 var app = builder.Build();
+
+// Enforce migrations at startup
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    db.Database.Migrate();
+}
 
 app.UseCors(x => x.AllowAnyHeader().AllowAnyOrigin().AllowAnyMethod());
 app.UseAuthentication();
