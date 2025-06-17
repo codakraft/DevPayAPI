@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("LendingSolution")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7cb15bdb959f5035d715cf0258fd9e3638f1cd6f")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+53dd19746a12863da458087bc2b010c8d01676bd")]
 [assembly: System.Reflection.AssemblyProductAttribute("LendingSolution")]
 [assembly: System.Reflection.AssemblyTitleAttribute("LendingSolution")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
