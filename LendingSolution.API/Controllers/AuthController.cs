@@ -26,6 +26,7 @@ public class AuthController(IAuthService authService) : Controller
 
         var result = await _authService.Register(body);
 
+
         if (!result.Success)
             return BadRequest(result);
 
