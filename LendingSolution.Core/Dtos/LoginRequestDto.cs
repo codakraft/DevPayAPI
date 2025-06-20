@@ -5,7 +5,7 @@ namespace LendingSolution.Core.Dtos;
 public class LoginRequestDto
 {
     [Required]
-    public required string EmailOrPhone { get; set; }
+    public required string Email { get; set; }
 
     [Required]
     public required string Password { get; set; }

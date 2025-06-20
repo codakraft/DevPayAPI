@@ -8,31 +8,31 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddAuthentication();
-builder.Services.ConfigureSqlContext(builder.Configuration);
-builder.Services.ConfigureIdentity();
-builder.Services.AddJwtConfiguration(builder.Configuration);
-builder.Services.ConfigureJwt(builder.Configuration);
-builder.Services.AddHttpContextAccessor();
+// builder.Services.AddAuthentication();
+// builder.Services.ConfigureSqlContext(builder.Configuration);
+// builder.Services.ConfigureIdentity();
+// builder.Services.AddJwtConfiguration(builder.Configuration);
+// builder.Services.ConfigureJwt(builder.Configuration);
+// builder.Services.AddHttpContextAccessor();
 
-builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddScoped<IProfileService, ProfileService>();
-builder.Services.AddScoped<ITokenService, TokenService>();
-builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
-builder.Services.ConfigureServiceManager();
-builder.Services.ConfigureSwagger();
-builder.Services.AddControllers();
+// builder.Services.AddScoped<IAuthService, AuthService>();
+// builder.Services.AddScoped<IProfileService, ProfileService>();
+// builder.Services.AddScoped<ITokenService, TokenService>();
+// builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
+// builder.Services.ConfigureServiceManager();
+// builder.Services.ConfigureSwagger();
+// builder.Services.AddControllers();
 
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddCors(opt =>
-{
-    opt.AddPolicy("AllowAll", builder =>
-    { 
-        builder.AllowAnyOrigin()
-               .AllowAnyMethod()
-               .AllowAnyHeader();
-    });
-});
+// builder.Services.AddEndpointsApiExplorer();
+// builder.Services.AddCors(opt =>
+// {
+//     opt.AddPolicy("AllowAll", builder =>
+//     { 
+//         builder.AllowAnyOrigin()
+//                .AllowAnyMethod()
+//                .AllowAnyHeader();
+//     });
+// });
 
 var app = builder.Build();
 

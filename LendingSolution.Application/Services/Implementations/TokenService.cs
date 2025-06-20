@@ -33,7 +33,7 @@ public class TokenService : ITokenService
                 new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                 new("FirstName", user.FirstName ?? string.Empty),
                 new("LastName", user.LastName ?? string.Empty),
-                // new("Role", user.Role)
+                // new("Role", user.Role?.ToString() ?? string.Empty),
             };
 
 

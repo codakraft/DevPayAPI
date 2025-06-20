@@ -1,17 +1,15 @@
 using Microsoft.AspNetCore.Identity;
-using System;
 
-namespace LendingSolution.Core.Models
+namespace LendingSolution.Core.Models;
+
+public class ApplicationUser : IdentityUser
 {
-    public class ApplicationUser : IdentityUser
-    {
-        public required string FirstName { get; set; }
-        public required string LastName { get; set; }
-        public required string Address { get; set; }
-        public required string City { get; set; }     
-        public required string State { get; set; }    
-        public required string BVN { get; set; }
-        public DateTime? DateOfBirth { get; set; } // <-- Make sure you assign a DateTime, not a string
+    public required string FirstName { get; set; }
+    public required string LastName { get; set; }
+    public required string Address { get; set; }
+    public required string City { get; set; }
+    public required string State { get; set; }
 
-    }
+    public DateTime? DateOfBirth { get; set; } // <-- Make sure you assign a DateTime, not a string
+
 }

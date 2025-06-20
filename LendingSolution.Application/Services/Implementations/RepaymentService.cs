@@ -1,5 +1,6 @@
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
+using LendingSolution.Core.Enum;
 using LendingSolution.Core.Models;
 using LendingSolution.Core.Models.Response;
 using LendingSolution.Infrastructure.Data;
@@ -62,7 +63,7 @@ public class RepaymentService : IRepaymentService
         // If fully repaid, update loan status
         if (dto.Amount == outstanding)
         {
-            loan.Status = "Repaid";
+            loan.Status = LoanStatus.Repaid;
             _db.Loans.Update(loan);
         }
 

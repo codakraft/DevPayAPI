@@ -13,4 +13,10 @@ public class RegisterRequestDto
 
     [Required]
     public required DateTime DateOfBirth { get; set; }
+
+    [Required]
+    public Guid CompanyId { get; set; }
+
+    [Required]
+    public Guid ProductId { get; set; }
 }

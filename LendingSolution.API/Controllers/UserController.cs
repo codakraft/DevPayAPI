@@ -1,15 +1,22 @@
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
-using LendingSolution.Core.Models.Response;
+using LendingSolution.Core.Dtos.Response;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LendingSolution.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
-public class AuthController(IAuthService authService) : Controller
+public class UserController : Controller
 {
-    private readonly IAuthService _authService = authService;
+    private readonly IAuthService _authService;
+    private readonly ICompanyUserService _companyUserService;
+    private readonly ILoanService _loanService;
+    public UserController(IAuthService authService, ICompanyUserService companyUserService, ILoanService loanService)
+    {
+        _authService = authService;
+        _companyUserService = companyUserService;
+        _loanService = loanService;
+    }
 
     [HttpPost("onboarding")]
     public async Task<IActionResult> Register([FromBody] RegisterRequestDto body)
@@ -91,4 +98,26 @@ public class AuthController(IAuthService authService) : Controller
             return Ok(result);
         return BadRequest(result);
     }
+
+    [HttpPost("salary-history-review")]
+    public async Task<IActionResult> SalaryHistoryReview([FromBody] ReviewHistoryRequestDto body)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(new ApiResponse
+            {
+                Data = null,
+                Success = false,
+                Message = "Invalid model State"
+            });
+        }
+
+        var result = await _loanService.SalaryHistoryReview(body);
+
+        if (result.Success)
+            return Ok(result);
+
+        return BadRequest(result);
+    }
+
 }

@@ -1,17 +1,23 @@
-using System;
+using Lending.Core.Models;
+using LendingSolution.Core.Enum;
 
 namespace LendingSolution.Core.Models;
 
-public class Loan
+public class Loan : Base
 {
-    public Guid Id { get; set; }
     public required string UserId { get; set; }
+    public ApplicationUser User { get; set; } = default!;
     public decimal Amount { get; set; }
     public int DurationInMonths { get; set; }
     public required string Purpose { get; set; }
-    public required string Status { get; set; } // e.g., Pending, Submitted, Approved, Rejected, Disbursed, Completed
-    public DateTime CreatedAt { get; set; }
+    public LoanStatus Status { get; set; }
     public DateTime? ApprovedAt { get; set; }
     public DateTime? DueDate { get; set; }
     public DateTime? RejectedAt { get; set; }
+    public Guid CompanyId { get; set; }
+    public Company Company { get; set; } = default!;
+    public string Message { get; set; } = string.Empty;
+
+    public Guid ProductId { get; set; }
+    public LoanProduct Product { get; set; } = default!;
 }

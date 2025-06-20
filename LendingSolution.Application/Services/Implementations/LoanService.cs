@@ -1,12 +1,15 @@
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
-using LendingSolution.Core.Models.Response;
 using LendingSolution.Core.Models;
 using LendingSolution.Infrastructure.Data; // Adjust namespace to your actual DbContext location
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using System.Text.Json;
+using LendingSolution.Core.Enum;
+using LendingSolution.Core.Dtos.Response;
+using Microsoft.Extensions.Configuration;
+using System.Text.Json.Nodes;
 
 
 namespace LendingSolution.Application.Services.Implementations;
@@ -15,15 +18,20 @@ public class LoanService : ILoanService
 {
     private readonly ApplicationDbContext _db;
     private readonly UserManager<ApplicationUser> _userManager;
-    private readonly IRemitaAuthService _remitaAuthService;
     private readonly IRemitaService _remitaService;
+    private readonly IConfiguration _configuration;
 
-    public LoanService(ApplicationDbContext db, UserManager<ApplicationUser> userManager, IRemitaAuthService remitaAuthService, IRemitaService remitaService)
+    public LoanService(
+        ApplicationDbContext db,
+        UserManager<ApplicationUser> userManager,
+        IRemitaService remitaService,
+        IConfiguration configuration
+)
     {
         _db = db;
         _userManager = userManager;
-        _remitaAuthService = remitaAuthService;
         _remitaService = remitaService;
+        _configuration = configuration;
     }
 
     public async Task<ApiResponse> ApplyForLoan(LoanApplicationDto dto, ClaimsPrincipal user)
@@ -41,7 +49,7 @@ public class LoanService : ILoanService
             Amount = dto.Amount,
             DurationInMonths = dto.DurationInMonths,
             Purpose = dto.Purpose,
-            Status = "Pending",
+            Status = LoanStatus.Pending,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -69,12 +77,12 @@ public class LoanService : ILoanService
             return new ApiResponse { Success = false, Message = "Loan not found", Data = null };
         }
 
-        if (loan.Status == "Approved")
+        if (loan.Status == LoanStatus.Approved)
         {
             return new ApiResponse { Success = false, Message = "Loan already approved", Data = loan };
         }
 
-        loan.Status = "Approved";
+        loan.Status = LoanStatus.Approved;
         loan.ApprovedAt = DateTime.UtcNow;
         loan.DueDate = DateTime.UtcNow.AddMonths(loan.DurationInMonths);
 
@@ -147,7 +155,7 @@ public class LoanService : ILoanService
         {
             return new ApiResponse { Success = false, Message = "Loan not found for user", Data = null };
         }
-        loan.Status = "Submitted";
+        loan.Status = LoanStatus.Pending;
         _db.Loans.Update(loan);
         await _db.SaveChangesAsync();
         return new ApiResponse { Success = true, Message = "Loan submitted successfully", Data = null };
@@ -155,65 +163,81 @@ public class LoanService : ILoanService
 
     public async Task<ApiResponse<ReviewHistoryResponseDto>> SalaryHistoryReview(ReviewHistoryRequestDto body)
     {
+        var loanInfo = await _db.Loans
+            .Where(l => l.Id == body.loanId && l.Status == LoanStatus.NotBooked) // only unbooked loans
+            .Include(l => l.User)
+            .OrderByDescending(l => l.CreatedAt)
+        .FirstOrDefaultAsync();
+
+        if (loanInfo is null)
+        {
+            return new ApiResponse<ReviewHistoryResponseDto>
+            {
+                Success = false,
+                Message = "Loan not found or already booked",
+                Data = null
+            };
+        }
+
+        var account = await _db.Account.FirstOrDefaultAsync(a => a.UserId == loanInfo.UserId);
+        if (account is null)
+        {
+            return new ApiResponse<ReviewHistoryResponseDto>
+            {
+                Success = false,
+                Message = "Account not found for user",
+                Data = null
+            };
+        }
+
         var remitaRequest = new
         {
-            authorisationCode = "",
-            firstName = "",
-            lastName = "",
-            middleName = "",
+            authorisationCode = "1234",
+            firstName = loanInfo.User.FirstName ?? "",
+            lastName = loanInfo.User.LastName ?? "",
+            middleName = string.Empty,
             accountNumber = body.AccountNumber,
             bankCode = body.BankCode,
-            bvn = "",
+            bvn = account.Bvn ?? "",
             authorisationChannel = "USSD"
         };
 
-        var apiKey = "REVNT01EQTEyMzR8REVNT01EQQ==";
-        var merchantId = "DEMOMDA1234";
-        var requestId = Guid.NewGuid().ToString();
-        var authorization = await _remitaAuthService.GetAccessTokenAsync() ?? string.Empty;
+        var salaryResponse = await _remitaService.GetSalaryHistoryAsync(remitaRequest);
 
-        var remitaResponseJson = await _remitaService.GetSalaryHistoryAsync(remitaRequest, apiKey, merchantId, requestId, authorization);
-        if (string.IsNullOrEmpty(remitaResponseJson))
+        if (salaryResponse == null)
         {
-            return new ApiResponse<ReviewHistoryResponseDto> { Success = false, Message = "Failed to retrieve salary history from Remita", Data = null };
-        }
-
-        string companyName = string.Empty;
-        decimal maxEligibleAmount = 0;
-        try
-        {
-            using var doc = JsonDocument.Parse(remitaResponseJson);
-            var root = doc.RootElement;
-            if (root.TryGetProperty("data", out var dataProp))
+            return new ApiResponse<ReviewHistoryResponseDto>
             {
-                if (dataProp.TryGetProperty("companyName", out var companyNameProp))
-                {
-                    companyName = companyNameProp.GetString() ?? string.Empty;
-                }
-                if (dataProp.TryGetProperty("salaryPaymentDetails", out var salaryDetailsProp) && salaryDetailsProp.ValueKind == JsonValueKind.Array)
-                {
-                    var salaries = salaryDetailsProp.EnumerateArray()
-                        .Select(x => decimal.TryParse(x.GetProperty("amount").GetString(), out var amt) ? amt : 0)
-                        .Where(x => x > 0)
-                        .ToList();
-                    if (salaries.Count > 0)
-                    {
-                        var avgSalary = salaries.Average();
-                        var minSalary = salaries.Min();
-                        var maxByAvg = avgSalary * 2;
-                        var maxByMin = minSalary * 3;
-                        maxEligibleAmount = Math.Min(maxByAvg, maxByMin);
-                    }
-                }
-            }
+                Success = false,
+                Message = "Failed to retrieve salary history",
+                Data = null
+            };
         }
-        catch { }
+
+        account.BankCode = body.BankCode;
+        account.AccountNumber = body.AccountNumber;
+        account.AccountName = salaryResponse.Data?.CustomerName ?? string.Empty;
+
+        await _db.SaveChangesAsync();
+
+        var product = await _db.LoanProducts.FirstOrDefaultAsync(p => p.Id == loanInfo.ProductId);
+
+        if (product is null)
+        {
+            return new ApiResponse<ReviewHistoryResponseDto>
+            {
+                Success = false,
+                Message = "Loan product not found",
+                Data = null
+            };
+        }
 
         var response = new ReviewHistoryResponseDto
         {
-            CompanyName = companyName,
-            MaxEligibleAmount = maxEligibleAmount
+            CompanyName = salaryResponse.Data?.CompanyName ?? string.Empty,
+            MaxEligibleAmount = product.MaxAmount
         };
+
         return new ApiResponse<ReviewHistoryResponseDto>
         {
             Data = response,

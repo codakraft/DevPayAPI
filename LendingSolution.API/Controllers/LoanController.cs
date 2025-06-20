@@ -56,23 +56,4 @@ public class LoanController(ILoanService loanService) : Controller
             return Ok(result);
         return BadRequest(result);
     }
-
-    [HttpPost("salary-history-review")]
-    public async Task<IActionResult> SalaryHistoryReview([FromBody] ReviewHistoryRequestDto body)
-    {
-        if (!ModelState.IsValid)
-        {
-            return BadRequest(new ApiResponse
-            {
-                Data = null,
-                Success = false,
-                Message = "Invalid model State"
-            });
-        }
-
-        var result = await _loanService.SalaryHistoryReview(body);
-        if (result.Success)
-            return Ok(result);
-        return BadRequest(result);
-    }
 }

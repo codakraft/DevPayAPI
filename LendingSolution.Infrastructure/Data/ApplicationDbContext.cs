@@ -14,11 +14,13 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Loan> Loans { get; set; }
     public DbSet<Repayment> Repayments { get; set; }
     public DbSet<Employee> Employees { get; set; }
+    public DbSet<Company> Companies { get; set; }
+    public DbSet<LoanProduct> LoanProducts { get; set; }
+    public DbSet<Account> Account { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-        // Set precision for decimal properties
         modelBuilder.Entity<Loan>()
             .Property(l => l.Amount)
             .HasColumnType("decimal(18,2)");

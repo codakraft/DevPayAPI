@@ -1,5 +1,5 @@
 using LendingSolution.Core.Dtos;
-using LendingSolution.Core.Models.Response;
+using LendingSolution.Core.Dtos.Response;
 using System.Security.Claims;
 
 namespace LendingSolution.Application.Services.Interfaces;

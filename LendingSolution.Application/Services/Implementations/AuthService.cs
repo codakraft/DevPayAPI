@@ -2,9 +2,10 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using LendingSolution.Core.Models;
 using LendingSolution.Core.Dtos;
-using LendingSolution.Core.Models.Response;
+using LendingSolution.Core.Dtos.Response;
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Infrastructure.Data;
+using LendingSolution.Core.Enum;
 namespace LendingSolution.Application.Services.Implementations;
 
 public class AuthService(UserManager<ApplicationUser> userManager, ITokenService tokenService, ApplicationDbContext db) : IAuthService
@@ -15,42 +16,55 @@ public class AuthService(UserManager<ApplicationUser> userManager, ITokenService
 
     public async Task<ApiResponse> Register(RegisterRequestDto body)
     {
-        if (!VerifyBvn(body.Bvn))
+        var existingCompany = await _db.Companies
+            .FirstOrDefaultAsync(c => c.Id == body.CompanyId);
+        if (existingCompany == null)
         {
             return new ApiResponse
             {
                 Success = false,
-                Message = "BVN verification failed",
+                Message = "Company not found",
                 Data = null
             };
         }
 
-        // Check if BVN already exists
-        var existingUser = await _userManager.Users.FirstOrDefaultAsync(u => u.BVN == body.Bvn);
-        if (existingUser != null)
+        var existingEmail = await _userManager.Users.FirstOrDefaultAsync(u => u.Email == body.Email);
+
+        if (existingEmail != null)
         {
             return new ApiResponse
             {
                 Success = false,
-                Message = "A user with this BVN already exists.",
+                Message = "A user with this email already exists.",
                 Data = null
             };
         }
 
+        var existingBvn = await _db.Account.FirstOrDefaultAsync(u => u.Bvn == body.Bvn);
+
+        if (existingBvn != null)
+        {
+            return new ApiResponse
+            {
+                Success = false,
+                Message = "Bvn already exists.",
+                Data = null
+            };
+        }
+
+        // Add new user
         var user = new ApplicationUser
         {
             UserName = body.Email,
             Email = body.Email,
-            FirstName = string.Empty, // Required, but not in RegisterRequestDto
-            LastName = string.Empty, // Required, but not in RegisterRequestDto
-            Address = string.Empty, // Required, but not in RegisterRequestDto
-            City = string.Empty, // Required, but not in RegisterRequestDto
-            State = string.Empty, // Required, but not in RegisterRequestDto
-            DateOfBirth = body.DateOfBirth,
-            BVN = body.Bvn
+            FirstName = string.Empty,
+            LastName = string.Empty,
+            Address = string.Empty,
+            City = string.Empty,
+            State = string.Empty,
+            DateOfBirth = body.DateOfBirth
         };
 
-        // Remove usage of body.Password since it does not exist
         var result = await _userManager.CreateAsync(user);
 
         if (!result.Succeeded)
@@ -63,17 +77,43 @@ public class AuthService(UserManager<ApplicationUser> userManager, ITokenService
             };
         }
 
+        // add a new loan
+        var loan = new Loan
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            Amount = 0,
+            DurationInMonths = 0,
+            Purpose = string.Empty,
+            Status = LoanStatus.NotBooked,
+            CompanyId = body.CompanyId
+        };
+
+        _db.Loans.Add(loan);
+
+        var loanResult = await _db.SaveChangesAsync();
+
+        if (loanResult <= 0)
+        {
+            return new ApiResponse
+            {
+                Success = false,
+                Message = "Loan creation failed",
+                Data = null
+            };
+        }
+
         return new ApiResponse
         {
             Success = true,
-            Data = null,
+            Data = loan.Id,
             Message = "User created successfully"
         };
     }
 
-    private bool VerifyBvn(String bvn)
+    private bool VerifyBvn(String Bvn)
     {
-        // if (!bvn.Contains("2222222"))
+        // if (!Bvn.Contains("2222222"))
         // {
         //     return false;
         // }
@@ -85,14 +125,7 @@ public class AuthService(UserManager<ApplicationUser> userManager, ITokenService
         var result = new ApiResponse { };
         ApplicationUser? user;
 
-        if (body.EmailOrPhone.Contains('@'))
-        {
-            user = await _userManager.FindByEmailAsync(body.EmailOrPhone);
-        }
-        else
-        {
-            user = await _userManager.Users.FirstOrDefaultAsync(u => u.PhoneNumber == body.EmailOrPhone);
-        }
+        user = await _userManager.FindByEmailAsync(body.Email);
 
         if (user is null || !await _userManager.CheckPasswordAsync(user, body.Password))
         {
@@ -103,23 +136,47 @@ public class AuthService(UserManager<ApplicationUser> userManager, ITokenService
             return result;
         }
 
-        var token = _tokenService.GenerateTokenAsync(
-            user ?? new ApplicationUser {
-                UserName = string.Empty,
-                Email = string.Empty,
-                BVN = string.Empty,
-                FirstName = string.Empty,
-                LastName = string.Empty,
-                Address = string.Empty,
-                City = string.Empty,
-                State = string.Empty
-            }
-        );
+        var token = _tokenService.GenerateTokenAsync(user);
 
         result.Success = true;
-        result.Data = new {
+        result.Data = new
+        {
             Token = token,
-            user = new {
+            user = new
+            {
+                FirstName = user?.FirstName ?? string.Empty,
+                LastName = user?.LastName ?? string.Empty,
+                Email = user?.Email ?? string.Empty,
+                PhoneNumber = user?.PhoneNumber ?? string.Empty
+            }
+        };
+
+        return result;
+    }
+
+    public async Task<ApiResponse> AdminLogin(LoginRequestDto body)
+    {
+        var result = new ApiResponse { };
+
+        var user = await _userManager.FindByEmailAsync(body.Email);
+
+        if (user is null || !await _userManager.CheckPasswordAsync(user, body.Password))
+        {
+            result.Success = false;
+            result.Message = "Invalid credentials";
+            result.Data = null;
+
+            return result;
+        }
+
+        var token = _tokenService.GenerateTokenAsync(user);
+
+        result.Success = true;
+        result.Data = new
+        {
+            Token = token,
+            user = new
+            {
                 FirstName = user?.FirstName ?? string.Empty,
                 LastName = user?.LastName ?? string.Empty,
                 Email = user?.Email ?? string.Empty,
@@ -190,7 +247,6 @@ public class AuthService(UserManager<ApplicationUser> userManager, ITokenService
             return new ApiResponse { Success = false, Message = "Loan not found for user", Data = null };
         }
 
-        // Prevent duplicate employee record for same loan and user
         var existingEmployee = await _db.Employees.FirstOrDefaultAsync(e => e.UserId == userId && e.LoanId == body.LoanId);
         if (existingEmployee != null)
         {

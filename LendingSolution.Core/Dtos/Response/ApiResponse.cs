@@ -1,4 +1,4 @@
-namespace LendingSolution.Core.Models.Response;
+namespace LendingSolution.Core.Dtos.Response;
 
 public class ApiResponse<T>
 {
