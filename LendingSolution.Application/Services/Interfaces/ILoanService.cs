@@ -12,5 +12,5 @@ public interface ILoanService
     Task<ApiResponse> GetAllLoans();
     ApiResponse GetLoanBreakdown(LoanBreakdownRequestDto body);
     Task<ApiResponse> SubmitLoan(Guid loanId, ClaimsPrincipal user);
-    Task<ApiResponse<ReviewHistoryResponseDto>> SalaryHistoryReview(ReviewHistoryRequestDto body);
+    Task<ApiResponse> SalaryHistoryReview(ReviewHistoryRequestDto body);
 }

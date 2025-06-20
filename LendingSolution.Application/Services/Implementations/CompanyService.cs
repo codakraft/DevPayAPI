@@ -16,7 +16,7 @@ public class CompanyService : ICompanyService
         _companyRepository = companyRepository;
     }
 
-    public async Task<ApiResponse<CreateCompanyResponseDto>> CreateCompany(CreateCompanyRequestDto body)
+    public async Task<ApiResponse> CreateCompany(CreateCompanyRequestDto body)
     {
         var company = new Company
         {
@@ -31,14 +31,14 @@ public class CompanyService : ICompanyService
 
         if (company == null)
         {
-            return new ApiResponse<CreateCompanyResponseDto>
+            return new ApiResponse
             {
                 Success = false,
                 Message = "Company was not created"
             };
         }
 
-        return new ApiResponse<CreateCompanyResponseDto>
+        return new ApiResponse
         {
             Success = true,
             Data = new CreateCompanyResponseDto

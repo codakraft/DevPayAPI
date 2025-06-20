@@ -9,13 +9,15 @@ namespace LendingSolution.Controllers;
 public class UserController : Controller
 {
     private readonly IAuthService _authService;
-    private readonly ICompanyUserService _companyUserService;
+    // private readonly ICompanyUserService _companyUserService;
+    private readonly ILoanProductService _loanProductService;
     private readonly ILoanService _loanService;
-    public UserController(IAuthService authService, ICompanyUserService companyUserService, ILoanService loanService)
+    public UserController(IAuthService authService, ILoanService loanService, ILoanProductService loanProductService)
     {
         _authService = authService;
-        _companyUserService = companyUserService;
+        // _companyUserService = companyUserSer;
         _loanService = loanService;
+        _loanProductService = loanProductService;
     }
 
     [HttpPost("onboarding")]
@@ -118,6 +120,24 @@ public class UserController : Controller
             return Ok(result);
 
         return BadRequest(result);
+    }
+
+    [HttpGet("get-loan-products/{companyId}")]
+    public async Task<IActionResult> GetLoanProductsByCmopanyId([FromRoute] Guid companyId)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(
+                ApiResponse.Fail("Invalid model State")
+            );
+        }
+
+        var result = await _loanProductService.GetLoanProductsByCompanyId(companyId);
+
+        if (!result.Success)
+            return BadRequest(result);
+
+        return Ok(result);
     }
 
 }

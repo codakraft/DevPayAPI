@@ -5,5 +5,5 @@ namespace LendingSolution.Application.Services.Interfaces;
 
 public interface ICompanyService
 {
-   Task<ApiResponse<CreateCompanyResponseDto>> CreateCompany(CreateCompanyRequestDto body);
+   Task<ApiResponse> CreateCompany(CreateCompanyRequestDto body);
 }

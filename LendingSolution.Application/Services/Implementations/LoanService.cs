@@ -9,7 +9,6 @@ using System.Text.Json;
 using LendingSolution.Core.Enum;
 using LendingSolution.Core.Dtos.Response;
 using Microsoft.Extensions.Configuration;
-using System.Text.Json.Nodes;
 
 
 namespace LendingSolution.Application.Services.Implementations;
@@ -161,7 +160,7 @@ public class LoanService : ILoanService
         return new ApiResponse { Success = true, Message = "Loan submitted successfully", Data = null };
     }
 
-    public async Task<ApiResponse<ReviewHistoryResponseDto>> SalaryHistoryReview(ReviewHistoryRequestDto body)
+    public async Task<ApiResponse> SalaryHistoryReview(ReviewHistoryRequestDto body)
     {
         var loanInfo = await _db.Loans
             .Where(l => l.Id == body.loanId && l.Status == LoanStatus.NotBooked) // only unbooked loans
@@ -171,7 +170,7 @@ public class LoanService : ILoanService
 
         if (loanInfo is null)
         {
-            return new ApiResponse<ReviewHistoryResponseDto>
+            return new ApiResponse
             {
                 Success = false,
                 Message = "Loan not found or already booked",
@@ -182,7 +181,7 @@ public class LoanService : ILoanService
         var account = await _db.Account.FirstOrDefaultAsync(a => a.UserId == loanInfo.UserId);
         if (account is null)
         {
-            return new ApiResponse<ReviewHistoryResponseDto>
+            return new ApiResponse
             {
                 Success = false,
                 Message = "Account not found for user",
@@ -206,7 +205,7 @@ public class LoanService : ILoanService
 
         if (salaryResponse == null)
         {
-            return new ApiResponse<ReviewHistoryResponseDto>
+            return new ApiResponse
             {
                 Success = false,
                 Message = "Failed to retrieve salary history",
@@ -224,7 +223,7 @@ public class LoanService : ILoanService
 
         if (product is null)
         {
-            return new ApiResponse<ReviewHistoryResponseDto>
+            return new ApiResponse
             {
                 Success = false,
                 Message = "Loan product not found",
@@ -238,7 +237,7 @@ public class LoanService : ILoanService
             MaxEligibleAmount = product.MaxAmount
         };
 
-        return new ApiResponse<ReviewHistoryResponseDto>
+        return new ApiResponse
         {
             Data = response,
             Success = true,
