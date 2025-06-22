@@ -1,4 +1,4 @@
-using Lending.Core.Models;
+using LendingSolution.Core.Models;
 using LendingSolution.Core.Enum;
 
 namespace LendingSolution.Core.Models;

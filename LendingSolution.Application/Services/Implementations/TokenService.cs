@@ -10,17 +10,10 @@ using System.Text;
 
 namespace LendingSolution.Application.Services.Implementations;
 
-public class TokenService : ITokenService
+public class TokenService(UserManager<ApplicationUser> userManager, IOptions<JwtSettings> configuration) : ITokenService
 {
-    private readonly UserManager<ApplicationUser> _userManager;
-    private readonly JwtSettings _jwtSettings;
-
-    public TokenService(UserManager<ApplicationUser> userManager, IOptions<JwtSettings> configuration)
-    {
-        _userManager = userManager;
-        _jwtSettings = configuration.Value;
-    }
-
+    private readonly UserManager<ApplicationUser> _userManager = userManager;
+    private readonly JwtSettings _jwtSettings = configuration.Value;
 
     public async Task<string> GenerateTokenAsync(ApplicationUser user)
     {

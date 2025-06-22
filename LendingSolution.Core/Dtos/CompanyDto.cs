@@ -8,3 +8,10 @@ public class CompanyDto
     public string? City { get; set; }
     public string? State { get; set; }
 }
+
+public class CompanyResponseDto : CompanyDto
+{
+    public Guid Id { get; set; }
+}
+
+public class CreateCompanyRequestDto : CompanyDto;

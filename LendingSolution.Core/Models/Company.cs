@@ -1,5 +1,3 @@
-using Lending.Core.Models;
-
 namespace LendingSolution.Core.Models;
 
 public class Company : Base

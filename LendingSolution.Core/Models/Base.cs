@@ -1,4 +1,4 @@
-namespace Lending.Core.Models;
+namespace LendingSolution.Core.Models;
 
 public class Base
 {

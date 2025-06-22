@@ -8,7 +8,6 @@ namespace LendingSolution.Application.Services.Implementations
     {
         public async Task<object> GetAccountDetailsAsync(string bankCode, string accountNumber)
         {
-            // TODO: Validate input and call external API
             return await Task.FromResult(new { });
         }
 

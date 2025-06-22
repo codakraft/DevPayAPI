@@ -38,10 +38,9 @@ public class CompanyService : ICompanyService
             };
         }
 
-        return new ApiResponse
-        {
-            Success = true,
-            Data = new CreateCompanyResponseDto
+        return ApiResponse.Ok(
+            "Company created successfully",
+            new CompanyResponseDto
             {
                 Id = company.Id,
                 Name = company.Name,
@@ -49,8 +48,7 @@ public class CompanyService : ICompanyService
                 ShortName = company.ShortName,
                 State = company.State,
                 City = company.City
-            }
-        };
+            });
     }
 
 

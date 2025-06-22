@@ -10,3 +10,10 @@ public class LoginRequestDto
     [Required]
     public required string Password { get; set; }
 }
+
+public class LoginResponseDto
+{
+    public string? Token { get; set; } = null;
+    public string? UserId { get; set; } = null;
+    public string? Role { get; set; }
+}

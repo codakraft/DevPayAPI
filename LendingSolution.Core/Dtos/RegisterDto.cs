@@ -22,6 +22,13 @@ public class RegisterRequestDto
 
     [Required]
     [RegularExpression(@"^\d{11}$", ErrorMessage = "Phone number must be exactly 11 digits.")]
-    public string PhoneNumber { get; set; }
+    public required string PhoneNumber { get; set; }
 
 }
+
+
+public class RegisterResponseDto
+{
+    public Guid LoanId { get; set; }
+}
+

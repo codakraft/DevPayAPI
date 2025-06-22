@@ -233,46 +233,46 @@ public class LoanService(
         };
     }
     // under construction
-    public ApiResponse GetLoanBreakdown(LoanBreakdownRequestDto body)
-    {
-        if (body.Amount <= 0 || body.DurationInMonths <= 0)
-        {
-            return new ApiResponse
-            {
-                Success = false,
-                Message = "Amount and duration must be greater than zero.",
-                Data = null
-            };
-        }
+    // public ApiResponse GetLoanBreakdown(LoanBreakdownRequestDto body)
+    // {
+    //     if (body.Amount <= 0 || body.DurationInMonths <= 0)
+    //     {
+    //         return new ApiResponse
+    //         {
+    //             Success = false,
+    //             Message = "Amount and duration must be greater than zero.",
+    //             Data = null
+    //         };
+    //     }
 
-        var monthlyRepayment = Math.Round(body.Amount / body.DurationInMonths, 2);
-        var schedules = new List<RepaymentScheduleDto>();
-        var today = DateTime.UtcNow.Date;
+    //     var monthlyRepayment = Math.Round(body.Amount / body.DurationInMonths, 2);
+    //     var schedules = new List<RepaymentScheduleDto>();
+    //     var today = DateTime.UtcNow.Date;
 
-        for (int i = 1; i <= body.DurationInMonths; i++)
-        {
-            schedules.Add(new RepaymentScheduleDto
-            {
-                RepaymentDate = today.AddMonths(i),
-                Amount = monthlyRepayment
-            });
-        }
+    //     for (int i = 1; i <= body.DurationInMonths; i++)
+    //     {
+    //         schedules.Add(new RepaymentScheduleDto
+    //         {
+    //             RepaymentDate = today.AddMonths(i),
+    //             Amount = monthlyRepayment
+    //         });
+    //     }
 
-        var response = new LoanBreakdownResponseDto
-        {
-            LoanAmount = body.Amount,
-            Tenor = body.DurationInMonths,
-            NextRepaymentDate = schedules[0].RepaymentDate,
-            RepaymentSchedules = schedules
-        };
+    //     var response = new LoanBreakdownResponseDto
+    //     {
+    //         LoanAmount = body.Amount,
+    //         Tenor = body.DurationInMonths,
+    //         NextRepaymentDate = schedules[0].RepaymentDate,
+    //         RepaymentSchedules = schedules
+    //     };
 
-        return new ApiResponse
-        {
-            Success = true,
-            Message = "Loan breakdown generated successfully",
-            Data = response
-        };
-    }
+    //     return new ApiResponse
+    //     {
+    //         Success = true,
+    //         Message = "Loan breakdown generated successfully",
+    //         Data = response
+    //     };
+    // }
 
     public async Task<ApiResponse> SubmitLoan(Guid loanId, SubmitRequestDto body)
     {

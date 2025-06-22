@@ -14,3 +14,9 @@ public class ReviewHistoryRequestDto
     [Required]
     public required Guid loanId { get; set; }
 }
+
+public class ReviewHistoryResponseDto
+{
+    public required string CompanyName { get; set; }
+    public decimal MaxEligibleAmount { get; set; }
+}

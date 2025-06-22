@@ -6,18 +6,13 @@ using LendingSolution.Core.Models;
 
 namespace LendingSolution.Application.Services.Implementations;
 
-public class LoanProductService : ILoanProductService
+public class LoanProductService(
+    ILoanProductRepository loanProductRepository,
+    ICompanyRepository companyRepository
+) : ILoanProductService
 {
-    private readonly ILoanProductRepository _loanProductRepository;
-    private readonly ICompanyRepository _companyRepository;
-
-    public LoanProductService(
-        ILoanProductRepository loanProductRepository,
-        ICompanyRepository companyRepository)
-    {
-        _loanProductRepository = loanProductRepository;
-        _companyRepository = companyRepository;
-    }
+    private readonly ILoanProductRepository _loanProductRepository = loanProductRepository;
+    private readonly ICompanyRepository _companyRepository = companyRepository;
 
     public async Task<ApiResponse> CreateLoanProduct(CreateLoanProductRequestDto dto)
     {
@@ -49,7 +44,7 @@ public class LoanProductService : ILoanProductService
 
         var loanProducts = await _loanProductRepository.GetLoanProductsByCompanyId(companyId);
 
-        var data = loanProducts.Select(lp => new FetchLoanProductDto
+        var data = loanProducts.Select(lp => new LoanProductResponseDto
         {
             Id = lp.Id,
             Name = lp.Name,
@@ -65,5 +60,5 @@ public class LoanProductService : ILoanProductService
     }
 
     private async Task<bool> CompanyExistsAsync(Guid companyId)
-        => await _companyRepository.GetCompaniesById(companyId) is not null;
+        => await _companyRepository.GetCompanyById(companyId) is not null;
 }

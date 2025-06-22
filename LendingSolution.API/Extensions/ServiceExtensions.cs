@@ -72,7 +72,12 @@ public static class ServiceExtensions
         services.AddDbContext<ApplicationDbContext>(opt =>
             opt.UseSqlServer(
                 configuration.GetConnectionString("DefaultConnection"),
-                sqlOptions => sqlOptions.EnableRetryOnFailure()
+                sqlOptions =>
+                {
+                    sqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "dbo");
+                    sqlOptions.MigrationsAssembly("LendingSolution.Infrastructure");
+                    sqlOptions.MigrationsAssembly("LendingSolution.Infrastructure");
+                }
             )
         );
 
@@ -137,22 +142,47 @@ public static class ServiceExtensions
         {
             var contextAccessor = provider.GetRequiredService<IHttpContextAccessor>();
             var userManager = provider.GetRequiredService<UserManager<ApplicationUser>>();
-            var configuration = provider.GetRequiredService<IOptions<JwtSettings>>();
+            var jwtSettings = provider.GetRequiredService<IOptions<JwtSettings>>();
             var tokenService = provider.GetRequiredService<ITokenService>();
             var db = provider.GetRequiredService<ApplicationDbContext>();
-            return new ServiceManager(contextAccessor, userManager, configuration, tokenService, db);
-        });
+            var companyRepository = provider.GetRequiredService<ICompanyRepository>();
+            var loanRepository = provider.GetRequiredService<ILoanRepository>();
+            var loanProductRepository = provider.GetRequiredService<ILoanProductRepository>();
+            var remitaService = provider.GetRequiredService<IRemitaService>();
+            var configuration = provider.GetRequiredService<IConfiguration>();
+            var remitaSettings = provider.GetRequiredService<IOptions<RemitaSettings>>();
+            var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+            var logger = provider.GetRequiredService<ILogger<RemitaService>>();
+            var combinedRepository = provider.GetRequiredService<ICombinedRepository>();
 
+            return new ServiceManager(
+                contextAccessor,
+                userManager,
+                jwtSettings,
+                tokenService,
+                db,
+                companyRepository,
+                loanRepository,
+                loanProductRepository,
+                remitaService,
+                configuration,
+                remitaSettings,
+                httpClientFactory,
+                logger,
+                combinedRepository
+            );
+        });
     }
 
     public static void ConfigureServices(this IServiceCollection services, IConfiguration configuration)
     {
-        services.Configure<RemitaSettings>(configuration.GetSection("Remita"));
-        services.AddScoped<IRemitaService, RemitaService>();
-        services.AddScoped<IAuthService, AuthService>();
-        services.AddScoped<IProfileService, ProfileService>();
-        services.AddScoped<ITokenService, TokenService>();
-        services.AddScoped<ISupportToolsService, SupportToolsService>();
+        // services.Configure<RemitaSettings>(configuration.GetSection("Remita"));
+        // services.AddScoped<IRemitaService, RemitaService>();
+        // services.AddScoped<IAuthService, AuthService>();
+        // services.AddScoped<IProfileService, ProfileService>();
+        // services.AddScoped<ITokenService, TokenService>();
+        // services.AddScoped<ISupportToolsService, SupportToolsService>();
+
     }
 
     public static void ConfigureRepositories(this IServiceCollection services, IConfiguration configuration)
