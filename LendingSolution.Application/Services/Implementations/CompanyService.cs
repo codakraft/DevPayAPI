@@ -3,7 +3,6 @@ using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Dtos.Response;
 using LendingSolution.Core.Models;
-using LendingSolution.Infrastructure.Data;
 
 namespace LendingSolution.Application.Services.Implementations;
 
@@ -14,6 +13,32 @@ public class CompanyService : ICompanyService
     public CompanyService(ICompanyRepository companyRepository)
     {
         _companyRepository = companyRepository;
+    }
+
+    public async Task<ApiResponse> Activate(Guid id)
+    {
+        var company = await _companyRepository.GetCompanyById(id);
+
+        if (company is null)
+        {
+            return ApiResponse.Fail("Company does not exist");
+        }
+
+        if (company.IsActive is true)
+        {
+            return ApiResponse.Fail("Company is already active");
+        }
+
+        company.IsActive = true;
+
+        var updateCompany = await _companyRepository.UpdateCompany(company);
+
+        if (updateCompany is false)
+        {
+            return ApiResponse.Fail("Unable to activate company at the moment");
+        }
+
+        return ApiResponse.Ok("Company has been activated");
     }
 
     public async Task<ApiResponse> CreateCompany(CreateCompanyRequestDto body)
@@ -51,6 +76,29 @@ public class CompanyService : ICompanyService
             });
     }
 
+    public async Task<ApiResponse> Deactivate(Guid id)
+    {
+        var company = await _companyRepository.GetCompanyById(id);
 
+        if (company is null)
+        {
+            return ApiResponse.Fail("Company does not exist");
+        }
 
+        if (company.IsActive is false)
+        {
+            return ApiResponse.Fail("Company is already inactive");
+        }
+
+        company.IsActive = false;
+
+        var updateCompany = await _companyRepository.UpdateCompany(company);
+
+        if (updateCompany is false)
+        {
+            return ApiResponse.Fail("Unable to deactivate company at the moment");
+        }
+
+        return ApiResponse.Ok("Company has been deactivated");
+    }
 }

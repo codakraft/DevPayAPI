@@ -31,10 +31,10 @@ public class CompanyRepository : ICompanyRepository
         return await _db.Companies.FirstOrDefaultAsync(c => c.Id == id);
     }
 
-    public async Task<Company> UpdateCompany(Company company)
+    public async Task<bool> UpdateCompany(Company company)
     {
         _db.Companies.Update(company);
-        await _db.SaveChangesAsync();
-        return company;
+        var result = await _db.SaveChangesAsync();
+        return result > 0;
     }
 }

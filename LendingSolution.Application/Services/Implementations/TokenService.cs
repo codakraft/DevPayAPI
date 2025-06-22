@@ -26,10 +26,11 @@ public class TokenService(UserManager<ApplicationUser> userManager, IOptions<Jwt
                 new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                 new("FirstName", user.FirstName ?? string.Empty),
                 new("LastName", user.LastName ?? string.Empty),
-                // new("Role", user.Role?.ToString() ?? string.Empty),
             };
 
+        var roles = await _userManager.GetRolesAsync(user);
 
+        claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
         claims.AddRange(userClaims);
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.Key!));

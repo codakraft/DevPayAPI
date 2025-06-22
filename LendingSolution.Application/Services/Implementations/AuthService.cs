@@ -36,28 +36,23 @@ public class AuthService(
 
     public async Task<ApiResponse> Login(LoginRequestDto body)
     {
-        var result = new ApiResponse { };
         ApplicationUser? user;
 
         user = await _userManager.FindByEmailAsync(body.Email);
 
         if (user is null || !await _userManager.CheckPasswordAsync(user, body.Password))
         {
-            result.Success = false;
-            result.Message = "Invalid credentials";
-            result.Data = null;
-
-            return result;
+            return ApiResponse.Fail("Invalid credentials");
         }
 
-        var token = _tokenService.GenerateTokenAsync(user);
+        var token = await _tokenService.GenerateTokenAsync(user);
 
-        result.Success = true;
-        result.Data = new
+        var data = new
         {
             Token = token,
             user = new
             {
+                Id = user?.Id,
                 FirstName = user?.FirstName ?? string.Empty,
                 LastName = user?.LastName ?? string.Empty,
                 Email = user?.Email ?? string.Empty,
@@ -65,32 +60,26 @@ public class AuthService(
             }
         };
 
-        return result;
+        return ApiResponse.Ok("Logged in successfully", data);
     }
 
     public async Task<ApiResponse> AdminLogin(LoginRequestDto body)
     {
-        var result = new ApiResponse { };
-
         var user = await _userManager.FindByEmailAsync(body.Email);
 
         if (user is null || !await _userManager.CheckPasswordAsync(user, body.Password))
         {
-            result.Success = false;
-            result.Message = "Invalid credentials";
-            result.Data = null;
-
-            return result;
+            return ApiResponse.Fail("Invalid Credentials");
         }
 
-        var token = _tokenService.GenerateTokenAsync(user);
+        var token = await _tokenService.GenerateTokenAsync(user);
 
-        result.Success = true;
-        result.Data = new
+        var data = new
         {
             Token = token,
             user = new
             {
+                Id = user?.Id,
                 FirstName = user?.FirstName ?? string.Empty,
                 LastName = user?.LastName ?? string.Empty,
                 Email = user?.Email ?? string.Empty,
@@ -98,7 +87,7 @@ public class AuthService(
             }
         };
 
-        return result;
+        return ApiResponse.Ok("Logged in successfully", data);
     }
 
     public ApiResponse VerifyOtp(VerifyOtpRequestDto body)
@@ -206,4 +195,28 @@ public class AuthService(
 
         return ApiResponse.Ok("Super admin created successfully", new { userId = user.Id });
     }
+
+    public async Task<ApiResponse> CreateAdmin(CreateAdminRequestDto body)
+    {
+        var user = new ApplicationUser
+        {
+            FirstName = body.FirstName,
+            LastName = body.LastName,
+            Email = body.Email,
+            UserName = body.Email
+        };
+
+        var result = await _userManager.CreateAsync(user, body.Password);
+
+        if (!result.Succeeded)
+        {
+            return ApiResponse.Fail("Failed to create admin: " + string.Join(", ", result.Errors.Select(e => e.Description)));
+        }
+
+        // Assign SuperAdmin role
+        await _userManager.AddToRoleAsync(user, "Admin");
+
+        return ApiResponse.Ok("admin created successfully", new { userId = user.Id });
+    }
 }
+
