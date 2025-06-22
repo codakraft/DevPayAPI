@@ -6,6 +6,7 @@
 *.pdb
 
 .planner
+planner
 
 # User-specific files
 *.user

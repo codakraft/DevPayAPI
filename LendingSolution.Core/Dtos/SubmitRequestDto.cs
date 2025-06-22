@@ -6,6 +6,8 @@ namespace LendingSolution.Core.Dtos
     public class SubmitRequestDto
     {
         [Required]
-        public Guid LoanId { get; set; }
+        public double Amount { get; set; }
+        [Required]
+        public int Tenor { get; set; }
     }
 }
