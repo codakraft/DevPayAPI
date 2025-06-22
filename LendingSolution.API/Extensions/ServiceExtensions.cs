@@ -11,6 +11,8 @@ using LendingSolution.Core.Settings;
 using LendingSolution.Core.Models;
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Application.Services.Implementations;
+using LendingSolution.Application.Repositories.Interfaces;
+using LendingSolution.Application.Repositories.Implementations;
 
 namespace LendingSolution.API.Extensions;
 
@@ -143,12 +145,27 @@ public static class ServiceExtensions
 
     }
 
-    public static void ConfigureRemita(this IServiceCollection services, IConfiguration configuration)
+    public static void ConfigureServices(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<RemitaSettings>(configuration.GetSection("Remita"));
         services.AddScoped<IRemitaService, RemitaService>();
+        services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IProfileService, ProfileService>();
+        services.AddScoped<ITokenService, TokenService>();
+        services.AddScoped<ISupportToolsService, SupportToolsService>();
+    }
+
+    public static void ConfigureRepositories(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddScoped<ICompanyRepository, CompanyRepository>();
+        services.AddScoped<ILoanProductRepository, LoanProductRepository>();
+    }
+
+    public static void ConfigureHttpClient(this IServiceCollection services, IConfiguration configuration)
+    {
         services.AddHttpClient();
     }
+
 
     public static async Task SeedRoles(IServiceProvider serviceProvider)
     {
@@ -160,47 +177,6 @@ public static class ServiceExtensions
             if (!await roleManager.RoleExistsAsync(role))
                 await roleManager.CreateAsync(new IdentityRole(role));
         }
-    }
-
-    public static void ConfigureAuth(this IServiceCollection services)
-    {
-        services.AddScoped<IAuthService, AuthService>();
-
-    }
-
-    public static void ConfigureProfile(this IServiceCollection services)
-    {
-        services.AddScoped<IProfileService, ProfileService>();
-    }
-
-    public static void ConfigureToken(this IServiceCollection services)
-    {
-        services.AddScoped<ITokenService, TokenService>();
-    }
-
-    public static void ConfigureSupportTools(this IServiceCollection services)
-    {
-        services.AddScoped<ISupportToolsService, SupportToolsService>();
-    }
-
-    public static void ConfigureDashboard(this IServiceCollection services)
-    {
-        services.AddScoped<IDashboardService, DashboardService>();
-    }
-
-    public static void ConfigureSuperAdmin(this IServiceCollection services)
-    {
-        services.AddScoped<ISuperAdminService, SuperAdminService>();
-    }
-
-    public static void ConfigureCompanyAdmin(this IServiceCollection services)
-    {
-        services.AddScoped<ICompanyAdminService, CompanyAdminService>();
-    }
-
-    public static void ConfigureCompanyUser(this IServiceCollection services)
-    {
-        services.AddScoped<ICompanyUserService, CompanyUserService>();
     }
 
     public static void ConfigureEndpointExplorer(this IServiceCollection services)

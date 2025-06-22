@@ -11,5 +11,4 @@ public class Company : Base
     public string? State { get; set; }
     public bool IsActive { get; set; } = true;
     public ICollection<LoanProduct> LoanProducts { get; set; } = [];
-
 }

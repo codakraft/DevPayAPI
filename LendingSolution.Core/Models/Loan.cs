@@ -14,10 +14,13 @@ public class Loan : Base
     public DateTime? ApprovedAt { get; set; }
     public DateTime? DueDate { get; set; }
     public DateTime? RejectedAt { get; set; }
+    public DateTime? MandateCreatedAt { get; set; }
     public Guid CompanyId { get; set; }
     public Company Company { get; set; } = default!;
     public string Message { get; set; } = string.Empty;
-
     public Guid ProductId { get; set; }
     public LoanProduct Product { get; set; } = default!;
+    public Guid AccountId { get; set; }
+    public Account Account { get; set; } = default!;
+    public bool IsMandateGenerated { get; set; } = false;
 }

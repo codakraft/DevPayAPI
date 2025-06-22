@@ -5,7 +5,6 @@ namespace LendingSolution.Application.Services.Interfaces;
 
 public interface IAuthService
 {
-    Task<ApiResponse> Register(RegisterRequestDto body);
     Task<ApiResponse> Login(LoginRequestDto body);
     Task<ApiResponse> AdminLogin(LoginRequestDto body);
     ApiResponse VerifyOtp(VerifyOtpRequestDto body);

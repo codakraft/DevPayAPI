@@ -8,4 +8,7 @@ public class RemitaSettings
     public string Password { get; set; } = string.Empty;
     public string ApiKey { get; set; } = string.Empty;
     public string MerchantId { get; set; } = string.Empty;
+    public string Hash { get; set; } = string.Empty;
+    public string ServiceTypeId { get; set; } = string.Empty;
+    public string MandateUrl { get; set; } = string.Empty;
 }

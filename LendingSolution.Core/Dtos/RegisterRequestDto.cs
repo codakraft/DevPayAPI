@@ -19,4 +19,9 @@ public class RegisterRequestDto
 
     [Required]
     public Guid ProductId { get; set; }
+
+    [Required]
+    [RegularExpression(@"^\d{11}$", ErrorMessage = "Phone number must be exactly 11 digits.")]
+    public string PhoneNumber { get; set; }
+
 }

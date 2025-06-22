@@ -21,12 +21,12 @@ public class CompanyRepository : ICompanyRepository
         return company;
     }
 
-    public async Task<List<Company>> GetAllCompanies()
+    public async Task<IEnumerable<Company>> GetAllCompanies()
     {
         return await _db.Companies.ToListAsync();
     }
 
-    public async Task<Company?> GetCompaniesById(Guid id)   
+    public async Task<Company?> GetCompanyById(Guid id)
     {
         return await _db.Companies.FirstOrDefaultAsync(c => c.Id == id);
     }

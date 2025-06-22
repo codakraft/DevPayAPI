@@ -1,0 +1,65 @@
+using LendingSolution.Application.Repositories.Interfaces;
+using LendingSolution.Core.Dtos;
+using LendingSolution.Core.Enum;
+using LendingSolution.Core.Models;
+using LendingSolution.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
+
+namespace LendingSolution.Application.Repositories.Implementations;
+
+public class LoanRespository(ApplicationDbContext db) : ILoanRepository
+{
+    private ApplicationDbContext _db = db;
+
+    public Task<bool> CreateLoan(Loan loanRequest)
+    {
+        _db.Loans.Add(loanRequest);
+        return _db.SaveChangesAsync().ContinueWith(t => t.Result > 0);
+    }
+
+    public Task<IEnumerable<Loan>> GetAllLoans()
+    {
+        return Task.FromResult(_db.Loans.AsEnumerable());
+    }
+
+    public Task<IEnumerable<Loan>> GetAllLoansByCompanyId(Guid CompanyId)
+    {
+        var loans = _db.Loans.Where(loan => loan.CompanyId == CompanyId);
+        return Task.FromResult(loans.AsEnumerable());
+    }
+
+    public Task<Loan?> GetLoanById(Guid loanId)
+    {
+        var loan = _db.Loans.FirstOrDefaultAsync(loan => loan.Id == loanId);
+        return loan;
+    }
+
+    public Task<IEnumerable<Loan>> GetLoansByUserIdAsync(string userId)
+    {
+        var loans = _db.Loans.Where(loan => loan.UserId == userId);
+        return Task.FromResult(loans.AsEnumerable());
+    }
+
+    public Task<bool> UpdateLoan(Loan loanRequestDto)
+    {
+        _db.Loans.Update(loanRequestDto);
+        return _db.SaveChangesAsync().ContinueWith(t => t.Result > 0);
+    }
+
+    public Task<bool> UpdateLoanStatus(Guid id, LoanStatus loanStatus)
+    {
+        var loan = _db.Loans.FirstOrDefaultAsync(loan => loan.Id == id);
+        if (loan is null)
+        {
+            return Task.FromResult(false);
+        }
+
+        if (loan.Result != null)
+        {
+            loan.Result.Status = loanStatus;
+            _db.Loans.Update(loan.Result);
+            return _db.SaveChangesAsync().ContinueWith(t => t.Result > 0);
+        }
+        return Task.FromResult(false);
+    }
+}

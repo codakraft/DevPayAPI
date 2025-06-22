@@ -16,5 +16,6 @@ public class LoanProduct : Base
     public int MinTenor { get; set; } = 0;
     public int MaxTenor { get; set; } = 0;
     public bool IsActive { get; set; } = false;
-    public int Moratorium { get; set; } = 0;
+    public int Moratorium { get; set; } = 30;
+    public ICollection<Loan> Loans { get; set; } = [];
 }

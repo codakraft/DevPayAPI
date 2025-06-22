@@ -1,7 +1,7 @@
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Models;
-using LendingSolution.Infrastructure.Data; // Adjust namespace to your actual DbContext location
+using LendingSolution.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
@@ -9,28 +9,117 @@ using System.Text.Json;
 using LendingSolution.Core.Enum;
 using LendingSolution.Core.Dtos.Response;
 using Microsoft.Extensions.Configuration;
-
+using LendingSolution.Application.Repositories.Interfaces;
 
 namespace LendingSolution.Application.Services.Implementations;
 
-public class LoanService : ILoanService
+public class LoanService(
+    ApplicationDbContext db,
+    UserManager<ApplicationUser> userManager,
+    IRemitaService remitaService,
+    ILoanRepository loanRepository,
+    ICompanyRepository companyRepository,
+    IConfiguration configuration
+) : ILoanService
 {
-    private readonly ApplicationDbContext _db;
-    private readonly UserManager<ApplicationUser> _userManager;
-    private readonly IRemitaService _remitaService;
-    private readonly IConfiguration _configuration;
-
-    public LoanService(
-        ApplicationDbContext db,
-        UserManager<ApplicationUser> userManager,
-        IRemitaService remitaService,
-        IConfiguration configuration
-)
+    private readonly ApplicationDbContext _db = db;
+    private readonly UserManager<ApplicationUser> _userManager = userManager;
+    private readonly IRemitaService _remitaService = remitaService;
+    private readonly IConfiguration _configuration = configuration;
+    private readonly ICompanyRepository _companyRepository = companyRepository;
+    private readonly ILoanRepository _loanRepository = loanRepository;
+    public async Task<ApiResponse> Register(RegisterRequestDto body)
     {
-        _db = db;
-        _userManager = userManager;
-        _remitaService = remitaService;
-        _configuration = configuration;
+        var existingCompany = await _companyRepository.GetCompanyById(body.CompanyId);
+        if (existingCompany is null)
+        {
+            return new ApiResponse
+            {
+                Success = false,
+                Message = "Company not found",
+                Data = null
+            };
+        }
+
+        var existingEmail = await _userManager.Users.FirstOrDefaultAsync(u => u.Email == body.Email);
+
+        if (existingEmail != null)
+        {
+            return new ApiResponse
+            {
+                Success = false,
+                Message = "A user with this email already exists.",
+                Data = null
+            };
+        }
+
+        var existingBvn = await _db.Account.FirstOrDefaultAsync(u => u.Bvn == body.Bvn);
+
+        if (existingBvn != null)
+        {
+            return new ApiResponse
+            {
+                Success = false,
+                Message = "Bvn already exists.",
+                Data = null
+            };
+        }
+
+        var user = new ApplicationUser
+        {
+            UserName = body.Email,
+            Email = body.Email,
+            FirstName = string.Empty,
+            LastName = string.Empty,
+            Address = string.Empty,
+            City = string.Empty,
+            State = string.Empty,
+            DateOfBirth = body.DateOfBirth,
+            PhoneNumber = body.PhoneNumber,
+        };
+
+        var result = await _userManager.CreateAsync(user);
+
+        if (!result.Succeeded)
+        {
+            return new ApiResponse
+            {
+                Success = false,
+                Message = "User creation failed",
+                Data = result.Errors
+            };
+        }
+
+        // add a new loan
+        var loan = new Loan
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            Amount = 0,
+            DurationInMonths = 0,
+            Purpose = string.Empty,
+            Status = LoanStatus.NotBooked,
+            CompanyId = body.CompanyId
+        };
+
+        var loanResult = await _loanRepository.CreateLoan(loan);
+
+        if (loanResult is false)
+        {
+            return new ApiResponse
+            {
+                Success = false,
+                Message = "Loan creation failed",
+                Data = null
+            };
+        }
+
+        return new ApiResponse
+        {
+            Success = true,
+            Data = loan.Id,
+            Message = "User created successfully"
+        };
     }
 
     public async Task<ApiResponse> ApplyForLoan(LoanApplicationDto dto, ClaimsPrincipal user)
@@ -38,7 +127,12 @@ public class LoanService : ILoanService
         var userId = _userManager.GetUserId(user);
         if (userId == null)
         {
-            return new ApiResponse { Success = false, Message = "User not found", Data = null };
+            return new ApiResponse
+            {
+                Success = false,
+                Message = "User not found",
+                Data = null
+            };
         }
 
         var loan = new Loan
@@ -55,17 +149,36 @@ public class LoanService : ILoanService
         _db.Loans.Add(loan);
         await _db.SaveChangesAsync();
 
-        return new ApiResponse { Success = true, Message = "Loan application submitted", Data = loan };
+        return new ApiResponse
+        {
+            Success = true,
+            Message = "Loan application submitted",
+            Data = loan
+        };
     }
 
     public async Task<ApiResponse> GetUserLoans(string userId)
     {
         if (string.IsNullOrEmpty(userId))
         {
-            return new ApiResponse { Success = false, Message = "User ID is required", Data = null };
+            return new ApiResponse
+            {
+                Success = false,
+                Message = "User ID is required",
+                Data = null
+            };
         }
-        var loans = await _db.Loans.Where(l => l.UserId == userId).ToListAsync();
-        return new ApiResponse { Success = true, Message = "User loans fetched successfully", Data = loans };
+
+        var loans = await _db.Loans
+            .Where(l => l.UserId == userId)
+            .ToListAsync();
+
+        return new ApiResponse
+        {
+            Success = true,
+            Message = "User loans fetched successfully",
+            Data = loans
+        };
     }
 
     public async Task<ApiResponse> ApproveLoan(Guid loanId)
@@ -73,12 +186,22 @@ public class LoanService : ILoanService
         var loan = await _db.Loans.FindAsync(loanId);
         if (loan == null)
         {
-            return new ApiResponse { Success = false, Message = "Loan not found", Data = null };
+            return new ApiResponse
+            {
+                Success = false,
+                Message = "Loan not found",
+                Data = null
+            };
         }
 
         if (loan.Status == LoanStatus.Approved)
         {
-            return new ApiResponse { Success = false, Message = "Loan already approved", Data = loan };
+            return new ApiResponse
+            {
+                Success = false,
+                Message = "Loan already approved",
+                Data = loan
+            };
         }
 
         loan.Status = LoanStatus.Approved;
@@ -88,7 +211,12 @@ public class LoanService : ILoanService
         _db.Loans.Update(loan);
         await _db.SaveChangesAsync();
 
-        return new ApiResponse { Success = true, Message = "Loan approved", Data = loan };
+        return new ApiResponse
+        {
+            Success = true,
+            Message = "Loan approved",
+            Data = loan
+        };
     }
 
     public async Task<ApiResponse> GetAllLoans()
@@ -97,26 +225,30 @@ public class LoanService : ILoanService
             .OrderByDescending(l => l.CreatedAt)
             .ToListAsync();
 
-        return new ApiResponse { Success = true, Message = "All loans fetched", Data = loans };
+        return new ApiResponse
+        {
+            Success = true,
+            Message = "All loans fetched",
+            Data = loans
+        };
     }
-
+    // under construction
     public ApiResponse GetLoanBreakdown(LoanBreakdownRequestDto body)
     {
-        // Basic checks
         if (body.Amount <= 0 || body.DurationInMonths <= 0)
         {
             return new ApiResponse
             {
-                Data = null,
                 Success = false,
-                Message = "Amount and duration must be greater than zero."
+                Message = "Amount and duration must be greater than zero.",
+                Data = null
             };
         }
 
-        // Simple equal repayment calculation
         var monthlyRepayment = Math.Round(body.Amount / body.DurationInMonths, 2);
         var schedules = new List<RepaymentScheduleDto>();
         var today = DateTime.UtcNow.Date;
+
         for (int i = 1; i <= body.DurationInMonths; i++)
         {
             schedules.Add(new RepaymentScheduleDto
@@ -136,37 +268,44 @@ public class LoanService : ILoanService
 
         return new ApiResponse
         {
-            Data = response,
             Success = true,
-            Message = "Loan breakdown generated successfully"
+            Message = "Loan breakdown generated successfully",
+            Data = response
         };
     }
 
-    public async Task<ApiResponse> SubmitLoan(Guid loanId, System.Security.Claims.ClaimsPrincipal user)
+    public async Task<ApiResponse> SubmitLoan(Guid loanId, SubmitRequestDto body)
     {
-        var userId = _userManager.GetUserId(user);
-        if (string.IsNullOrEmpty(userId))
-        {
-            return new ApiResponse { Success = false, Message = "User not found", Data = null };
-        }
-        var loan = await _db.Loans.FirstOrDefaultAsync(l => l.Id == loanId && l.UserId == userId);
+        var loan = await _loanRepository.GetLoanById(loanId);
+
         if (loan == null)
         {
-            return new ApiResponse { Success = false, Message = "Loan not found for user", Data = null };
+            return ApiResponse.Fail
+            (
+                "Loan not found for user"
+            );
         }
+
+        var generateMandate = await _remitaService.GenerateMandate(loanId, body);
+
         loan.Status = LoanStatus.Pending;
-        _db.Loans.Update(loan);
-        await _db.SaveChangesAsync();
-        return new ApiResponse { Success = true, Message = "Loan submitted successfully", Data = null };
+        loan.IsMandateGenerated = true;
+
+        var saveLoan = await _loanRepository.UpdateLoan(loan);
+
+        if (saveLoan)
+            ApiResponse.Fail("Failed to update loan status");
+
+        return ApiResponse.Ok("Loan booked successfully. You will be notified of status of your loan.");
     }
 
     public async Task<ApiResponse> SalaryHistoryReview(ReviewHistoryRequestDto body)
     {
         var loanInfo = await _db.Loans
-            .Where(l => l.Id == body.loanId && l.Status == LoanStatus.NotBooked) // only unbooked loans
+            .Where(l => l.Id == body.loanId && l.Status == LoanStatus.NotBooked)
             .Include(l => l.User)
             .OrderByDescending(l => l.CreatedAt)
-        .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync();
 
         if (loanInfo is null)
         {
@@ -201,7 +340,7 @@ public class LoanService : ILoanService
             authorisationChannel = "USSD"
         };
 
-        var salaryResponse = await _remitaService.GetSalaryHistoryAsync(remitaRequest);
+        var salaryResponse = await _remitaService.GetSalaryHistory(remitaRequest);
 
         if (salaryResponse == null)
         {
@@ -220,7 +359,6 @@ public class LoanService : ILoanService
         await _db.SaveChangesAsync();
 
         var product = await _db.LoanProducts.FirstOrDefaultAsync(p => p.Id == loanInfo.ProductId);
-
         if (product is null)
         {
             return new ApiResponse
@@ -239,9 +377,9 @@ public class LoanService : ILoanService
 
         return new ApiResponse
         {
-            Data = response,
             Success = true,
-            Message = "Salary history reviewed successfully"
+            Message = "Salary history reviewed successfully",
+            Data = response
         };
     }
 }

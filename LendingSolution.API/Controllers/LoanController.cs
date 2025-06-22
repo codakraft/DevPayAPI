@@ -44,16 +44,5 @@ public class LoanController(ILoanService loanService) : Controller
         return BadRequest(result);
     }
 
-    [HttpPost("submit")]
-    public async Task<IActionResult> SubmitLoan([FromBody] SubmitRequestDto body)
-    {
-        if (body == null || body.LoanId == Guid.Empty)
-        {
-            return BadRequest(new { Success = false, Message = "Invalid loan ID" });
-        }
-        var result = await _loanService.SubmitLoan(body.LoanId, User);
-        if (result.Success)
-            return Ok(result);
-        return BadRequest(result);
-    }
+
 }

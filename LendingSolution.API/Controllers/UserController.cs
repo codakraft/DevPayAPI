@@ -6,38 +6,29 @@ using Microsoft.AspNetCore.Mvc;
 namespace LendingSolution.Controllers;
 
 [ApiController]
-public class UserController : Controller
+public class UserController(
+    IAuthService authService,
+    ILoanService loanService,
+    ILoanProductService loanProductService) : Controller
 {
-    private readonly IAuthService _authService;
-    // private readonly ICompanyUserService _companyUserService;
-    private readonly ILoanProductService _loanProductService;
-    private readonly ILoanService _loanService;
-    public UserController(IAuthService authService, ILoanService loanService, ILoanProductService loanProductService)
-    {
-        _authService = authService;
-        // _companyUserService = companyUserSer;
-        _loanService = loanService;
-        _loanProductService = loanProductService;
-    }
+    private readonly IAuthService _authService = authService;
+    private readonly ILoanProductService _loanProductService = loanProductService;
+    private readonly ILoanService _loanService = loanService;
 
     [HttpPost("onboarding")]
     public async Task<IActionResult> Register([FromBody] RegisterRequestDto body)
     {
         if (!ModelState.IsValid)
         {
-            return BadRequest(new ApiResponse
-            {
-                Data = null,
-                Success = false,
-                Message = "Invalid model State"
-            });
+            return BadRequest(ApiResponse.Fail("Invalid model state"));
         }
 
-        var result = await _authService.Register(body);
-
+        var result = await _loanService.Register(body);
 
         if (!result.Success)
+        {
             return BadRequest(result);
+        }
 
         return Ok(result);
     }
@@ -47,18 +38,15 @@ public class UserController : Controller
     {
         if (!ModelState.IsValid)
         {
-            return BadRequest(new ApiResponse
-            {
-                Data = null,
-                Success = false,
-                Message = "Invalid model State"
-            });
+            return BadRequest(ApiResponse.Fail("Invalid model state"));
         }
 
         var result = await _authService.Login(body);
 
         if (!result.Success)
+        {
             return BadRequest(result);
+        }
 
         return Ok(result);
     }
@@ -68,17 +56,16 @@ public class UserController : Controller
     {
         if (!ModelState.IsValid)
         {
-            return BadRequest(new ApiResponse
-            {
-                Data = null,
-                Success = false,
-                Message = "Invalid model State"
-            });
+            return BadRequest(ApiResponse.Fail("Invalid model state"));
         }
 
         var result = _authService.VerifyOtp(body);
+
         if (result.Success)
+        {
             return Ok(result);
+        }
+
         return BadRequest(result);
     }
 
@@ -87,17 +74,16 @@ public class UserController : Controller
     {
         if (!ModelState.IsValid)
         {
-            return BadRequest(new ApiResponse
-            {
-                Data = null,
-                Success = false,
-                Message = "Invalid model State"
-            });
+            return BadRequest(ApiResponse.Fail("Invalid model state"));
         }
 
         var result = await _authService.SavePersonalDetails(body, User);
+
         if (result.Success)
+        {
             return Ok(result);
+        }
+
         return BadRequest(result);
     }
 
@@ -106,38 +92,52 @@ public class UserController : Controller
     {
         if (!ModelState.IsValid)
         {
-            return BadRequest(new ApiResponse
-            {
-                Data = null,
-                Success = false,
-                Message = "Invalid model State"
-            });
+            return BadRequest(ApiResponse.Fail("Invalid model state"));
         }
 
         var result = await _loanService.SalaryHistoryReview(body);
 
         if (result.Success)
+        {
             return Ok(result);
+        }
 
         return BadRequest(result);
     }
 
     [HttpGet("get-loan-products/{companyId}")]
-    public async Task<IActionResult> GetLoanProductsByCmopanyId([FromRoute] Guid companyId)
+    public async Task<IActionResult> GetLoanProductsByCompanyId([FromRoute] Guid companyId)
     {
         if (!ModelState.IsValid)
         {
-            return BadRequest(
-                ApiResponse.Fail("Invalid model State")
-            );
+            return BadRequest(ApiResponse.Fail("Invalid model state"));
         }
 
         var result = await _loanProductService.GetLoanProductsByCompanyId(companyId);
 
         if (!result.Success)
+        {
             return BadRequest(result);
+        }
 
         return Ok(result);
     }
 
+    [HttpPost("submit/{loanId}")]
+    public async Task<IActionResult> SubmitLoan([FromRoute] Guid loanId, [FromBody] SubmitRequestDto body)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ApiResponse.Fail("Invalid model state"));
+        }
+
+        var result = await _loanService.SubmitLoan(loanId, body);
+
+        if (result.Success)
+        {
+            return Ok(result);
+        }
+
+        return BadRequest(result);
+    }
 }

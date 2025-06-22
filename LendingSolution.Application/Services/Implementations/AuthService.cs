@@ -6,110 +6,24 @@ using LendingSolution.Core.Dtos.Response;
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Infrastructure.Data;
 using LendingSolution.Core.Enum;
+using LendingSolution.Application.Repositories.Interfaces;
 namespace LendingSolution.Application.Services.Implementations;
 
-public class AuthService(UserManager<ApplicationUser> userManager, ITokenService tokenService, ApplicationDbContext db) : IAuthService
+public class AuthService(
+    UserManager<ApplicationUser> userManager,
+    ITokenService tokenService,
+    ApplicationDbContext db,
+    ICompanyRepository companyRepository,
+    ILoanRepository loanRepository,
+    IRemitaService remitaService
+) : IAuthService
 {
     private readonly UserManager<ApplicationUser> _userManager = userManager;
     private readonly ITokenService _tokenService = tokenService;
     private readonly ApplicationDbContext _db = db;
-
-    public async Task<ApiResponse> Register(RegisterRequestDto body)
-    {
-        var existingCompany = await _db.Companies
-            .FirstOrDefaultAsync(c => c.Id == body.CompanyId);
-        if (existingCompany == null)
-        {
-            return new ApiResponse
-            {
-                Success = false,
-                Message = "Company not found",
-                Data = null
-            };
-        }
-
-        var existingEmail = await _userManager.Users.FirstOrDefaultAsync(u => u.Email == body.Email);
-
-        if (existingEmail != null)
-        {
-            return new ApiResponse
-            {
-                Success = false,
-                Message = "A user with this email already exists.",
-                Data = null
-            };
-        }
-
-        var existingBvn = await _db.Account.FirstOrDefaultAsync(u => u.Bvn == body.Bvn);
-
-        if (existingBvn != null)
-        {
-            return new ApiResponse
-            {
-                Success = false,
-                Message = "Bvn already exists.",
-                Data = null
-            };
-        }
-
-        // Add new user
-        var user = new ApplicationUser
-        {
-            UserName = body.Email,
-            Email = body.Email,
-            FirstName = string.Empty,
-            LastName = string.Empty,
-            Address = string.Empty,
-            City = string.Empty,
-            State = string.Empty,
-            DateOfBirth = body.DateOfBirth
-        };
-
-        var result = await _userManager.CreateAsync(user);
-
-        if (!result.Succeeded)
-        {
-            return new ApiResponse
-            {
-                Success = false,
-                Message = "User creation failed",
-                Data = result.Errors
-            };
-        }
-
-        // add a new loan
-        var loan = new Loan
-        {
-            Id = Guid.NewGuid(),
-            UserId = user.Id,
-            Amount = 0,
-            DurationInMonths = 0,
-            Purpose = string.Empty,
-            Status = LoanStatus.NotBooked,
-            CompanyId = body.CompanyId
-        };
-
-        _db.Loans.Add(loan);
-
-        var loanResult = await _db.SaveChangesAsync();
-
-        if (loanResult <= 0)
-        {
-            return new ApiResponse
-            {
-                Success = false,
-                Message = "Loan creation failed",
-                Data = null
-            };
-        }
-
-        return new ApiResponse
-        {
-            Success = true,
-            Data = loan.Id,
-            Message = "User created successfully"
-        };
-    }
+    private readonly ICompanyRepository _companyRepository = companyRepository;
+    private readonly ILoanRepository _loanRepository = loanRepository;
+    private readonly IRemitaService _remitaService = remitaService;
 
     private bool VerifyBvn(String Bvn)
     {
@@ -267,6 +181,6 @@ public class AuthService(UserManager<ApplicationUser> userManager, ITokenService
         _db.Employees.Add(employee);
         await _db.SaveChangesAsync();
 
-        return new ApiResponse { Success = true, Message = "Personal details saved successfully", Data = null };
+        return ApiResponse.Ok("Personal details saved successfully");
     }
 }

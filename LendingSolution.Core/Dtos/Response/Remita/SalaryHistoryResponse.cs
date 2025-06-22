@@ -1,13 +1,11 @@
 namespace LendingSolution.Core.Dtos.Response.Remita;
 
-public class SalaryHistoryResponse
+public class SalaryHistoryResponse : ResponseBase
 {
-    public string? Status { get; set; }
-    public string? Message { get; set; }
-    public required Data Data { get; set; } // Replace with real type if known
+    public SalaryHistoryReviewData Data { get; set; } // Replace with real type if known
 }
 
-public class Data
+public class SalaryHistoryReviewData
 {
     public string CompanyName { get; set; } = string.Empty;
     public string CustomerName { get; set; } = string.Empty;
