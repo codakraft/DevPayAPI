@@ -121,6 +121,7 @@ public static class ServiceExtensions
             options.Password.RequiredLength = 8;
             options.Password.RequireNonAlphanumeric = false;
         })
+        .AddRoles<IdentityRole>()
      .AddEntityFrameworkStores<ApplicationDbContext>()
      .AddDefaultTokenProviders()
      .AddSignInManager<SignInManager<ApplicationUser>>();
@@ -143,6 +144,7 @@ public static class ServiceExtensions
             var contextAccessor = provider.GetRequiredService<IHttpContextAccessor>();
             var userManager = provider.GetRequiredService<UserManager<ApplicationUser>>();
             var jwtSettings = provider.GetRequiredService<IOptions<JwtSettings>>();
+            var IAuthService = provider.GetRequiredService<IAuthService>();
             var tokenService = provider.GetRequiredService<ITokenService>();
             var db = provider.GetRequiredService<ApplicationDbContext>();
             var companyRepository = provider.GetRequiredService<ICompanyRepository>();
@@ -174,6 +176,25 @@ public static class ServiceExtensions
         });
     }
 
+    public static void RegisterServices(this IServiceCollection services)
+    {
+        services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<ITokenService, TokenService>();
+        services.AddScoped<ICompanyService, CompanyService>();
+        services.AddScoped<ILoanProductService, LoanProductService>();
+        services.AddScoped<ILoanService, LoanService>();
+        services.AddScoped<IRemitaService, RemitaService>();
+        services.AddScoped<ISupportToolsService, SupportToolsService>();
+    }
+
+    public static void RegisterRepositories(this IServiceCollection services)
+    {
+        services.AddScoped<ICombinedRepository, CombinedRepository>();
+        services.AddScoped<ICompanyRepository, CompanyRepository>();
+        services.AddScoped<ILoanProductRepository, LoanProductRepository>();
+        services.AddScoped<ILoanRepository, LoanRespository>();
+    }
+
     public static void ConfigureServices(this IServiceCollection services, IConfiguration configuration)
     {
         // services.Configure<RemitaSettings>(configuration.GetSection("Remita"));
@@ -194,19 +215,6 @@ public static class ServiceExtensions
     public static void ConfigureHttpClient(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddHttpClient();
-    }
-
-
-    public static async Task SeedRoles(IServiceProvider serviceProvider)
-    {
-        var roleManager = serviceProvider.GetRequiredService<RoleManager<IdentityRole>>();
-        var roles = new[] { "SuperAdmin", "Admin", "Viewer" };
-
-        foreach (var role in roles)
-        {
-            if (!await roleManager.RoleExistsAsync(role))
-                await roleManager.CreateAsync(new IdentityRole(role));
-        }
     }
 
     public static void ConfigureEndpointExplorer(this IServiceCollection services)

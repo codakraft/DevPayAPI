@@ -183,4 +183,27 @@ public class AuthService(
 
         return ApiResponse.Ok("Personal details saved successfully");
     }
+
+    public async Task<ApiResponse> CreateSuperAdmin(CreateSuperAdminRequestDto body)
+    {
+        var user = new ApplicationUser
+        {
+            FirstName = body.FirstName,
+            LastName = body.LastName,
+            Email = body.Email,
+            UserName = body.Email
+        };
+
+        var result = await _userManager.CreateAsync(user, body.Password);
+
+        if (!result.Succeeded)
+        {
+            return ApiResponse.Fail("Failed to create super admin: " + string.Join(", ", result.Errors.Select(e => e.Description)));
+        }
+
+        // Assign SuperAdmin role
+        await _userManager.AddToRoleAsync(user, "SuperAdmin");
+
+        return ApiResponse.Ok("Super admin created successfully", new { userId = user.Id });
+    }
 }

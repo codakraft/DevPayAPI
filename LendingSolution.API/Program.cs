@@ -5,12 +5,15 @@ using LendingSolution.Core.Settings;
 using LendingSolution.API.Extensions;
 using LendingSolution.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.ConfigureSqlContext(builder.Configuration);
 builder.Services.ConfigureIdentity();
 builder.Services.ConfigureRepositories(builder.Configuration);
+builder.Services.RegisterServices();
+builder.Services.RegisterRepositories();
 builder.Services.ConfigureServiceManager();
 builder.Services.ConfigureHttpClient(builder.Configuration);
 builder.Services.ConfigureCors();
@@ -25,6 +28,22 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     db.Database.Migrate();
 }
+
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
+    var roles = new[] { "SuperAdmin", "Admin", "Viewer" };
+
+    foreach (var role in roles)
+    {
+        if (!await roleManager.RoleExistsAsync(role))
+        {
+            await roleManager.CreateAsync(new IdentityRole(role));
+        }
+    }
+}
+
 
 app.UseCors(x => x.AllowAnyHeader().AllowAnyOrigin().AllowAnyMethod());
 app.UseAuthentication();

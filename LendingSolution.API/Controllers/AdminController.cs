@@ -43,27 +43,6 @@ public class AdminController : Controller
         return Ok(result);
     }
 
-    [HttpPost("create-company")]
-    public async Task<IActionResult> CreateCompany([FromBody] CreateCompanyRequestDto body)
-    {
-        if (!ModelState.IsValid)
-        {
-            return BadRequest(new ApiResponse
-            {
-                Data = null,
-                Success = false,
-                Message = "Invalid model State"
-            });
-        }
-
-        var result = await _companyService.CreateCompany(body);
-
-        if (!result.Success)
-            return BadRequest(result);
-
-        return Ok(result);
-    }
-
     [HttpPost("create-product")]
     public async Task<IActionResult> CreateProduct([FromBody] CreateLoanProductRequestDto body)
     {
