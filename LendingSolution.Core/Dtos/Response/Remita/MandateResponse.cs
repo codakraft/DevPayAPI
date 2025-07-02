@@ -13,3 +13,18 @@ public class MandateData
     public string Status { get; set; } = string.Empty;
 
 }
+
+public class ValidateMandateResponse
+{
+
+}
+
+public class DebitInstructionResponse
+{
+
+}
+
+public class StopMandateResponse
+{
+
+}

@@ -7,6 +7,7 @@ using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Infrastructure.Data;
 using LendingSolution.Core.Enum;
 using LendingSolution.Application.Repositories.Interfaces;
+using LendingSolution.Application.Exceptions;
 namespace LendingSolution.Application.Services.Implementations;
 
 public class AuthService(
@@ -15,7 +16,8 @@ public class AuthService(
     ApplicationDbContext db,
     ICompanyRepository companyRepository,
     ILoanRepository loanRepository,
-    IRemitaService remitaService
+    IRemitaService remitaService,
+    RoleManager<IdentityRole> roleManager
 ) : IAuthService
 {
     private readonly UserManager<ApplicationUser> _userManager = userManager;
@@ -24,6 +26,7 @@ public class AuthService(
     private readonly ICompanyRepository _companyRepository = companyRepository;
     private readonly ILoanRepository _loanRepository = loanRepository;
     private readonly IRemitaService _remitaService = remitaService;
+    private readonly RoleManager<IdentityRole> _roleManager = roleManager;
 
     private bool VerifyBvn(String Bvn)
     {
@@ -63,13 +66,13 @@ public class AuthService(
         return ApiResponse.Ok("Logged in successfully", data);
     }
 
-    public async Task<ApiResponse> AdminLogin(LoginRequestDto body)
+    public async Task<object> AdminLogin(LoginRequestDto body)
     {
         var user = await _userManager.FindByEmailAsync(body.Email);
 
         if (user is null || !await _userManager.CheckPasswordAsync(user, body.Password))
         {
-            return ApiResponse.Fail("Invalid Credentials");
+            throw new AppException("Invalid credentials");
         }
 
         var token = await _tokenService.GenerateTokenAsync(user);
@@ -87,76 +90,46 @@ public class AuthService(
             }
         };
 
-        return ApiResponse.Ok("Logged in successfully", data);
+        return data;
     }
 
-    public ApiResponse VerifyOtp(VerifyOtpRequestDto body)
+    public bool VerifyOtp(VerifyOtpRequestDto body)
     {
-        if (body.Otp == "1234")
+        if (body.Otp != "1234")
         {
-            return new ApiResponse
-            {
-                Data = null,
-                Success = true,
-                Message = "OTP verified successfully"
-            };
+            throw new AppException("Invalid OTP");
         }
-        else
-        {
-            return new ApiResponse
-            {
-                Data = null,
-                Success = false,
-                Message = "Invalid OTP"
-            };
-        }
+        return true;
     }
 
-    public ApiResponse SalaryHistoryReview(ReviewHistoryRequestDto body)
+    public async Task<bool> SavePersonalDetails(SavePersonalDetailsRequestDto body, System.Security.Claims.ClaimsPrincipal user)
     {
-        // Example logic, replace with real implementation as needed
-        var response = new ReviewHistoryResponseDto
+        if (body is null)
         {
-            CompanyName = "Example Company",
-            MaxEligibleAmount = 500000.00m
-        };
-        return new ApiResponse
-        {
-            Data = response,
-            Success = true,
-            Message = "Salary history reviewed successfully"
-        };
-    }
-
-    public async Task<ApiResponse> SavePersonalDetails(SavePersonalDetailsRequestDto body, System.Security.Claims.ClaimsPrincipal user)
-    {
-        // Validate input
-        if (body == null)
-        {
-            return new ApiResponse { Success = false, Message = "Request body cannot be null", Data = null };
+            throw new AppException("Request body cannot be null");
         }
 
-        // Check for valid user
         var userId = _userManager.GetUserId(user);
+
         if (string.IsNullOrWhiteSpace(userId))
         {
-            return new ApiResponse { Success = false, Message = "User not found", Data = null };
+            throw new AppException("User not found");
         }
 
-        // Check if Loan exists and belongs to user
         var loan = await _db.Loans.FirstOrDefaultAsync(l => l.Id == body.LoanId && l.UserId == userId);
+
         if (loan == null)
         {
-            return new ApiResponse { Success = false, Message = "Loan not found for user", Data = null };
+            throw new AppException("Loan not found for user");
         }
 
         var existingEmployee = await _db.Employees.FirstOrDefaultAsync(e => e.UserId == userId && e.LoanId == body.LoanId);
+
         if (existingEmployee != null)
         {
-            return new ApiResponse { Success = false, Message = "Personal details already submitted for this loan", Data = null };
+            throw new AppException("Personal details already submitted for this loan");
         }
 
-        // Save employee details
         var employee = new Employee
         {
             Id = Guid.NewGuid(),
@@ -170,7 +143,7 @@ public class AuthService(
         _db.Employees.Add(employee);
         await _db.SaveChangesAsync();
 
-        return ApiResponse.Ok("Personal details saved successfully");
+        return true;
     }
 
     public async Task<ApiResponse> CreateSuperAdmin(CreateSuperAdminRequestDto body)
@@ -218,5 +191,37 @@ public class AuthService(
 
         return ApiResponse.Ok("admin created successfully", new { userId = user.Id });
     }
-}
 
+    public Task<ApiResponse> GetRoles()
+    {
+        var roles = _roleManager.Roles.Select(r => new
+        {
+            r.Id,
+            r.Name
+        })
+        .ToList();
+
+        return Task.FromResult(ApiResponse.Ok("Roles fetched successfully", roles));
+    }
+
+    public async Task<ApiResponse> AssignRole(RoleAssignDto body)
+    {
+        var user = await _userManager.FindByIdAsync(body.UserId);
+
+        if (user is null)
+        {
+            return ApiResponse.Fail("User not found");
+        }
+
+        var role = await _roleManager.FindByIdAsync(body.RoleId);
+
+        if (role is null)
+        {
+            return ApiResponse.Fail("Role not found.");
+        }
+
+        var result = await _userManager.AddToRoleAsync(user, role.Name!);
+
+        return ApiResponse.Ok("role added successfully", result);
+    }
+}

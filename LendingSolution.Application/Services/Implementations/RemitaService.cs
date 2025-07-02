@@ -22,8 +22,8 @@ public class RemitaService(
 {
     private readonly RemitaSettings _settings = options.Value;
     private readonly HttpClient _httpClient = httpClientFactory.CreateClient();
-    private readonly ICombinedRepository _cRepo = cRepo;
     private readonly ILogger<RemitaService> _logger = logger;
+    private readonly ICombinedRepository _cRepo = cRepo;
     private string? _cachedToken;
     private DateTime? _tokenExpiry;
     private void AddStandardHeaders(HttpRequestMessage request, string? token)
@@ -36,44 +36,38 @@ public class RemitaService(
         if (!string.IsNullOrWhiteSpace(token))
             request.Headers.Add("AUTHORIZATION", token);
     }
-    public string GetUsername() => _settings.Username;
+    private string BuildUrl(string path) => $"{_settings.BaseUrl.TrimEnd('/')}/{path.TrimStart('/')}";
     private string GetPassword() => _settings.Password;
-    private string BuildUrl(string relativePath) =>
-        $"{_settings.BaseUrl.TrimEnd('/')}/{relativePath.TrimStart('/')}";
+    private string GetUsername() => _settings.Username;
     private async Task<string?> GetAccessTokenAsync()
     {
         if (!string.IsNullOrWhiteSpace(_cachedToken) && _tokenExpiry > DateTime.UtcNow)
             return _cachedToken;
 
-        var url = BuildUrl(_settings.AuthUrl);
-        var credentials = new
+        var request = new HttpRequestMessage(HttpMethod.Post, BuildUrl(_settings.AuthUrl))
         {
-            username = _settings.Username,
-            password = _settings.Password
+            Content = new StringContent(JsonSerializer.Serialize(new
+            {
+                username = _settings.Username,
+                password = _settings.Password
+            }), Encoding.UTF8, "application/json")
         };
 
-        var request = new HttpRequestMessage(HttpMethod.Post, url)
-        {
-            Content = new StringContent(JsonSerializer.Serialize(credentials), Encoding.UTF8, "application/json")
-        };
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
         var response = await _httpClient.SendAsync(request);
-
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogWarning("Remita token request failed: {Status} - {Reason}", response.StatusCode, response.ReasonPhrase);
+            _logger.LogWarning("Token request failed: {Status} - {Reason}", response.StatusCode, response.ReasonPhrase);
             return null;
         }
 
-        var json = await response.Content.ReadAsStringAsync();
-
         try
         {
-            var auth = JsonSerializer.Deserialize<RemitaAuthResponse>(json);
+            var auth = JsonSerializer.Deserialize<RemitaAuthResponse>(await response.Content.ReadAsStringAsync());
             if (auth?.AccessToken is null)
             {
-                _logger.LogError("Access token was missing from Remita response.");
+                _logger.LogError("Missing token in response");
                 return null;
             }
 
@@ -83,100 +77,210 @@ public class RemitaService(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to parse token response from Remita");
+            _logger.LogError(ex, "Token response parse error");
             return null;
         }
     }
-    public async Task<SalaryHistoryResponse?> GetSalaryHistory(object requestBody)
+
+    public async Task<object?> GetSalaryHistory(Guid loanId, ReviewHistoryRequestDto body)
     {
         var token = await GetAccessTokenAsync();
-        var url = BuildUrl("/send/api/loansvc/data/api/v2/payday/salary/history/provideCustomerDetails");
-
-        var request = new HttpRequestMessage(HttpMethod.Post, url)
+        var request = new HttpRequestMessage(HttpMethod.Post,
+            BuildUrl("/send/api/loansvc/data/api/v2/payday/salary/history/provideCustomerDetails"))
         {
-            Content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json")
+            Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json")
         };
-
         AddStandardHeaders(request, token);
 
         var response = await _httpClient.SendAsync(request);
-
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogWarning("Remita salary history request failed: {Status} - {Reason}", response.StatusCode, response.ReasonPhrase);
+            _logger.LogWarning("Salary history failed: {Status} - {Reason}", response.StatusCode, response.ReasonPhrase);
             return null;
         }
 
-        var json = await response.Content.ReadAsStringAsync();
+        var result = new ReviewHistoryResponseDto
+        {
+            CompanyName = "Example Company",
+            MaxEligibleAmount = 500000.00m
+        };
 
-        try
-        {
-            return JsonSerializer.Deserialize<SalaryHistoryResponse>(json);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to parse salary history response");
-            return null;
-        }
+
+        return result;
+
     }
-    public async Task<MandateResponse?> GenerateMandate(Guid loanId, SubmitRequestDto requestBody)
+
+    public async Task<MandateResponse?> GenerateMandate(Guid loanId, SubmitRequestDto body)
     {
-        var loan = await _cRepo.GetAllLoanInfoByLoanId(loanId);
+        var loan = await _cRepo.GetAllLoanInfoByLoanId(loanId)
+                   ?? throw new ArgumentException("Loan not found", nameof(loanId));
 
-        if (loan is null)
-            throw new ArgumentException("Loan not found", nameof(loanId));
+        var startDate = DateTime.UtcNow.ToString("yyyy-MM-dd");
+        var endDate = DateTime.Now.AddMonths(body.Tenor).AddDays(loan.Product.Moratorium).ToString("yyyy-MM-dd");
+        var requestId = Guid.NewGuid().ToString();
+        var hash = HashUtils.ComputeSha512Hash($"{_settings.MerchantId}{_settings.ServiceTypeId}{body.Amount}{_settings.ApiKey}");
 
-        String startDate = DateTime.UtcNow.ToString("yyyy-MM-dd");
-        String endDate = DateTime.Now.AddMonths(requestBody.Tenor).AddDays(loan.Product.Moratorium).ToString("yyyy-MM-dd");
-        String requiestId = new Guid().ToString();
-        String hash = HashUtils.ComputeSha512Hash($"{_settings.MerchantId}{_settings.ServiceTypeId}{requestBody.Amount}{_settings.ApiKey}");
-
-        var newRequestBody = new
+        var payload = new
         {
-            MerchantId = _settings.MerchantId,
-            ServiceTypeId = _settings.ServiceTypeId,
-            hash = _settings.Hash,
+            merchantId = _settings.MerchantId,
+            serviceTypeId = _settings.ServiceTypeId,
+            hash,
             payerName = loan.Account.AccountName,
             payerEmail = loan.User.Email,
             payerPhone = loan.User.PhoneNumber,
             payerBankCode = loan.Account.BankCode,
             payeraccount = loan.Account.AccountNumber,
-            requestId = requiestId.ToString(),
-            amount = requestBody.Amount,
+            requestId,
+            amount = body.Amount,
             mandateType = "SO",
             Frequency = "Month",
             StartDate = startDate,
-            endDate = endDate,
+            endDate
         };
 
         var token = await GetAccessTokenAsync();
-        var url = BuildUrl("/send/api/loansvc/data/api/v2/payday/mandate/create");
-
-        var request = new HttpRequestMessage(HttpMethod.Post, url)
+        var request = new HttpRequestMessage(HttpMethod.Post, BuildUrl("/send/api/loansvc/data/api/v2/payday/mandate/create"))
         {
-            Content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json")
+            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
         };
 
         AddStandardHeaders(request, token);
+        var response = await _httpClient.SendAsync(request);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("Mandate request failed: {Status} - {Reason}", response.StatusCode, response.ReasonPhrase);
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<MandateResponse>(await response.Content.ReadAsStringAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Mandate response parse error");
+            return null;
+        }
+    }
+
+    public async Task<InitiateMandateOtpResponseDto?> Initiate(Guid loanId)
+    {
+        var loan = await _cRepo.GetAllLoanInfoByLoanId(loanId)
+                   ?? throw new ArgumentException("Loan not found", nameof(loanId));
+
+        var requestId = Guid.NewGuid().ToString();
+        var payload = new { mandateId = loan.MandateId, requestId };
+
+        var request = new HttpRequestMessage(HttpMethod.Post,
+            BuildUrl("/send/api/echannelsvc/echannel/mandate/requestAuthorization"))
+        {
+            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+        };
 
         var response = await _httpClient.SendAsync(request);
 
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogWarning("Remita mandate creation request failed: {Status} - {Reason}", response.StatusCode, response.ReasonPhrase);
+            _logger.LogWarning("Initiate OTP request failed: {Status} - {Reason}", response.StatusCode, response.ReasonPhrase);
             return null;
         }
 
-        var json = await response.Content.ReadAsStringAsync();
-
         try
         {
-            return JsonSerializer.Deserialize<MandateResponse>(json);
+            return JsonSerializer.Deserialize<InitiateMandateOtpResponseDto>(await response.Content.ReadAsStringAsync());
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to parse mandate creation response");
+            _logger.LogError(ex, "Initiate OTP response parse error");
+            return null;
+        }
+    }
+
+    public async Task<ValidateMandateOtpResponseDto?> ValidateMandate(Guid loanId, ValidateMandateOtpRequestDto body)
+    {
+        var loan = await _cRepo.GetAllLoanInfoByLoanId(loanId)
+                   ?? throw new ArgumentException("Loan not found", nameof(loanId));
+
+        var payload = new
+        {
+            remitaTransRef = loan.RemitaTransRef,
+            authParams = new[]
+            {
+                new { param1 = "OTP", value = body.OtpCode }
+            }
+        };
+
+        var request = new HttpRequestMessage(HttpMethod.Post,
+            BuildUrl("/send/api/echannelsvc/echannel/mandate/validateAuthorization"))
+        {
+            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+        };
+
+        var response = await _httpClient.SendAsync(request);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("Validate OTP request failed: {Status} - {Reason}", response.StatusCode, response.ReasonPhrase);
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<ValidateMandateOtpResponseDto>(await response.Content.ReadAsStringAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Validate OTP response parse error");
+            return null;
+        }
+    }
+
+    public async Task<DebitInstructionResponseDto?> DebitInstruction(Guid loanId, DebitInstructionRequestDto body)
+    {
+        var loan = await _cRepo.GetAllLoanInfoByLoanId(loanId)
+                   ?? throw new ArgumentException("Loan not found", nameof(loanId));
+
+        var requestId = Guid.NewGuid().ToString();
+        var hash = HashUtils.ComputeSha512Hash($"{_settings.MerchantId}{_settings.ServiceTypeId}{loan.Amount}{_settings.ApiKey}");
+        var totalAmount = loan.Amount / loan.DurationInMonths;
+
+        var payload = new
+        {
+            merchantId = _settings.MerchantId,
+            serviceTypeId = _settings.ServiceTypeId,
+            hash,
+            requestId,
+            totalAmount,
+            mandateId = loan.MandateId,
+            fundingAccount = loan.Account.AccountNumber,
+            fundingBankCode = loan.Account.BankCode
+        };
+
+        var request = new HttpRequestMessage(HttpMethod.Post,
+            BuildUrl("/send/api/echannelsvc/echannel/mandate/payment/send"))
+        {
+            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+        };
+
+        var response = await _httpClient.SendAsync(request);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("Debit instruction failed: {Status} - {Reason}", response.StatusCode, response.ReasonPhrase);
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<DebitInstructionResponseDto>(await response.Content.ReadAsStringAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Debit instruction parse error");
             return null;
         }
     }
 }
+
+

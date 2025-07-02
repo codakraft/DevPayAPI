@@ -17,6 +17,7 @@ public class ServiceManager(
     IHttpContextAccessor _contextAccessor,
 #pragma warning restore CS9113 // Parameter is unread.
     UserManager<ApplicationUser> userManager,
+    RoleManager<IdentityRole> roleManager,
     IOptions<JwtSettings> jwtconfig,
     ITokenService tokenService,
     ApplicationDbContext db,
@@ -38,7 +39,9 @@ public class ServiceManager(
                     db,
                     companyRepository,
                     loanRepository,
-                    remitaService));
+                    remitaService,
+                    roleManager
+                ));
     private readonly Lazy<ITokenService> _tokenService = new Lazy<ITokenService>(() =>
                 new TokenService(userManager, jwtconfig));
     private readonly Lazy<ICompanyService> _companyService = new Lazy<ICompanyService>(() =>

@@ -1,6 +1,3 @@
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using LendingSolution.Application.Services.Interfaces;
-using LendingSolution.Application.Services.Implementations;
 using LendingSolution.Core.Settings;
 using LendingSolution.API.Extensions;
 using LendingSolution.Infrastructure.Data;
@@ -33,7 +30,7 @@ using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
-    var roles = new[] { "SuperAdmin", "Admin", "Viewer" };
+    var roles = new[] { "SuperAdmin", "Admin", "LoanOfficer", "CollectionsOfficer", "Underwriter", "SupportAgent", "Auditor", "Viewer" };
 
     foreach (var role in roles)
     {

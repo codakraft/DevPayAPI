@@ -1,3 +1,4 @@
+using LendingSolution.Application.Exceptions;
 using LendingSolution.Application.Repositories.Interfaces;
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
@@ -37,10 +38,10 @@ public class LoanProductService(
             : ApiResponse.Fail("Failed to create loan product");
     }
 
-    public async Task<ApiResponse> GetLoanProductsByCompanyId(Guid companyId)
+    public async Task<List<LoanProductResponseDto>> GetLoanProductsByCompanyId(Guid companyId)
     {
         if (!await CompanyExistsAsync(companyId))
-            return ApiResponse.Fail("Company does not exist");
+            throw new AppException("Company does not exist", 404);
 
         var loanProducts = await _loanProductRepository.GetLoanProductsByCompanyId(companyId);
 
@@ -56,7 +57,7 @@ public class LoanProductService(
             ShortName = lp.ShortName
         }).ToList();
 
-        return ApiResponse.Ok("Loan products retrieved successfully", data);
+        return data;
     }
 
     private async Task<bool> CompanyExistsAsync(Guid companyId)

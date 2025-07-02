@@ -6,7 +6,7 @@ namespace LendingSolution.Application.Services.Interfaces
     public interface ILoanProductService
     {
         Task<ApiResponse> CreateLoanProduct(CreateLoanProductRequestDto product);
-        Task<ApiResponse> GetLoanProductsByCompanyId(Guid companyId);
+        Task<List<LoanProductResponseDto>> GetLoanProductsByCompanyId(Guid companyId);
         // Task<bool> DeactivateLoanProductAsync(string id);
         // Task<bool> ActivateLoanProductAsync(string id);
         // Task<bool> DeleteLoanProductAsync(string id);

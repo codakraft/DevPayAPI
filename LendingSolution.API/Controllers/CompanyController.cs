@@ -6,45 +6,28 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace LendingSolution.API.Controllers;
 
-[Authorize(Roles = "SuperAdmin")]
+[Authorize]
 [ApiController]
-[Route("api/sa")]
-public class SuperAdminController(IAuthService authService, ICompanyService companySErvice, ILoanProductService loanProductService) : Controller
+[Route("api/company")]
+public class CompanyController(ICompanyService companySErvice, ILoanProductService loanProductService, ILogger<CompanyController> logger)
+  : Controller
 {
-    private readonly IAuthService _authService = authService;
     private readonly ILoanProductService _loanProductService = loanProductService;
     private readonly ICompanyService _companyService = companySErvice;
+    private readonly ILogger<CompanyController> _logger = logger;
 
-    // create
-    [AllowAnonymous]
-    [HttpPost("super-admin/create")]
-    public async Task<IActionResult> CreateSuperAdmin([FromBody] CreateSuperAdminRequestDto body)
-    {
-        if (!ModelState.IsValid)
-        {
-            return BadRequest(ApiResponse.Fail("Invalid model State"));
-        }
-
-        var result = await _authService.CreateSuperAdmin(body);
-
-        if (!result.Success)
-            return BadRequest(result);
-
-        return Ok(result);
-    }
-
-    // company/create-admin
-    [HttpPost("admin/create")]
-    public async Task<IActionResult> CreateAdmin([FromBody] CreateAdminRequestDto body)
+    [Authorize(Roles = "SuperAdmin, Admin")]
+    [HttpPost("product/create")]
+    public async Task<IActionResult> CreateProduct([FromBody] CreateLoanProductRequestDto body)
     {
         if (!ModelState.IsValid)
         {
             return BadRequest(
-                ApiResponse.Fail("Invalid model state")
+                ApiResponse.Fail("Invalid model State")
             );
         }
 
-        var result = await _authService.CreateAdmin(body);
+        var result = await _loanProductService.CreateLoanProduct(body);
 
         if (!result.Success)
             return BadRequest(result);
@@ -52,7 +35,25 @@ public class SuperAdminController(IAuthService authService, ICompanyService comp
         return Ok(result);
     }
 
-    [HttpPost("company/create")]
+    [Authorize(Roles = "SuperAdmin, Admin")]
+    [HttpGet("loan-products/{companyId}")]
+    public async Task<IActionResult> GetLoanProductsByCmopanyId([FromRoute] Guid companyId)
+    {
+        try
+        {
+            var result = await _loanProductService.GetLoanProductsByCompanyId(companyId);
+            return Ok(ApiResponse.Ok("Loan products fetched successfully", result));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching loan products for company {CompanyId}", companyId);
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred: " + ex.Message));
+        }
+
+    }
+
+    [Authorize(Roles = "SuperAdmin")]
+    [HttpPost("sa/create")]
     public async Task<IActionResult> CreateCompany([FromBody] CreateCompanyRequestDto body)
     {
         if (!ModelState.IsValid)
@@ -70,8 +71,8 @@ public class SuperAdminController(IAuthService authService, ICompanyService comp
         return Ok(result);
     }
 
-    // company/activate
-    [HttpGet("company/deactivate/{companyId}")]
+    [Authorize(Roles = "SuperAdmin")]
+    [HttpGet("sa/deactivate/{companyId}")]
     public async Task<IActionResult> DeactivateCompany([FromRoute] Guid companyId)
     {
         if (!ModelState.IsValid)
@@ -89,8 +90,8 @@ public class SuperAdminController(IAuthService authService, ICompanyService comp
         return Ok(result);
     }
 
-    // company/activate
-    [HttpGet("company/activate")]
+    [Authorize(Roles = "SuperAdmin")]
+    [HttpGet("sa/activate/{companyId}")]
     public async Task<IActionResult> Activate([FromRoute] Guid companyId)
     {
         if (!ModelState.IsValid)
@@ -108,12 +109,17 @@ public class SuperAdminController(IAuthService authService, ICompanyService comp
         return Ok(result);
     }
 
+    // Update company information
 
-    // company/deactivate-admin
-
-    // company/remove-admin
-
-    // company/deactivate
+    // [GET]    /api/company  
+    // [GET]    /api/company/{id}  
+    // [POST]   /api/company  
+    // [PUT]    /api/company/{id}  
+    // [GET]    /api/company/products  
+    // [POST]   /api/company/products  
+    // [PUT]    /api/company/products/{id}  
+    // [DELETE] /api/company/products/{id}  
+    // [GET]    /api/company/analytics  
 
 
 }

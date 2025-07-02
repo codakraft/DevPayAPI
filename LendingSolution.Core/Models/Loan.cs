@@ -23,4 +23,6 @@ public class Loan : Base
     public Guid AccountId { get; set; }
     public Account Account { get; set; } = default!;
     public bool IsMandateGenerated { get; set; } = false;
+    public string MandateId { get; set; } = string.Empty;
+    public string RemitaTransRef { get; set; } = string.Empty;
 }

@@ -156,10 +156,12 @@ public static class ServiceExtensions
             var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
             var logger = provider.GetRequiredService<ILogger<RemitaService>>();
             var combinedRepository = provider.GetRequiredService<ICombinedRepository>();
+            var roleManager = provider.GetRequiredService<RoleManager<IdentityRole>>();
 
             return new ServiceManager(
                 contextAccessor,
                 userManager,
+                roleManager,
                 jwtSettings,
                 tokenService,
                 db,
