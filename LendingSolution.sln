@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LendingSolution.API", "LendingSolution.API/LendingSolution.API.csproj", "{6DD35211-FAB5-5944-6D9C-A4053D41BC40}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LendingSolution.API", "LendingSolution.API\LendingSolution.API.csproj", "{6DD35211-FAB5-5944-6D9C-A4053D41BC40}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LendingSolution.Core", "LendingSolution.Core\LendingSolution.Core.csproj", "{FE1E9782-CFCA-4179-9944-2BE63EAEFDBE}"
 EndProject

@@ -45,7 +45,7 @@ public class LoanService(
             throw new AppException("A user with this email already exists");
         }
 
-        var existingBvn = await _db.Account.FirstOrDefaultAsync(u => u.Bvn == body.Bvn);
+        var existingBvn = await _db.Accounts.FirstOrDefaultAsync(u => u.Bvn == body.Bvn);
 
         if (existingBvn != null)
         {
