@@ -39,6 +39,6 @@ public class LoanController(
     // [POST]   /api/loans/{id}/reject  
     // [POST]   /api/loans/{id}/disburse  
     // [GET]    /api/loans/user/{userId}  
-    // [GET]    /api/loans/company/{companyId}  
+    // [GET]    /api/loans/company/{companyId}
     // [GET]    /api/loans/status/{status}  
 }
