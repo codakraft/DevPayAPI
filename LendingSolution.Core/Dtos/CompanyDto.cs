@@ -15,3 +15,7 @@ public class CompanyResponseDto : CompanyDto
 }
 
 public class CreateCompanyRequestDto : CompanyDto;
+
+public class UpdateCompanyRequestDto : CompanyDto
+{
+}

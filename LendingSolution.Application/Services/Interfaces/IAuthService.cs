@@ -13,4 +13,7 @@ public interface IAuthService
     Task<bool> SavePersonalDetails(SavePersonalDetailsRequestDto body, System.Security.Claims.ClaimsPrincipal user);
     Task<ApiResponse> GetRoles();
     Task<ApiResponse> AssignRole(RoleAssignDto body);
+    Task<ApiResponse> RefreshToken(RefreshTokenRequestDto request);
+    Task<ApiResponse> RevokeToken(RevokeTokenRequestDto request, string? userId = null);
+    Task<ApiResponse> Logout(string? userId = null);
 }

@@ -157,6 +157,7 @@ public static class ServiceExtensions
             var logger = provider.GetRequiredService<ILogger<RemitaService>>();
             var combinedRepository = provider.GetRequiredService<ICombinedRepository>();
             var roleManager = provider.GetRequiredService<RoleManager<IdentityRole>>();
+            var refreshTokenRepository = provider.GetRequiredService<IRefreshTokenRepository>();
 
             return new ServiceManager(
                 contextAccessor,
@@ -173,7 +174,8 @@ public static class ServiceExtensions
                 remitaSettings,
                 httpClientFactory,
                 logger,
-                combinedRepository
+                combinedRepository,
+                refreshTokenRepository
             );
         });
     }
@@ -187,6 +189,10 @@ public static class ServiceExtensions
         services.AddScoped<ILoanService, LoanService>();
         services.AddScoped<IRemitaService, RemitaService>();
         services.AddScoped<ISupportToolsService, SupportToolsService>();
+        services.AddScoped<IAdminSettingsService, AdminSettingsService>();
+        services.AddScoped<IApprovalService, ApprovalService>();
+        services.AddScoped<IFinanceService, FinanceService>();
+        services.AddScoped<ISupportService, SupportService>();
     }
 
     public static void RegisterRepositories(this IServiceCollection services)
@@ -195,6 +201,13 @@ public static class ServiceExtensions
         services.AddScoped<ICompanyRepository, CompanyRepository>();
         services.AddScoped<ILoanProductRepository, LoanProductRepository>();
         services.AddScoped<ILoanRepository, LoanRespository>();
+        services.AddScoped<IAdminSettingsRepository, AdminSettingsRepository>();
+        services.AddScoped<IApprovalRepository, ApprovalRepository>();
+        services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+        services.AddScoped<IDisbursementRepository, DisbursementRepository>();
+        services.AddScoped<IRepaymentRepository, RepaymentRepository>();
+        services.AddScoped<ISupportTicketRepository, SupportTicketRepository>();
+        services.AddScoped<ISupportCommentRepository, SupportCommentRepository>();
     }
 
     public static void ConfigureServices(this IServiceCollection services, IConfiguration configuration)

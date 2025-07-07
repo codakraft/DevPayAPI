@@ -101,4 +101,100 @@ public class CompanyService : ICompanyService
 
         return ApiResponse.Ok("Company has been deactivated");
     }
+
+    public async Task<ApiResponse> UpdateCompany(Guid id, UpdateCompanyRequestDto body, string? userId = null)
+    {
+        try
+        {
+            var company = await _companyRepository.GetCompanyById(id);
+
+            if (company is null)
+            {
+                return ApiResponse.Fail("Company does not exist");
+            }
+
+            // Update company properties
+            company.Name = body.Name;
+            company.ShortName = body.ShortName;
+            company.Street = body.Street;
+            company.City = body.City;
+            company.State = body.State;
+            company.UpdatedAt = DateTime.UtcNow;
+
+            var updateResult = await _companyRepository.UpdateCompany(company);
+
+            if (!updateResult)
+            {
+                return ApiResponse.Fail("Unable to update company at the moment");
+            }
+
+            return ApiResponse.Ok("Company updated successfully", new CompanyResponseDto
+            {
+                Id = company.Id,
+                Name = company.Name,
+                ShortName = company.ShortName,
+                Street = company.Street,
+                City = company.City,
+                State = company.State
+            });
+        }
+        catch (Exception ex)
+        {
+            return ApiResponse.Fail($"Failed to update company: {ex.Message}");
+        }
+    }
+
+    public async Task<ApiResponse> GetCompanyById(Guid id)
+    {
+        try
+        {
+            var company = await _companyRepository.GetCompanyById(id);
+
+            if (company is null)
+            {
+                return ApiResponse.Fail("Company not found");
+            }
+
+            return ApiResponse.Ok("Company retrieved successfully", new CompanyResponseDto
+            {
+                Id = company.Id,
+                Name = company.Name,
+                ShortName = company.ShortName,
+                Street = company.Street,
+                City = company.City,
+                State = company.State
+            });
+        }
+        catch (Exception ex)
+        {
+            return ApiResponse.Fail($"Failed to retrieve company: {ex.Message}");
+        }
+    }
+
+    public async Task<ApiResponse> GetUserCompany(string userId)
+    {
+        try
+        {
+            var company = await _companyRepository.GetCompanyByUserId(userId);
+
+            if (company is null)
+            {
+                return ApiResponse.Fail("User is not associated with any company");
+            }
+
+            return ApiResponse.Ok("Company retrieved successfully", new CompanyResponseDto
+            {
+                Id = company.Id,
+                Name = company.Name,
+                ShortName = company.ShortName,
+                Street = company.Street,
+                City = company.City,
+                State = company.State
+            });
+        }
+        catch (Exception ex)
+        {
+            return ApiResponse.Fail($"Failed to retrieve user company: {ex.Message}");
+        }
+    }
 }

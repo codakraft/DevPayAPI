@@ -48,12 +48,16 @@ public class AuthService(
             return ApiResponse.Fail("Invalid credentials");
         }
 
-        var token = await _tokenService.GenerateTokenAsync(user);
+        var tokenResponse = await _tokenService.GenerateTokenWithRefreshAsync(user);
 
         var data = new
         {
-            Token = token,
-            user = new
+            AccessToken = tokenResponse.AccessToken,
+            RefreshToken = tokenResponse.RefreshToken,
+            TokenType = tokenResponse.TokenType,
+            ExpiresIn = tokenResponse.AccessTokenExpiry,
+            RefreshTokenExpiresIn = tokenResponse.RefreshTokenExpiry,
+            User = new
             {
                 Id = user?.Id,
                 FirstName = user?.FirstName ?? string.Empty,
@@ -75,12 +79,16 @@ public class AuthService(
             throw new AppException("Invalid credentials");
         }
 
-        var token = await _tokenService.GenerateTokenAsync(user);
+        var tokenResponse = await _tokenService.GenerateTokenWithRefreshAsync(user);
 
         var data = new
         {
-            Token = token,
-            user = new
+            AccessToken = tokenResponse.AccessToken,
+            RefreshToken = tokenResponse.RefreshToken,
+            TokenType = tokenResponse.TokenType,
+            ExpiresIn = tokenResponse.AccessTokenExpiry,
+            RefreshTokenExpiresIn = tokenResponse.RefreshTokenExpiry,
+            User = new
             {
                 Id = user?.Id,
                 FirstName = user?.FirstName ?? string.Empty,
@@ -223,5 +231,47 @@ public class AuthService(
         var result = await _userManager.AddToRoleAsync(user, role.Name!);
 
         return ApiResponse.Ok("role added successfully", result);
+    }
+
+    public async Task<ApiResponse> RefreshToken(RefreshTokenRequestDto request)
+    {
+        try
+        {
+            return await _tokenService.RefreshTokenAsync(request.RefreshToken);
+        }
+        catch (Exception ex)
+        {
+            return ApiResponse.Fail($"Failed to refresh token: {ex.Message}");
+        }
+    }
+
+    public async Task<ApiResponse> RevokeToken(RevokeTokenRequestDto request, string? userId = null)
+    {
+        try
+        {
+            return await _tokenService.RevokeTokenAsync(request.RefreshToken, userId, request.Reason);
+        }
+        catch (Exception ex)
+        {
+            return ApiResponse.Fail($"Failed to revoke token: {ex.Message}");
+        }
+    }
+
+    public async Task<ApiResponse> Logout(string? userId = null)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(userId))
+            {
+                return ApiResponse.Fail("User ID is required for logout");
+            }
+
+            await _tokenService.RevokeAllUserTokensAsync(userId, userId, "User logged out");
+            return ApiResponse.Ok("Logged out successfully");
+        }
+        catch (Exception ex)
+        {
+            return ApiResponse.Fail($"Failed to logout: {ex.Message}");
+        }
     }
 }

@@ -3,17 +3,19 @@ using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Dtos.Response;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace LendingSolution.API.Controllers;
 
 [Authorize]
 [ApiController]
 [Route("api/company")]
-public class CompanyController(ICompanyService companySErvice, ILoanProductService loanProductService, ILogger<CompanyController> logger)
+public class CompanyController(ICompanyService companySErvice, ILoanProductService loanProductService, ISupportService supportService, ILogger<CompanyController> logger)
   : Controller
 {
     private readonly ILoanProductService _loanProductService = loanProductService;
     private readonly ICompanyService _companyService = companySErvice;
+    private readonly ISupportService _supportService = supportService;
     private readonly ILogger<CompanyController> _logger = logger;
 
     [Authorize(Roles = "SuperAdmin, Admin")]
@@ -109,17 +111,142 @@ public class CompanyController(ICompanyService companySErvice, ILoanProductServi
         return Ok(result);
     }
 
-    // Update company information
+    // Admin can update their own company info
+    [Authorize(Roles = "Admin")]
+    [HttpPut("info")]
+    public async Task<IActionResult> UpdateCompanyInfo([FromBody] UpdateCompanyRequestDto body)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ApiResponse.Fail("Invalid model state"));
+            }
 
-    // [GET]    /api/company  
-    // [GET]    /api/company/{id}  
-    // [POST]   /api/company  
-    // [PUT]    /api/company/{id}  
-    // [GET]    /api/company/products  
-    // [POST]   /api/company/products  
-    // [PUT]    /api/company/products/{id}  
-    // [DELETE] /api/company/products/{id}  
-    // [GET]    /api/company/analytics  
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized(ApiResponse.Fail("User not authenticated"));
+            }
 
+            // Get user's company
+            var userCompanyResult = await _companyService.GetUserCompany(userId);
+            if (!userCompanyResult.Success)
+            {
+                return BadRequest(userCompanyResult);
+            }
+
+            var companyData = userCompanyResult.Data as CompanyResponseDto;
+            if (companyData == null)
+            {
+                return BadRequest(ApiResponse.Fail("Unable to retrieve company information"));
+            }
+
+            // Update the company
+            var result = await _companyService.UpdateCompany(companyData.Id, body, userId);
+
+            if (!result.Success)
+            {
+                return BadRequest(result);
+            }
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating company info for user {UserId}", User.FindFirstValue(ClaimTypes.NameIdentifier));
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    // Admin can update loan product info for their company
+    [Authorize(Roles = "Admin")]
+    [HttpPut("loan-product/{productId}")]
+    public async Task<IActionResult> UpdateLoanProduct(Guid productId, [FromBody] UpdateLoanProductRequestDto body)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ApiResponse.Fail("Invalid model state"));
+            }
+
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized(ApiResponse.Fail("User not authenticated"));
+            }
+
+            // Verify the loan product belongs to the user's company
+            var productResult = await _loanProductService.GetLoanProductById(productId);
+            if (!productResult.Success)
+            {
+                return BadRequest(productResult);
+            }
+
+            var productData = productResult.Data as LoanProductResponseDto;
+            if (productData == null)
+            {
+                return BadRequest(ApiResponse.Fail("Unable to retrieve loan product information"));
+            }
+
+            // Get user's company to verify ownership
+            var userCompanyResult = await _companyService.GetUserCompany(userId);
+            if (!userCompanyResult.Success)
+            {
+                return BadRequest(userCompanyResult);
+            }
+
+            var companyData = userCompanyResult.Data as CompanyResponseDto;
+            if (companyData == null || companyData.Id != productData.CompanyId)
+            {
+                return Forbid(ApiResponse.Fail("You can only update loan products for your own company").Message);
+            }
+
+            // Update the loan product
+            var result = await _loanProductService.UpdateLoanProduct(productId, body, userId);
+
+            if (!result.Success)
+            {
+                return BadRequest(result);
+            }
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating loan product {ProductId} for user {UserId}", productId, User.FindFirstValue(ClaimTypes.NameIdentifier));
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    [Authorize(Roles = "Admin")]
+    [HttpGet("dashboard")]
+    public async Task<IActionResult> GetCompanyDashboard()
+    {
+        try
+        {
+            // Get the company ID from the user's claims or context
+            var companyId = User.FindFirstValue("CompanyId");
+            if (string.IsNullOrEmpty(companyId))
+            {
+                return BadRequest(ApiResponse.Fail("Company ID not found in user context"));
+            }
+
+            var result = await _supportService.GetCompanyDashboardAsync(companyId);
+            
+            if (!result.Success)
+            {
+                return BadRequest(result);
+            }
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving company dashboard for user {UserId}", User.FindFirstValue(ClaimTypes.NameIdentifier));
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
 
 }

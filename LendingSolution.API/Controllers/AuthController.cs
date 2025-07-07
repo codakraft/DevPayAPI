@@ -3,16 +3,22 @@ using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Dtos.Response;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace LendingSolution.API.Controllers;
 
 [ApiController]
 [Route("api/admin")]
-public class AuthController(IAuthService authService, ICompanyService companySErvice, ILoanProductService loanProductService) : Controller
+public class AuthController(
+    IAuthService authService,
+    ICompanyService companyService,
+    ILoanProductService loanProductService,
+    ILogger<AuthController> logger) : Controller
 {
     private readonly IAuthService _authService = authService;
     private readonly ILoanProductService _loanProductService = loanProductService;
-    private readonly ICompanyService _companyService = companySErvice;
+    private readonly ICompanyService _companyService = companyService;
+    private readonly ILogger<AuthController> _logger = logger;
 
     [AllowAnonymous]
     [HttpPost("login")]
@@ -65,9 +71,82 @@ public class AuthController(IAuthService authService, ICompanyService companySEr
         return Ok(result);
     }
 
-    // [GET]  /api/auth/roles
-    // [GET]  /api/auth/me
-    // [POST] /api/auth/logout
-    // [POST] /api/auth/refresh-token
+    [AllowAnonymous]
+    [HttpPost("refresh")]
+    public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequestDto request)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ApiResponse.Fail("Invalid model state"));
+            }
 
+            var result = await _authService.RefreshToken(request);
+
+            if (!result.Success)
+            {
+                return BadRequest(result);
+            }
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while refreshing token.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    [Authorize]
+    [HttpPost("revoke")]
+    public async Task<IActionResult> RevokeToken([FromBody] RevokeTokenRequestDto request)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ApiResponse.Fail("Invalid model state"));
+            }
+
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var result = await _authService.RevokeToken(request, userId);
+
+            if (!result.Success)
+            {
+                return BadRequest(result);
+            }
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while revoking token.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    [Authorize]
+    [HttpPost("logout")]
+    public async Task<IActionResult> Logout()
+    {
+        try
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var result = await _authService.Logout(userId);
+
+            if (!result.Success)
+            {
+                return BadRequest(result);
+            }
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while logging out.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
 }
+

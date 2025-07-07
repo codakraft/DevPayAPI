@@ -29,7 +29,8 @@ public class ServiceManager(
     IOptions<RemitaSettings> remitaOptions,
     IHttpClientFactory httpClientFactory,
     ILogger<RemitaService> logger,
-    ICombinedRepository cRepo
+    ICombinedRepository cRepo,
+    IRefreshTokenRepository refreshTokenRepository
 ) : IServiceManager
 {
     private readonly Lazy<IAuthService> _authService = new Lazy<IAuthService>(() =>
@@ -43,7 +44,7 @@ public class ServiceManager(
                     roleManager
                 ));
     private readonly Lazy<ITokenService> _tokenService = new Lazy<ITokenService>(() =>
-                new TokenService(userManager, jwtconfig));
+                new TokenService(userManager, jwtconfig, refreshTokenRepository));
     private readonly Lazy<ICompanyService> _companyService = new Lazy<ICompanyService>(() =>
                 new CompanyService(companyRepository));
     private readonly Lazy<ILoanService> _loanService = new Lazy<ILoanService>(() =>

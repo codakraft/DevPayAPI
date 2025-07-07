@@ -27,4 +27,16 @@ public class LoanProductRepository : ILoanProductRepository
             .Where(lp => lp.CompanyId == companyId)
             .ToListAsync();
     }
+
+    public async Task<LoanProduct?> GetLoanProductById(Guid id)
+    {
+        return await _db.LoanProducts.FirstOrDefaultAsync(lp => lp.Id == id);
+    }
+
+    public async Task<bool> UpdateLoanProduct(LoanProduct loanProduct)
+    {
+        _db.LoanProducts.Update(loanProduct);
+        var result = await _db.SaveChangesAsync();
+        return result > 0;
+    }
 }

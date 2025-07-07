@@ -9,6 +9,9 @@ public class ApplicationUser : IdentityUser
     public string? Address { get; set; } = null;
     public string? City { get; set; } = null;
     public string? State { get; set; } = null;
+    public string? CompanyId { get; set; } // For multi-tenant support
+    public string? Gender { get; set; } = null; // Male, Female, Other, PreferNotToSay
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow; // For accurate user registration analytics
 
     public DateTime? DateOfBirth { get; set; } // <-- Make sure you assign a DateTime, not a string
 

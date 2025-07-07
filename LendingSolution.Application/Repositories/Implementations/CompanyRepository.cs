@@ -31,6 +31,18 @@ public class CompanyRepository : ICompanyRepository
         return await _db.Companies.FirstOrDefaultAsync(c => c.Id == id);
     }
 
+    public async Task<Company?> GetCompanyByUserId(string userId)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId);
+        
+        if (user?.CompanyId == null)
+        {
+            return null;
+        }
+
+        return await _db.Companies.FirstOrDefaultAsync(c => c.Id.ToString() == user.CompanyId);
+    }
+
     public async Task<bool> UpdateCompany(Company company)
     {
         _db.Companies.Update(company);
