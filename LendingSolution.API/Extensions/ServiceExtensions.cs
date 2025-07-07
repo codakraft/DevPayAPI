@@ -158,6 +158,9 @@ public static class ServiceExtensions
             var combinedRepository = provider.GetRequiredService<ICombinedRepository>();
             var roleManager = provider.GetRequiredService<RoleManager<IdentityRole>>();
             var refreshTokenRepository = provider.GetRequiredService<IRefreshTokenRepository>();
+            var disbursementRepository = provider.GetRequiredService<IDisbursementRepository>();
+            var repaymentRepository = provider.GetRequiredService<IRepaymentRepository>();
+            var supportTicketRepository = provider.GetRequiredService<ISupportTicketRepository>();
 
             return new ServiceManager(
                 contextAccessor,
@@ -175,7 +178,10 @@ public static class ServiceExtensions
                 httpClientFactory,
                 logger,
                 combinedRepository,
-                refreshTokenRepository
+                refreshTokenRepository,
+                disbursementRepository,
+                repaymentRepository,
+                supportTicketRepository
             );
         });
     }

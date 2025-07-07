@@ -198,8 +198,293 @@ public class LoanService(
         return await _db.Loans
             .OrderByDescending(l => l.CreatedAt)
             .ToListAsync();
-
     }
 
+    public async Task<ApiResponse> GetAllLoansAsync(LoanFilterDto filter)
+    {
+        try
+        {
+            var query = _loanRepository.GetAllLoansQueryable();
 
+            // Apply filters
+            query = ApplyFilters(query, filter);
+
+            // Get total count before pagination
+            var totalCount = await query.CountAsync();
+
+            // Calculate summary statistics
+            var totalAmount = await query.SumAsync(l => l.Amount);
+            var avgAmount = totalCount > 0 ? totalAmount / totalCount : 0;
+            var statusCounts = await query
+                .GroupBy(l => l.Status)
+                .ToDictionaryAsync(g => g.Key.ToString(), g => g.Count());
+
+            // Apply sorting
+            query = ApplySorting(query, filter);
+
+            // Apply pagination
+            var pagedLoans = await query
+                .Skip((filter.Page - 1) * filter.PageSize)
+                .Take(filter.PageSize)
+                .ToListAsync();
+
+            // Map to DTOs
+            var loanDtos = pagedLoans.Select(MapToLoanListDto).ToList();
+
+            var totalPages = (int)Math.Ceiling((double)totalCount / filter.PageSize);
+
+            var result = new PagedLoanListDto
+            {
+                Loans = loanDtos,
+                TotalCount = totalCount,
+                Page = filter.Page,
+                PageSize = filter.PageSize,
+                TotalPages = totalPages,
+                HasNextPage = filter.Page < totalPages,
+                HasPreviousPage = filter.Page > 1,
+                TotalLoanAmount = totalAmount,
+                AverageAmount = avgAmount,
+                StatusCounts = statusCounts
+            };
+
+            return ApiResponse.Ok("Loans retrieved successfully", result);
+        }
+        catch (Exception ex)
+        {
+            return ApiResponse.Fail($"Error retrieving loans: {ex.Message}");
+        }
+    }
+
+    public async Task<ApiResponse> GetCompanyLoansAsync(Guid companyId, LoanFilterDto filter)
+    {
+        try
+        {
+            var query = _loanRepository.GetCompanyLoansQueryable(companyId);
+
+            // Apply filters (excluding company filter since it's already filtered)
+            query = ApplyFilters(query, filter, excludeCompanyFilter: true);
+
+            // Get total count before pagination
+            var totalCount = await query.CountAsync();
+
+            // Calculate summary statistics
+            var totalAmount = await query.SumAsync(l => l.Amount);
+            var avgAmount = totalCount > 0 ? totalAmount / totalCount : 0;
+            var statusCounts = await query
+                .GroupBy(l => l.Status)
+                .ToDictionaryAsync(g => g.Key.ToString(), g => g.Count());
+
+            // Apply sorting
+            query = ApplySorting(query, filter);
+
+            // Apply pagination
+            var pagedLoans = await query
+                .Skip((filter.Page - 1) * filter.PageSize)
+                .Take(filter.PageSize)
+                .ToListAsync();
+
+            // Map to DTOs
+            var loanDtos = pagedLoans.Select(MapToLoanListDto).ToList();
+
+            var totalPages = (int)Math.Ceiling((double)totalCount / filter.PageSize);
+
+            var result = new PagedLoanListDto
+            {
+                Loans = loanDtos,
+                TotalCount = totalCount,
+                Page = filter.Page,
+                PageSize = filter.PageSize,
+                TotalPages = totalPages,
+                HasNextPage = filter.Page < totalPages,
+                HasPreviousPage = filter.Page > 1,
+                TotalLoanAmount = totalAmount,
+                AverageAmount = avgAmount,
+                StatusCounts = statusCounts
+            };
+
+            return ApiResponse.Ok("Company loans retrieved successfully", result);
+        }
+        catch (Exception ex)
+        {
+            return ApiResponse.Fail($"Error retrieving company loans: {ex.Message}");
+        }
+    }
+
+    public async Task<ApiResponse> GetLoanByIdAsync(Guid loanId, string? requestingUserId = null)
+    {
+        try
+        {
+            var loan = await _db.Loans
+                .Include(l => l.User)
+                .Include(l => l.Company)
+                .Include(l => l.Product)
+                .Include(l => l.Account)
+                .FirstOrDefaultAsync(l => l.Id == loanId);
+
+            if (loan == null)
+            {
+                return ApiResponse.Fail("Loan not found");
+            }
+
+            // Optional: Add access control if requestingUserId is provided
+            // This can be enhanced based on business rules
+
+            var loanDto = MapToLoanListDto(loan);
+            return ApiResponse.Ok("Loan retrieved successfully", loanDto);
+        }
+        catch (Exception ex)
+        {
+            return ApiResponse.Fail($"Error retrieving loan: {ex.Message}");
+        }
+    }
+
+    private IQueryable<Loan> ApplyFilters(IQueryable<Loan> query, LoanFilterDto filter, bool excludeCompanyFilter = false)
+    {
+        // Search filter (user name, email, purpose, account number)
+        if (!string.IsNullOrEmpty(filter.Search))
+        {
+            var searchTerm = filter.Search.ToLower();
+            query = query.Where(l =>
+                l.User.FirstName.ToLower().Contains(searchTerm) ||
+                l.User.LastName.ToLower().Contains(searchTerm) ||
+                (l.User.Email != null && l.User.Email.ToLower().Contains(searchTerm)) ||
+                l.Purpose.ToLower().Contains(searchTerm) ||
+                l.Account.AccountNumber.ToLower().Contains(searchTerm));
+        }
+
+        // Company filter (only for SuperAdmin view)
+        if (!excludeCompanyFilter && filter.CompanyId.HasValue)
+        {
+            query = query.Where(l => l.CompanyId == filter.CompanyId.Value);
+        }
+
+        // Status filter
+        if (filter.Status.HasValue)
+        {
+            query = query.Where(l => l.Status == filter.Status.Value);
+        }
+
+        // Amount range filter
+        if (filter.MinAmount.HasValue)
+        {
+            query = query.Where(l => l.Amount >= filter.MinAmount.Value);
+        }
+        if (filter.MaxAmount.HasValue)
+        {
+            query = query.Where(l => l.Amount <= filter.MaxAmount.Value);
+        }
+
+        // Duration range filter
+        if (filter.MinDuration.HasValue)
+        {
+            query = query.Where(l => l.DurationInMonths >= filter.MinDuration.Value);
+        }
+        if (filter.MaxDuration.HasValue)
+        {
+            query = query.Where(l => l.DurationInMonths <= filter.MaxDuration.Value);
+        }
+
+        // Date range filters
+        if (filter.StartDate.HasValue)
+        {
+            query = query.Where(l => l.CreatedAt >= filter.StartDate.Value);
+        }
+        if (filter.EndDate.HasValue)
+        {
+            query = query.Where(l => l.CreatedAt <= filter.EndDate.Value);
+        }
+
+        // Approval date filters
+        if (filter.ApprovedAfter.HasValue)
+        {
+            query = query.Where(l => l.ApprovedAt >= filter.ApprovedAfter.Value);
+        }
+        if (filter.ApprovedBefore.HasValue)
+        {
+            query = query.Where(l => l.ApprovedAt <= filter.ApprovedBefore.Value);
+        }
+
+        // Product filter
+        if (filter.ProductId.HasValue)
+        {
+            query = query.Where(l => l.ProductId == filter.ProductId.Value);
+        }
+
+        // Mandate filter
+        if (filter.IsMandateGenerated.HasValue)
+        {
+            query = query.Where(l => l.IsMandateGenerated == filter.IsMandateGenerated.Value);
+        }
+
+        return query;
+    }
+
+    private IQueryable<Loan> ApplySorting(IQueryable<Loan> query, LoanFilterDto filter)
+    {
+        return filter.SortBy?.ToLower() switch
+        {
+            "amount" => filter.SortOrder?.ToLower() == "desc"
+                ? query.OrderByDescending(l => l.Amount)
+                : query.OrderBy(l => l.Amount),
+            "duration" => filter.SortOrder?.ToLower() == "desc"
+                ? query.OrderByDescending(l => l.DurationInMonths)
+                : query.OrderBy(l => l.DurationInMonths),
+            "status" => filter.SortOrder?.ToLower() == "desc"
+                ? query.OrderByDescending(l => l.Status)
+                : query.OrderBy(l => l.Status),
+            "username" => filter.SortOrder?.ToLower() == "desc"
+                ? query.OrderByDescending(l => l.User.FirstName).ThenByDescending(l => l.User.LastName)
+                : query.OrderBy(l => l.User.FirstName).ThenBy(l => l.User.LastName),
+            "companyname" => filter.SortOrder?.ToLower() == "desc"
+                ? query.OrderByDescending(l => l.Company.Name)
+                : query.OrderBy(l => l.Company.Name),
+            "approvedat" => filter.SortOrder?.ToLower() == "desc"
+                ? query.OrderByDescending(l => l.ApprovedAt)
+                : query.OrderBy(l => l.ApprovedAt),
+            "duedate" => filter.SortOrder?.ToLower() == "desc"
+                ? query.OrderByDescending(l => l.DueDate)
+                : query.OrderBy(l => l.DueDate),
+            "updatedat" => filter.SortOrder?.ToLower() == "desc"
+                ? query.OrderByDescending(l => l.UpdatedAt)
+                : query.OrderBy(l => l.UpdatedAt),
+            "createdat" => filter.SortOrder?.ToLower() == "desc"
+                ? query.OrderByDescending(l => l.CreatedAt)
+                : query.OrderBy(l => l.CreatedAt),
+            _ => query.OrderByDescending(l => l.CreatedAt)
+        };
+    }
+
+    private LoanListDto MapToLoanListDto(Loan loan)
+    {
+        return new LoanListDto
+        {
+            Id = loan.Id,
+            UserId = loan.UserId,
+            UserFirstName = loan.User.FirstName,
+            UserLastName = loan.User.LastName,
+            UserEmail = loan.User.Email ?? string.Empty,
+            Amount = loan.Amount,
+            DurationInMonths = loan.DurationInMonths,
+            Purpose = loan.Purpose,
+            Status = loan.Status,
+            ApprovedAt = loan.ApprovedAt,
+            DueDate = loan.DueDate,
+            RejectedAt = loan.RejectedAt,
+            CreatedAt = loan.CreatedAt,
+            UpdatedAt = loan.UpdatedAt,
+            CompanyId = loan.CompanyId,
+            CompanyName = loan.Company.Name,
+            CompanyShortName = loan.Company.ShortName,
+            ProductId = loan.ProductId,
+            ProductName = loan.Product.Name,
+            ProductInterestRate = loan.Product.InterestRate,
+            AccountId = loan.AccountId,
+            AccountNumber = loan.Account.AccountNumber,
+            Message = loan.Message,
+            IsMandateGenerated = loan.IsMandateGenerated,
+            MandateId = loan.MandateId
+        };
+    }
 }
+
+    // ...existing code...

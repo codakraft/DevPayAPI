@@ -15,12 +15,16 @@ public class AdminController(
     ICompanyService companyService, 
     IAdminSettingsService adminSettingsService,
     IApprovalService approvalService,
+    ILoanProductService loanProductService,
+    ILoanService loanService,
     ILogger<AdminController> logger) : Controller
 {
     private readonly IAuthService _authService = authService;
     private readonly ICompanyService _companyService = companyService;
     private readonly IAdminSettingsService _adminSettingsService = adminSettingsService;
     private readonly IApprovalService _approvalService = approvalService;
+    private readonly ILoanProductService _loanProductService = loanProductService;
+    private readonly ILoanService _loanService = loanService;
     private readonly ILogger<AdminController> _logger = logger;
 
     /// <summary>
@@ -216,6 +220,139 @@ public class AdminController(
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error occurred while rejecting request.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    /// <summary>
+    /// Gets comprehensive system-wide dashboard for super admin
+    /// </summary>
+    /// <returns>Complete system analytics across all companies</returns>
+    // [GET] /api/admin/super-dashboard
+    [HttpGet("super-dashboard")]
+    [Authorize(Roles = "SuperAdmin")]
+    public async Task<IActionResult> GetSuperAdminDashboard()
+    {
+        try
+        {
+            var result = await _authService.GetSuperAdminDashboardAsync();
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while fetching super admin dashboard.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    /// <summary>
+    /// Gets a paginated list of admins with filtering and search capabilities
+    /// </summary>
+    /// <param name="filter">Filter parameters for searching and filtering admins</param>
+    /// <returns>Paginated list of admins with their details</returns>
+    // [GET] /api/admin/list
+    [HttpGet("list")]
+    [Authorize(Roles = "SuperAdmin")]
+    public async Task<IActionResult> GetAdminList([FromQuery] AdminFilterDto filter)
+    {
+        try
+        {
+            var result = await _authService.GetAdminListAsync(filter);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while fetching admin list with filters: {@Filter}", filter);
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    /// <summary>
+    /// Gets all loan products across all companies with filtering and search (SuperAdmin only)
+    /// </summary>
+    /// <param name="filter">Filter parameters for searching and filtering loan products</param>
+    /// <returns>Paginated list of loan products with company information</returns>
+    // [GET] /api/admin/loan-products
+    [HttpGet("loan-products")]
+    [Authorize(Roles = "SuperAdmin")]
+    public async Task<IActionResult> GetAllLoanProducts([FromQuery] LoanProductFilterDto filter)
+    {
+        try
+        {
+            var result = await _loanProductService.GetAllLoanProductsAsync(filter);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while fetching all loan products with filters: {@Filter}", filter);
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    /// <summary>
+    /// Gets all loans across all companies with filtering and search (SuperAdmin only)
+    /// </summary>
+    /// <param name="filter">Filter parameters for searching and filtering loans</param>
+    /// <returns>Paginated list of loans with complete information</returns>
+    // [GET] /api/admin/loans
+    [HttpGet("loans")]
+    [Authorize(Roles = "SuperAdmin")]
+    public async Task<IActionResult> GetAllLoans([FromQuery] LoanFilterDto filter)
+    {
+        try
+        {
+            var result = await _loanService.GetAllLoansAsync(filter);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while fetching all loans with filters: {@Filter}", filter);
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    /// <summary>
+    /// Gets all loans for a specific company (SuperAdmin only)
+    /// </summary>
+    /// <param name="companyId">Company ID to filter loans</param>
+    /// <param name="filter">Filter parameters for searching and filtering loans</param>
+    /// <returns>Paginated list of loans for the specified company</returns>
+    // [GET] /api/admin/loans/company/{companyId}
+    [HttpGet("loans/company/{companyId}")]
+    [Authorize(Roles = "SuperAdmin")]
+    public async Task<IActionResult> GetCompanyLoans(Guid companyId, [FromQuery] LoanFilterDto filter)
+    {
+        try
+        {
+            var result = await _loanService.GetCompanyLoansAsync(companyId, filter);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while fetching company loans with filters: {@Filter}", filter);
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    /// <summary>
+    /// Gets a specific loan by ID (SuperAdmin only)
+    /// </summary>
+    /// <param name="loanId">Loan ID</param>
+    /// <returns>Loan details with complete information</returns>
+    // [GET] /api/admin/loans/{loanId}
+    [HttpGet("loans/{loanId}")]
+    [Authorize(Roles = "SuperAdmin")]
+    public async Task<IActionResult> GetLoanById(Guid loanId)
+    {
+        try
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var result = await _loanService.GetLoanByIdAsync(loanId, userId);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while fetching loan {LoanId}", loanId);
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }

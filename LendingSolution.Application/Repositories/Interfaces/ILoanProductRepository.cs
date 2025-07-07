@@ -8,6 +8,7 @@ public interface ILoanProductRepository
     Task<LoanProduct?> GetLoanProductById(Guid id);
     Task<bool> UpdateLoanProduct(LoanProduct loanProduct);
     Task<List<LoanProduct>> GetLoanProductsByCompanyId(Guid companyId);
-    // Task<List<LoanProduct>> GetAllLoanProducts();
+    IQueryable<LoanProduct> GetAllLoanProductsQueryable(); // For filtering and pagination
+    IQueryable<LoanProduct> GetCompanyLoanProductsQueryable(Guid companyId); // For company-specific filtering
     // Task<bool> DeleteLoanProduct(Guid id);
 }

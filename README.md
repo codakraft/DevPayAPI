@@ -99,29 +99,92 @@ LendingSolution.Infrastructure/ # Data Access & External Services
 
 ## API Endpoints
 
-### Authentication
+### 🔐 Authentication & Authorization
 - `POST /api/auth/login` - User authentication
 - `POST /api/auth/refresh` - Token refresh
 - `POST /api/auth/revoke` - Token revocation
 
-### Company Management
-- `GET /api/company/info` - Get company details
-- `PUT /api/company/update` - Update company information
+### 📊 Dashboard & Analytics
 
-### Loan Operations
-- `GET /api/loan/products` - Get loan products
-- `POST /api/loan/apply` - Submit loan application
-- `GET /api/loan/status/{id}` - Check loan status
+#### SuperAdmin Dashboard
+- `GET /api/admin/super-dashboard` - System-wide analytics across all companies
 
-### Finance
-- `GET /api/finance/dashboard` - Financial dashboard
-- `GET /api/finance/disbursements` - Disbursement history
-- `GET /api/finance/repayments` - Repayment tracking
+#### Company Dashboard
+- `GET /api/company/dashboard` - Company-specific analytics and metrics
 
-### Support
+### 👥 User & Admin Management
+- `GET /api/admin/roles` - Get all admin roles (SuperAdmin, Admin)
+- `POST /api/admin/role/assign` - Assign roles to users
+- `GET /api/admin/list` - Get paginated admin list with search (SuperAdmin only)
+
+### 🏦 Loan Product Management
+
+#### SuperAdmin Endpoints
+- `GET /api/admin/loan-products` - Get all loan products across all companies with filtering
+
+#### Admin Endpoints
+- `GET /api/company/loan-products` - Get company loan products with filtering
+- `POST /api/company/product` - Create new loan product
+- `PUT /api/company/loan-product/{id}` - Update loan product
+
+### 💰 Loan Management
+
+#### SuperAdmin Endpoints
+- `GET /api/admin/loans` - Get all loans across all companies with comprehensive filtering
+- `GET /api/admin/loans/company/{companyId}` - Get loans for specific company
+- `GET /api/admin/loans/{loanId}` - Get detailed loan information
+
+#### Admin Endpoints
+- `GET /api/company/loans` - Get company loans with filtering (company ID from JWT)
+- `GET /api/company/loans/{loanId}` - Get company loan details with access control
+
+#### Loan Filtering & Search
+**Available on all loan endpoints:**
+- Search: User name, email, loan purpose, account number
+- Status: `Pending`, `Approved`, `Disbursed` (ongoing/unpaid), `Overdue` (unpaid), `Repaid`, `Rejected`, `Cancelled`
+- Amount range: `minAmount`, `maxAmount`
+- Duration range: `minDuration`, `maxDuration`
+- Date ranges: `startDate`, `endDate`, `approvedAfter`, `approvedBefore`
+- Product filter: `productId`
+- Mandate status: `isMandateGenerated`
+- Pagination: `page`, `pageSize`
+- Sorting: `sortBy`, `sortOrder` (amount, duration, status, username, companyname, createdat, etc.)
+
+**Example Usage:**
+```http
+# Get ongoing loans across all companies (SuperAdmin)
+GET /api/admin/loans?status=Disbursed
+
+# Get overdue loans for admin's company
+GET /api/company/loans?status=Overdue
+
+# Search for loans with complex filters
+GET /api/admin/loans?search=john&status=Approved&minAmount=50000&maxAmount=200000&sortBy=amount&sortOrder=desc
+```
+
+### ⚙️ Administrative Settings
+- `GET /api/admin/settings` - Get all administrative settings
+- `POST /api/admin/settings` - Create new setting (SuperAdmin only)
+- `PUT /api/admin/settings/{id}` - Update setting
+
+### ✅ Approval Management
+- `GET /api/admin/approvals/pending` - Get pending approvals
+- `POST /api/admin/approvals/{id}/approve` - Approve request
+- `POST /api/admin/approvals/{id}/reject` - Reject request
+
+### 🎫 Support System
 - `POST /api/support/tickets` - Create support ticket
 - `GET /api/support/tickets` - List tickets
 - `GET /api/support/dashboard` - Support metrics
+
+### 🏢 Company Management
+- `GET /api/company/info` - Get company details
+- `PUT /api/company/update` - Update company information
+
+### 💳 Finance Operations
+- `GET /api/finance/dashboard` - Financial dashboard
+- `GET /api/finance/disbursements` - Disbursement history
+- `GET /api/finance/repayments` - Repayment tracking
 
 ## Getting Started
 
@@ -159,6 +222,15 @@ LendingSolution.Infrastructure/ # Data Access & External Services
 - All major API controllers and endpoints
 - Data access layer with Entity Framework
 - JWT token management with refresh tokens
+- **Complete loan management system with advanced filtering**
+- **SuperAdmin system-wide access across all companies**
+- **Admin company-scoped access with JWT-based isolation**
+- **Comprehensive loan product management**
+- **Advanced search and filtering capabilities**
+- **Dashboard analytics for both SuperAdmin and Admin roles**
+- **Multi-tenant security enforcement**
+- **Pagination and sorting for all listing endpoints**
+- **Role-based access control with proper authorization**
 - Compilation and build verification
 
 ### 🔄 In Progress
@@ -168,10 +240,40 @@ LendingSolution.Infrastructure/ # Data Access & External Services
 
 ### 📋 Pending
 - Unit and integration tests
+- **Audit trail system implementation**
 - API documentation (OpenAPI/Swagger)
 - Performance optimization
 - Security audit and hardening
 - Deployment configuration
+
+## 🎯 Platform Capabilities
+
+### Multi-Tenancy Features
+- **SuperAdmin**: System-wide access to all companies, loans, products, and users
+- **Admin**: Company-scoped access with automatic company ID extraction from JWT
+- **Data Isolation**: Complete separation between companies at the service layer
+- **Role-Based Security**: Proper authorization checks on all endpoints
+
+### Loan Management Features
+- **Comprehensive Filtering**: Status, amount range, duration, dates, search terms
+- **Advanced Search**: User details, loan purpose, account numbers
+- **Multiple Sorting Options**: Amount, dates, status, user names, company names
+- **Status Tracking**: Full loan lifecycle from pending to repaid/overdue
+- **Ongoing Loan Monitoring**: Easy identification of active and overdue loans
+- **Company-Specific Analytics**: Detailed metrics and statistics
+
+### Analytics & Reporting
+- **System-Wide Dashboard**: Complete overview for SuperAdmin
+- **Company Dashboard**: Focused analytics for Admin users
+- **Financial Metrics**: Total amounts, averages, distributions
+- **Performance Tracking**: Growth trends and historical data
+- **Risk Analytics**: Overdue rates and status distributions
+
+### Data Management
+- **Efficient Pagination**: Handle large datasets with proper pagination
+- **Database-Level Filtering**: Performance-optimized queries
+- **Real-Time Statistics**: Live counts and summaries with every request
+- **Export-Ready Data**: Structured responses suitable for reporting
 
 ## Contributing
 1. Follow the existing code structure and naming conventions

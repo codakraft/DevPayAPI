@@ -62,4 +62,25 @@ public class LoanRespository(ApplicationDbContext db) : ILoanRepository
         }
         return Task.FromResult(false);
     }
+
+    public IQueryable<Loan> GetAllLoansQueryable()
+    {
+        return _db.Loans
+            .Include(l => l.User)
+            .Include(l => l.Company)
+            .Include(l => l.Product)
+            .Include(l => l.Account)
+            .AsQueryable();
+    }
+
+    public IQueryable<Loan> GetCompanyLoansQueryable(Guid companyId)
+    {
+        return _db.Loans
+            .Include(l => l.User)
+            .Include(l => l.Company)
+            .Include(l => l.Product)
+            .Include(l => l.Account)
+            .Where(l => l.CompanyId == companyId)
+            .AsQueryable();
+    }
 }

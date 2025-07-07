@@ -39,4 +39,19 @@ public class LoanProductRepository : ILoanProductRepository
         var result = await _db.SaveChangesAsync();
         return result > 0;
     }
+
+    public IQueryable<LoanProduct> GetAllLoanProductsQueryable()
+    {
+        return _db.LoanProducts
+            .Include(lp => lp.Company)
+            .AsQueryable();
+    }
+
+    public IQueryable<LoanProduct> GetCompanyLoanProductsQueryable(Guid companyId)
+    {
+        return _db.LoanProducts
+            .Include(lp => lp.Company)
+            .Where(lp => lp.CompanyId == companyId)
+            .AsQueryable();
+    }
 }

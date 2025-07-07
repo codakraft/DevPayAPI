@@ -13,4 +13,8 @@ public interface ILoanRepository
     Task<bool> UpdateLoanStatus(Guid id, LoanStatus loanStatus);
     // Task<bool> DeleteLoan(Guid loanId);
     Task<IEnumerable<Loan>> GetLoansByUserIdAsync(string userId);
+    
+    // New queryable methods for filtering and pagination
+    IQueryable<Loan> GetAllLoansQueryable(); // For SuperAdmin filtering
+    IQueryable<Loan> GetCompanyLoansQueryable(Guid companyId); // For company-specific filtering
 }

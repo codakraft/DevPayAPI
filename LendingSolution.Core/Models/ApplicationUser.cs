@@ -12,6 +12,8 @@ public class ApplicationUser : IdentityUser
     public string? CompanyId { get; set; } // For multi-tenant support
     public string? Gender { get; set; } = null; // Male, Female, Other, PreferNotToSay
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow; // For accurate user registration analytics
+    public bool IsActive { get; set; } = true; // User activation status
+    public DateTime? LastLoginAt { get; set; } // Last login timestamp
 
     public DateTime? DateOfBirth { get; set; } // <-- Make sure you assign a DateTime, not a string
 

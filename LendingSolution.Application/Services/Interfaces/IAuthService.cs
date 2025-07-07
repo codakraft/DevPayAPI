@@ -16,4 +16,6 @@ public interface IAuthService
     Task<ApiResponse> RefreshToken(RefreshTokenRequestDto request);
     Task<ApiResponse> RevokeToken(RevokeTokenRequestDto request, string? userId = null);
     Task<ApiResponse> Logout(string? userId = null);
+    Task<ApiResponse> GetSuperAdminDashboardAsync();
+    Task<ApiResponse> GetAdminListAsync(AdminFilterDto filter);
 }

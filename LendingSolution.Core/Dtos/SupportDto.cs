@@ -239,3 +239,127 @@ public class AgeDistribution
     public double Age55PlusPercentage { get; set; }
     public double UnknownAgePercentage { get; set; }
 }
+
+public class SuperAdminDashboardDto
+{
+    public SystemWideStatistics SystemStats { get; set; } = new();
+    public List<CompanyOverviewDto> Companies { get; set; } = new();
+    public SystemWideAnalytics Analytics { get; set; } = new();
+    public SystemWideFinancialMetrics FinancialMetrics { get; set; } = new();
+    public PlatformPerformanceMetrics Performance { get; set; } = new();
+    public List<GraphDataPoint> CompanyGrowthTrend { get; set; } = new();
+    public List<GraphDataPoint> UserGrowthTrend { get; set; } = new();
+    public List<GraphDataPoint> LoanVolumeTrend { get; set; } = new();
+    public List<GraphDataPoint> RevenueGrowthTrend { get; set; } = new();
+}
+
+public class SystemWideStatistics
+{
+    public int TotalCompanies { get; set; }
+    public int ActiveCompanies { get; set; }
+    public int TotalUsers { get; set; }
+    public int TotalLoans { get; set; }
+    public int TodayUsers { get; set; }
+    public int TodayLoans { get; set; }
+    public int ThisWeekUsers { get; set; }
+    public int ThisWeekLoans { get; set; }
+    public int ThisMonthUsers { get; set; }
+    public int ThisMonthLoans { get; set; }
+    public int ThisYearUsers { get; set; }
+    public int ThisYearLoans { get; set; }
+}
+
+public class CompanyOverviewDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string ShortName { get; set; } = string.Empty;
+    public bool IsActive { get; set; }
+    public int TotalUsers { get; set; }
+    public int TotalLoans { get; set; }
+    public decimal TotalLoanAmount { get; set; }
+    public decimal TotalDisbursed { get; set; }
+    public double DefaultRate { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime LastActivity { get; set; }
+}
+
+public class SystemWideAnalytics
+{
+    public GenderDistribution UserGenderBreakdown { get; set; } = new();
+    public LoanStatusDistribution LoanStatusBreakdown { get; set; } = new();
+    public CompanyPerformanceMetrics TopPerformingCompanies { get; set; } = new();
+    public List<CompanyRiskMetrics> CompanyRiskAnalysis { get; set; } = new();
+}
+
+public class LoanStatusDistribution
+{
+    public int PendingLoans { get; set; }
+    public int ApprovedLoans { get; set; }
+    public int DisbursedLoans { get; set; }
+    public int RepaidLoans { get; set; }
+    public int OverdueLoans { get; set; }
+    public int RejectedLoans { get; set; }
+    public double PendingPercentage { get; set; }
+    public double ApprovedPercentage { get; set; }
+    public double DisbursedPercentage { get; set; }
+    public double RepaidPercentage { get; set; }
+    public double OverduePercentage { get; set; }
+    public double RejectedPercentage { get; set; }
+}
+
+public class CompanyPerformanceMetrics
+{
+    public List<CompanyPerformanceDto> ByLoanVolume { get; set; } = new();
+    public List<CompanyPerformanceDto> ByUserCount { get; set; } = new();
+    public List<CompanyPerformanceDto> ByRevenue { get; set; } = new();
+    public List<CompanyPerformanceDto> ByGrowthRate { get; set; } = new();
+}
+
+public class CompanyPerformanceDto
+{
+    public Guid CompanyId { get; set; }
+    public string CompanyName { get; set; } = string.Empty;
+    public decimal Value { get; set; }
+    public double Percentage { get; set; }
+    public string Metric { get; set; } = string.Empty;
+}
+
+public class CompanyRiskMetrics
+{
+    public Guid CompanyId { get; set; }
+    public string CompanyName { get; set; } = string.Empty;
+    public double DefaultRate { get; set; }
+    public double OverdueRate { get; set; }
+    public int TotalLoans { get; set; }
+    public decimal ExposureAmount { get; set; }
+    public string RiskLevel { get; set; } = "Low"; // Low, Medium, High, Critical
+}
+
+public class SystemWideFinancialMetrics
+{
+    public decimal TotalLoanRequests { get; set; }
+    public decimal TotalDisbursed { get; set; }
+    public decimal TotalRepayments { get; set; }
+    public decimal OutstandingAmount { get; set; }
+    public decimal AverageLoanSize { get; set; }
+    public double SystemRepaymentRate { get; set; }
+    public double SystemDefaultRate { get; set; }
+    public decimal MonthlyDisbursementVolume { get; set; }
+    public decimal MonthlyRepaymentVolume { get; set; }
+    public decimal RevenueThisMonth { get; set; }
+    public decimal RevenueThisYear { get; set; }
+}
+
+public class PlatformPerformanceMetrics
+{
+    public int TotalSupportTickets { get; set; }
+    public int OpenTickets { get; set; }
+    public int ResolvedTickets { get; set; }
+    public double TicketResolutionRate { get; set; }
+    public double AverageResolutionTimeHours { get; set; }
+    public int SystemUptime { get; set; }
+    public double UserSatisfactionScore { get; set; }
+    public int TotalTransactions { get; set; }
+    public double TransactionSuccessRate { get; set; }
+}

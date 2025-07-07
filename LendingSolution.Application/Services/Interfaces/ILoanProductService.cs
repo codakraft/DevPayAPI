@@ -9,10 +9,12 @@ namespace LendingSolution.Application.Services.Interfaces
         Task<ApiResponse> UpdateLoanProduct(Guid id, UpdateLoanProductRequestDto product, string? userId = null);
         Task<ApiResponse> GetLoanProductById(Guid id);
         Task<List<LoanProductResponseDto>> GetLoanProductsByCompanyId(Guid companyId);
-        // Task<bool> DeactivateLoanProductAsync(string id);
-        // Task<bool> ActivateLoanProductAsync(string id);
-        // Task<bool> DeleteLoanProductAsync(string id);
-        // Task<bool> UpdateLoanProductAsync(string id, LoanProductUpdateDto update);
+        
+        // New methods for filtering and search
+        Task<ApiResponse> GetAllLoanProductsAsync(LoanProductFilterDto filter); // For SuperAdmin
+        Task<ApiResponse> GetCompanyLoanProductsAsync(Guid companyId, LoanProductFilterDto filter); // For Admin
+        
+        // ...existing code...
     }
 
 }
