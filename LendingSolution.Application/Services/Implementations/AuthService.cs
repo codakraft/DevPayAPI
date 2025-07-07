@@ -192,7 +192,7 @@ public class AuthService(
             LastName = body.LastName,
             Email = body.Email,
             UserName = body.Email,
-            CompanyId = null
+            CompanyId = body.CompanyId.ToString()
         };
 
         var result = await _userManager.CreateAsync(user, body.Password);
