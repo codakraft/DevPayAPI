@@ -79,19 +79,14 @@ public class AuthController(
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.Fail("Invalid model state"));
-            }
 
             var result = await _authService.RefreshToken(request);
-
-            if (!result.Success)
-            {
-                return BadRequest(result);
-            }
-
             return Ok(result);
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error occurred while refreshing token.");
+            return BadRequest(ApiResponse.Fail($"Failed to refresh token: {ex.Message}"));
         }
         catch (Exception ex)
         {

@@ -11,11 +11,12 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using LendingSolution.Application.Exceptions;
 
 namespace LendingSolution.Application.Services.Implementations;
 
 public class TokenService(
-    UserManager<ApplicationUser> userManager, 
+    UserManager<ApplicationUser> userManager,
     IOptions<JwtSettings> configuration,
     IRefreshTokenRepository refreshTokenRepository) : ITokenService
 {
@@ -35,6 +36,12 @@ public class TokenService(
                 new("FirstName", user.FirstName ?? string.Empty),
                 new("LastName", user.LastName ?? string.Empty),
             };
+
+        // Add CompanyId claim for Admin users
+        if (!string.IsNullOrEmpty(user.CompanyId))
+        {
+            claims.Add(new Claim("CompanyId", user.CompanyId));
+        }
 
         var roles = await _userManager.GetRolesAsync(user);
 
@@ -63,7 +70,7 @@ public class TokenService(
     {
         var accessToken = await GenerateTokenAsync(user);
         var refreshToken = await GenerateRefreshTokenAsync();
-        
+
         // Save refresh token to database
         var refreshTokenEntity = new RefreshToken
         {
@@ -71,9 +78,9 @@ public class TokenService(
             UserId = user.Id!,
             ExpiryDate = DateTime.UtcNow.AddDays(_jwtSettings.RefreshTokenExpiryInDays)
         };
-        
+
         await _refreshTokenRepository.CreateTokenAsync(refreshTokenEntity);
-        
+
         return new TokenResponseDto
         {
             AccessToken = accessToken,
@@ -91,80 +98,63 @@ public class TokenService(
         return Task.FromResult(Convert.ToBase64String(randomBytes));
     }
 
-    public async Task<ApiResponse> RefreshTokenAsync(string refreshToken)
+    public async Task<TokenResponseDto> RefreshTokenAsync(string refreshToken)
     {
-        try
+
+        var storedToken = await _refreshTokenRepository.GetByTokenAsync(refreshToken);
+
+        if (storedToken == null)
         {
-            var storedToken = await _refreshTokenRepository.GetByTokenAsync(refreshToken);
-            
-            if (storedToken == null)
-            {
-                return ApiResponse.Fail("Invalid refresh token");
-            }
-
-            if (!storedToken.IsActive)
-            {
-                return ApiResponse.Fail("Refresh token is expired or revoked");
-            }
-
-            var user = storedToken.User;
-            if (user == null)
-            {
-                return ApiResponse.Fail("User not found");
-            }
-
-            // Generate new tokens
-            var newTokenResponse = await GenerateTokenWithRefreshAsync(user);
-            
-            // Revoke the old refresh token
-            await _refreshTokenRepository.RevokeTokenAsync(refreshToken, user.Id, "Replaced by new token");
-            
-            return ApiResponse.Ok("Tokens refreshed successfully", newTokenResponse);
+            throw new AppException("Invalid refresh token");
         }
-        catch (Exception ex)
+
+        if (!storedToken.IsActive)
         {
-            return ApiResponse.Fail($"Failed to refresh token: {ex.Message}");
+            throw new AppException("Refresh token is already revoked or expired");
         }
+
+        var user = storedToken.User;
+        if (user == null)
+        {
+            throw new AppException("User associated with the refresh token not found");
+        }
+
+        // Generate new tokens
+        var newTokenResponse = await GenerateTokenWithRefreshAsync(user);
+
+        // Revoke the old refresh token
+        await _refreshTokenRepository.RevokeTokenAsync(refreshToken, user.Id, "Replaced by new token");
+
+        return newTokenResponse;
+
     }
 
-    public async Task<ApiResponse> RevokeTokenAsync(string refreshToken, string? revokedBy = null, string? reason = null)
+    public async Task<bool> RevokeTokenAsync(string refreshToken, string? revokedBy = null, string? reason = null)
     {
-        try
-        {
-            var storedToken = await _refreshTokenRepository.GetByTokenAsync(refreshToken);
-            
-            if (storedToken == null)
-            {
-                return ApiResponse.Fail("Invalid refresh token");
-            }
+        var storedToken = await _refreshTokenRepository.GetByTokenAsync(refreshToken);
 
-            if (!storedToken.IsActive)
-            {
-                return ApiResponse.Fail("Refresh token is already revoked or expired");
-            }
-
-            await _refreshTokenRepository.RevokeTokenAsync(refreshToken, revokedBy, reason ?? "Token revoked by user");
-            
-            return ApiResponse.Ok("Refresh token revoked successfully");
-        }
-        catch (Exception ex)
+        if (storedToken == null)
         {
-            return ApiResponse.Fail($"Failed to revoke token: {ex.Message}");
+            throw new AppException("Invalid refresh token");
         }
+
+        if (!storedToken.IsActive)
+        {
+            throw new AppException("Refresh token is already revoked or expired");
+        }
+
+        await _refreshTokenRepository.RevokeTokenAsync(refreshToken, revokedBy, reason ?? "Token revoked by user");
+
+        return true;
+
     }
 
-    public async Task<ApiResponse> RevokeAllUserTokensAsync(string userId, string? revokedBy = null, string? reason = null)
+    public async Task<bool> RevokeAllUserTokensAsync(string userId, string? revokedBy = null, string? reason = null)
     {
-        try
-        {
-            await _refreshTokenRepository.RevokeAllUserTokensAsync(userId, revokedBy, reason ?? "All tokens revoked");
-            
-            return ApiResponse.Ok("All refresh tokens revoked successfully");
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse.Fail($"Failed to revoke all tokens: {ex.Message}");
-        }
+        await _refreshTokenRepository.RevokeAllUserTokensAsync(userId, revokedBy, reason ?? "All tokens revoked");
+        return true;
+
+
     }
 
     public async Task<bool> IsRefreshTokenValidAsync(string refreshToken)

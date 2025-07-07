@@ -423,12 +423,29 @@ public class CompanyController(
     {
         try
         {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            _logger.LogInformation("GetMyCompany called for user {UserId}", userId);
+
+            // Debug: Log all claims in the token
+            var allClaims = User.Claims.Select(c => new { c.Type, c.Value }).ToList();
+            _logger.LogInformation("User claims: {@Claims}", allClaims);
+
             // Get company ID from JWT
             var companyIdClaim = User.FindFirstValue("CompanyId");
-            if (string.IsNullOrEmpty(companyIdClaim) || !Guid.TryParse(companyIdClaim, out var companyId))
+            
+            if (string.IsNullOrEmpty(companyIdClaim))
             {
-                return BadRequest(ApiResponse.Fail("Company ID not found in token"));
+                _logger.LogWarning("CompanyId claim not found in JWT for user {UserId}. Available claims: {@Claims}", userId, allClaims);
+                return BadRequest(ApiResponse.Fail("Company ID not found in token. Please ensure you are logged in as an Admin user associated with a company."));
             }
+
+            if (!Guid.TryParse(companyIdClaim, out var companyId))
+            {
+                _logger.LogWarning("Invalid CompanyId format in JWT: {CompanyIdClaim} for user {UserId}", companyIdClaim, userId);
+                return BadRequest(ApiResponse.Fail("Invalid company ID format in token"));
+            }
+
+            _logger.LogInformation("Retrieved CompanyId {CompanyId} from JWT for user {UserId}", companyId, userId);
 
             var result = await _companyService.GetCompanyByIdAsync(companyId);
             

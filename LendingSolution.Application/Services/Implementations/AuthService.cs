@@ -245,7 +245,12 @@ public class AuthService(
     {
         try
         {
-            return await _tokenService.RefreshTokenAsync(request.RefreshToken);
+            var tokenResponse = await _tokenService.RefreshTokenAsync(request.RefreshToken);
+            return ApiResponse.Ok("Token refreshed successfully", tokenResponse);
+        }
+        catch (AppException ex)
+        {
+            return ApiResponse.Fail($"Failed to refresh token: {ex.Message}");
         }
         catch (Exception ex)
         {
@@ -257,7 +262,10 @@ public class AuthService(
     {
         try
         {
-            return await _tokenService.RevokeTokenAsync(request.RefreshToken, userId, request.Reason);
+            var result = await _tokenService.RevokeTokenAsync(request.RefreshToken, userId, request.Reason);
+            return result
+                ? ApiResponse.Ok("Token revoked successfully")
+                : ApiResponse.Fail("Failed to revoke token");
         }
         catch (Exception ex)
         {
