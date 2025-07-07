@@ -190,6 +190,7 @@ public class SupportService : ISupportService
         try
         {
             // Mock implementation
+            await Task.CompletedTask; // Add await to resolve warning
             return ApiResponse.Ok("Support ticket updated successfully");
         }
         catch (Exception ex)
@@ -256,6 +257,7 @@ public class SupportService : ISupportService
         try
         {
             // Mock implementation
+            await Task.CompletedTask; // Add await to resolve warning
             var tickets = new List<SupportTicketDto>();
             return ApiResponse.Ok("User tickets retrieved successfully", tickets);
         }
@@ -309,7 +311,7 @@ public class SupportService : ISupportService
     {
         try
         {
-            var users = _userManager.Users
+            var users = await _userManager.Users
                 .Where(u => u.Email!.Contains(searchTerm) || 
                            u.FirstName.Contains(searchTerm) || 
                            u.LastName.Contains(searchTerm))
@@ -322,7 +324,7 @@ public class SupportService : ISupportService
                     u.LastName,
                     u.PhoneNumber
                 })
-                .ToList();
+                .ToListAsync(); // Use async version
 
             return ApiResponse.Ok("Users found successfully", users);
         }
@@ -739,22 +741,17 @@ public class SupportService : ISupportService
             {
                 MalePercentage = 0,
                 FemalePercentage = 0,
-                OtherPercentage = 0,
                 TotalUsers = 0
             };
         }
 
         var maleCount = users.Count(u => u.Gender?.ToLower() == "male");
         var femaleCount = users.Count(u => u.Gender?.ToLower() == "female");
-        var otherCount = users.Count(u => u.Gender?.ToLower() == "other");
-        var preferNotToSayCount = users.Count(u => u.Gender?.ToLower() == "prefernottosay");
-        var unknownCount = totalUsers - maleCount - femaleCount - otherCount - preferNotToSayCount;
 
         return new UserAnalytics
         {
             MalePercentage = Math.Round((double)maleCount / totalUsers * 100, 2),
             FemalePercentage = Math.Round((double)femaleCount / totalUsers * 100, 2),
-            OtherPercentage = Math.Round((double)(otherCount + preferNotToSayCount + unknownCount) / totalUsers * 100, 2),
             TotalUsers = totalUsers
         };
     }

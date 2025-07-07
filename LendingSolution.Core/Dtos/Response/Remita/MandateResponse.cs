@@ -2,7 +2,7 @@ namespace LendingSolution.Core.Dtos.Response.Remita;
 
 public class MandateResponse : ResponseBase
 {
-    public MandateData Data { get; set; } // Replace with real type if known
+    public MandateData Data { get; set; } = new(); // Initialize with default value
 }
 
 public class MandateData

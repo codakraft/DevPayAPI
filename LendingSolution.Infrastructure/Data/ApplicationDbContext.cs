@@ -109,6 +109,23 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             .Property(d => d.Amount)
             .HasColumnType("decimal(18,2)");
 
+        // Fix Entity Framework warnings by adding decimal precision configurations
+        modelBuilder.Entity<Account>()
+            .Property(a => a.MonthlySalary)
+            .HasPrecision(18, 2);
+
+        modelBuilder.Entity<LoanProduct>()
+            .Property(lp => lp.InterestRate)
+            .HasPrecision(5, 4); // Allow for rates like 15.2500%
+
+        modelBuilder.Entity<LoanProduct>()
+            .Property(lp => lp.MaxAmount)
+            .HasPrecision(18, 2);
+
+        modelBuilder.Entity<LoanProduct>()
+            .Property(lp => lp.MinAmount)
+            .HasPrecision(18, 2);
+
         // Configure SupportTicket relationships
         modelBuilder.Entity<SupportTicket>()
             .HasOne(st => st.User)
@@ -141,14 +158,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             .HasForeignKey(sc => sc.UserId)
             .OnDelete(DeleteBehavior.NoAction);
 
-        // Configure decimal precision for financial entities
-        modelBuilder.Entity<Disbursement>()
-            .Property(d => d.Amount)
-            .HasPrecision(18, 2);
 
-        modelBuilder.Entity<Repayment>()
-            .Property(r => r.Amount)
-            .HasPrecision(18, 2);
 
         // Configure indexes for better performance
         modelBuilder.Entity<SupportTicket>()

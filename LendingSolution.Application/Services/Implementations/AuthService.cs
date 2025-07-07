@@ -160,50 +160,52 @@ public class AuthService(
         return true;
     }
 
-    public async Task<ApiResponse> CreateSuperAdmin(CreateSuperAdminRequestDto body)
+    public async Task<object> CreateSuperAdmin(CreateSuperAdminRequestDto body)
     {
         var user = new ApplicationUser
         {
             FirstName = body.FirstName,
             LastName = body.LastName,
             Email = body.Email,
-            UserName = body.Email
+            UserName = body.Email,
+            LastLoginAt = DateTime.UtcNow,
         };
 
         var result = await _userManager.CreateAsync(user, body.Password);
 
         if (!result.Succeeded)
         {
-            return ApiResponse.Fail("Failed to create super admin: " + string.Join(", ", result.Errors.Select(e => e.Description)));
+            throw new AppException("Failed to create super admin: " + string.Join(", ", result.Errors.Select(e => e.Description)));
         }
 
         // Assign SuperAdmin role
         await _userManager.AddToRoleAsync(user, "SuperAdmin");
 
-        return ApiResponse.Ok("Super admin created successfully", new { userId = user.Id });
+        return new { userId = user.Id };
     }
 
-    public async Task<ApiResponse> CreateAdmin(CreateAdminRequestDto body)
+    public async Task<object> CreateAdmin(CreateAdminRequestDto body)
     {
         var user = new ApplicationUser
         {
             FirstName = body.FirstName,
             LastName = body.LastName,
             Email = body.Email,
-            UserName = body.Email
+            UserName = body.Email,
+            CompanyId = null
         };
 
         var result = await _userManager.CreateAsync(user, body.Password);
 
         if (!result.Succeeded)
         {
-            return ApiResponse.Fail("Failed to create admin: " + string.Join(", ", result.Errors.Select(e => e.Description)));
+            throw new AppException("Failed to create admin: " + string.Join(", ", result.Errors.Select(e => e.Description)));
         }
 
         // Assign SuperAdmin role
         await _userManager.AddToRoleAsync(user, "Admin");
 
-        return ApiResponse.Ok("admin created successfully", new { userId = user.Id });
+        return new { userId = user.Id };
     }
 
     public Task<ApiResponse> GetRoles()
@@ -354,13 +356,13 @@ public class AuthService(
     }
 
     private SystemWideStatistics CalculateSystemWideStatistics(
-        List<Company> companies, 
-        List<ApplicationUser> users, 
-        List<Loan> loans, 
-        DateTime now, 
-        DateTime todayStart, 
-        DateTime weekStart, 
-        DateTime monthStart, 
+        List<Company> companies,
+        List<ApplicationUser> users,
+        List<Loan> loans,
+        DateTime now,
+        DateTime todayStart,
+        DateTime weekStart,
+        DateTime monthStart,
         DateTime yearStart)
     {
         return new SystemWideStatistics
@@ -381,8 +383,8 @@ public class AuthService(
     }
 
     private async Task<List<CompanyOverviewDto>> CalculateCompanyOverviews(
-        List<Company> companies, 
-        List<Loan> allLoans, 
+        List<Company> companies,
+        List<Loan> allLoans,
         List<Disbursement> allDisbursements)
     {
         var overviews = new List<CompanyOverviewDto>();
@@ -394,7 +396,7 @@ public class AuthService(
                 .ToListAsync();
 
             var companyLoans = allLoans.Where(l => l.CompanyId == company.Id).ToList();
-            var companyDisbursements = allDisbursements.Where(d => 
+            var companyDisbursements = allDisbursements.Where(d =>
                 companyLoans.Any(l => l.Id.ToString() == d.LoanId)).ToList();
 
             var defaultedLoans = companyLoans.Count(l => l.Status == LoanStatus.Overdue);
@@ -420,24 +422,21 @@ public class AuthService(
     }
 
     private SystemWideAnalytics CalculateSystemWideAnalytics(
-        List<ApplicationUser> users, 
-        List<Loan> loans, 
+        List<ApplicationUser> users,
+        List<Loan> loans,
         List<Company> companies)
     {
         // Gender distribution
         var totalUsers = users.Count;
         var maleCount = users.Count(u => u.Gender?.ToLower() == "male");
         var femaleCount = users.Count(u => u.Gender?.ToLower() == "female");
-        var otherCount = totalUsers - maleCount - femaleCount;
 
         var genderDistribution = new GenderDistribution
         {
             MaleCount = maleCount,
             FemaleCount = femaleCount,
-            OtherCount = otherCount,
             MalePercentage = totalUsers > 0 ? Math.Round((double)maleCount / totalUsers * 100, 2) : 0,
             FemalePercentage = totalUsers > 0 ? Math.Round((double)femaleCount / totalUsers * 100, 2) : 0,
-            OtherPercentage = totalUsers > 0 ? Math.Round((double)otherCount / totalUsers * 100, 2) : 0,
             TotalUsers = totalUsers
         };
 
@@ -512,10 +511,10 @@ public class AuthService(
             var totalLoans = companyLoans.Count;
             var defaultedLoans = companyLoans.Count(l => l.Status == LoanStatus.Overdue);
             var overdueLoans = companyLoans.Count(l => l.Status == LoanStatus.Overdue);
-            
+
             var defaultRate = totalLoans > 0 ? (double)defaultedLoans / totalLoans * 100 : 0;
             var overdueRate = totalLoans > 0 ? (double)overdueLoans / totalLoans * 100 : 0;
-            
+
             var riskLevel = defaultRate >= 15 ? "Critical" :
                            defaultRate >= 10 ? "High" :
                            defaultRate >= 5 ? "Medium" : "Low";
@@ -534,21 +533,21 @@ public class AuthService(
     }
 
     private SystemWideFinancialMetrics CalculateSystemWideFinancialMetrics(
-        List<Loan> loans, 
-        List<Disbursement> disbursements, 
+        List<Loan> loans,
+        List<Disbursement> disbursements,
         List<Repayment> repayments)
     {
         var totalRequested = loans.Sum(l => l.Amount);
         var totalDisbursed = disbursements.Sum(d => d.Amount);
         var totalRepayments = repayments.Sum(r => r.Amount);
         var outstandingAmount = totalDisbursed - totalRepayments;
-        
+
         var monthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
         var yearStart = new DateTime(DateTime.UtcNow.Year, 1, 1);
-        
+
         var monthlyDisbursements = disbursements.Where(d => d.CreatedAt >= monthStart).Sum(d => d.Amount);
         var monthlyRepayments = repayments.Where(r => r.CreatedAt >= monthStart).Sum(r => r.Amount);
-        
+
         var totalProcessedLoans = loans.Count(l => l.Status == LoanStatus.Approved || l.Status == LoanStatus.Rejected);
         var defaultedLoans = loans.Count(l => l.Status == LoanStatus.Overdue);
 
@@ -596,7 +595,7 @@ public class AuthService(
             var monthStart = now.AddMonths(-i).Date.AddDays(1 - now.AddMonths(-i).Day);
             var monthEnd = monthStart.AddMonths(1).AddDays(-1);
             var companiesThisMonth = companies.Count(c => c.CreatedAt >= monthStart && c.CreatedAt <= monthEnd);
-            
+
             result.Add(new GraphDataPoint
             {
                 Label = monthStart.ToString("MMM yyyy"),
@@ -615,7 +614,7 @@ public class AuthService(
             var monthStart = now.AddMonths(-i).Date.AddDays(1 - now.AddMonths(-i).Day);
             var monthEnd = monthStart.AddMonths(1).AddDays(-1);
             var usersThisMonth = users.Count(u => u.CreatedAt >= monthStart && u.CreatedAt <= monthEnd);
-            
+
             result.Add(new GraphDataPoint
             {
                 Label = monthStart.ToString("MMM yyyy"),
@@ -636,7 +635,7 @@ public class AuthService(
             var volumeThisMonth = loans
                 .Where(l => l.CreatedAt >= monthStart && l.CreatedAt <= monthEnd)
                 .Sum(l => l.Amount);
-            
+
             result.Add(new GraphDataPoint
             {
                 Label = monthStart.ToString("MMM yyyy"),
@@ -654,14 +653,14 @@ public class AuthService(
         {
             var monthStart = now.AddMonths(-i).Date.AddDays(1 - now.AddMonths(-i).Day);
             var monthEnd = monthStart.AddMonths(1).AddDays(-1);
-            
+
             var disbursedThisMonth = disbursements
                 .Where(d => d.CreatedAt >= monthStart && d.CreatedAt <= monthEnd)
                 .Sum(d => d.Amount);
-            
+
             // Assuming revenue is 10% of disbursed amount
             var revenueThisMonth = disbursedThisMonth * 0.1m;
-            
+
             result.Add(new GraphDataPoint
             {
                 Label = monthStart.ToString("MMM yyyy"),
@@ -696,7 +695,7 @@ public class AuthService(
             if (!string.IsNullOrEmpty(filter.Search))
             {
                 var searchTerm = filter.Search.ToLower();
-                query = query.Where(u => 
+                query = query.Where(u =>
                     u.FirstName.ToLower().Contains(searchTerm) ||
                     u.LastName.ToLower().Contains(searchTerm) ||
                     (u.Email != null && u.Email.ToLower().Contains(searchTerm)));
@@ -734,7 +733,7 @@ public class AuthService(
             // Apply sorting
             query = filter.SortBy?.ToLower() switch
             {
-                "firstname" => filter.SortOrder?.ToLower() == "desc" 
+                "firstname" => filter.SortOrder?.ToLower() == "desc"
                     ? query.OrderByDescending(u => u.FirstName)
                     : query.OrderBy(u => u.FirstName),
                 "lastname" => filter.SortOrder?.ToLower() == "desc"
@@ -757,11 +756,11 @@ public class AuthService(
 
             // Map to DTOs with additional data
             var adminDtos = new List<AdminListDto>();
-            
+
             foreach (var user in pagedUsers)
             {
                 var userRoles = await _userManager.GetRolesAsync(user);
-                var company = user.CompanyId != null 
+                var company = user.CompanyId != null
                     ? await _companyRepository.GetCompanyById(Guid.Parse(user.CompanyId))
                     : null;
 

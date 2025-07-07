@@ -356,4 +356,94 @@ public class CompanyController(
         }
     }
 
+    /// <summary>
+    /// Gets all companies for SuperAdmin with advanced filtering and search
+    /// </summary>
+    /// <param name="filter">Filter parameters for searching and filtering companies</param>
+    /// <returns>Paginated list of all companies with analytics data</returns>
+    // [GET] /api/company/sa/all
+    [HttpGet("sa/all")]
+    [Authorize(Roles = "SuperAdmin")]
+    public async Task<IActionResult> GetAllCompanies([FromQuery] CompanyFilterDto filter)
+    {
+        try
+        {
+            var result = await _companyService.GetAllCompaniesAsync(filter);
+            
+            if (!result.Success)
+            {
+                return BadRequest(result);
+            }
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while fetching all companies with filters: {@Filter}", filter);
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    /// <summary>
+    /// Gets a specific company by ID for SuperAdmin
+    /// </summary>
+    /// <param name="companyId">The ID of the company to retrieve</param>
+    /// <returns>Company details with analytics</returns>
+    // [GET] /api/company/sa/{companyId}
+    [HttpGet("sa/{companyId}")]
+    [Authorize(Roles = "SuperAdmin")]
+    public async Task<IActionResult> GetCompanyById(Guid companyId)
+    {
+        try
+        {
+            var result = await _companyService.GetCompanyByIdAsync(companyId);
+            
+            if (!result.Success)
+            {
+                return BadRequest(result);
+            }
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while fetching company {CompanyId}", companyId);
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    /// <summary>
+    /// Gets the current admin's company information (no companyId required)
+    /// </summary>
+    /// <returns>Company details for the authenticated admin</returns>
+    // [GET] /api/company/my-company
+    [HttpGet("my-company")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetMyCompany()
+    {
+        try
+        {
+            // Get company ID from JWT
+            var companyIdClaim = User.FindFirstValue("CompanyId");
+            if (string.IsNullOrEmpty(companyIdClaim) || !Guid.TryParse(companyIdClaim, out var companyId))
+            {
+                return BadRequest(ApiResponse.Fail("Company ID not found in token"));
+            }
+
+            var result = await _companyService.GetCompanyByIdAsync(companyId);
+            
+            if (!result.Success)
+            {
+                return BadRequest(result);
+            }
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while fetching admin's company for user {UserId}", User.FindFirstValue(ClaimTypes.NameIdentifier));
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
 }

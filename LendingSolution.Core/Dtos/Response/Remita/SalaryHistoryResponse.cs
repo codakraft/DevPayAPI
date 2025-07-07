@@ -2,7 +2,7 @@ namespace LendingSolution.Core.Dtos.Response.Remita;
 
 public class SalaryHistoryResponse : ResponseBase
 {
-    public SalaryHistoryReviewData Data { get; set; } // Replace with real type if known
+    public SalaryHistoryReviewData Data { get; set; } = new(); // Initialize with default value
 }
 
 public class SalaryHistoryReviewData

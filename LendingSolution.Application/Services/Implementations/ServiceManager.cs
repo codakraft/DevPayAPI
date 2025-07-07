@@ -52,7 +52,7 @@ public class ServiceManager(
     private readonly Lazy<ITokenService> _tokenService = new Lazy<ITokenService>(() =>
                 new TokenService(userManager, jwtconfig, refreshTokenRepository));
     private readonly Lazy<ICompanyService> _companyService = new Lazy<ICompanyService>(() =>
-                new CompanyService(companyRepository));
+                new CompanyService(companyRepository, userManager, loanRepository, disbursementRepository, repaymentRepository));
     private readonly Lazy<ILoanService> _loanService = new Lazy<ILoanService>(() =>
                 new LoanService(
                     db,

@@ -327,6 +327,113 @@ Content-Type: application/json
 
 ---
 
+## 🏢 **Company Management**
+
+### Get All Companies (SuperAdmin)
+Retrieve all companies with advanced filtering and analytics.
+
+```http
+GET /api/company/sa/all?search={term}&isActive={bool}&createdFrom={date}&createdTo={date}&minUsers={num}&maxUsers={num}&minLoans={num}&maxLoans={num}&minLoanAmount={amount}&maxLoanAmount={amount}&minDefaultRate={rate}&maxDefaultRate={rate}&page={num}&pageSize={size}&sortBy={field}&sortOrder={asc|desc}
+Authorization: Bearer {token}
+Role Required: SuperAdmin
+```
+
+**Query Parameters:**
+- `search`: Search company name, short name, or address
+- `isActive`: Filter by active/inactive status
+- `createdFrom`/`createdTo`: Date range filters
+- `minUsers`/`maxUsers`: User count range
+- `minLoans`/`maxLoans`: Loan count range
+- `minLoanAmount`/`maxLoanAmount`: Total loan amount range
+- `minDefaultRate`/`maxDefaultRate`: Default rate percentage range
+- Standard pagination and sorting
+
+**Returns:**
+- Paginated list of companies with analytics
+- User metrics (total/active users)
+- Loan statistics (total/active/pending loans)
+- Financial metrics (amounts, default rates)
+- Activity tracking
+
+### Get Company by ID (SuperAdmin)
+Retrieve detailed information for a specific company.
+
+```http
+GET /api/company/sa/{companyId}
+Authorization: Bearer {token}
+Role Required: SuperAdmin
+```
+
+**Returns:**
+- Complete company details
+- Real-time user and loan analytics
+- Financial performance metrics
+- Activity history
+
+### Get My Company (Admin)
+Retrieve admin's own company information without providing company ID.
+
+```http
+GET /api/company/my-company
+Authorization: Bearer {token}
+Role Required: Admin
+```
+
+**Returns:**
+- Company details for the authenticated admin
+- Company ID automatically extracted from JWT token
+- Same detailed analytics as SuperAdmin company view
+
+### Create Company (SuperAdmin)
+Create a new company in the system.
+
+```http
+POST /api/company/sa/create
+Authorization: Bearer {token}
+Role Required: SuperAdmin
+Content-Type: application/json
+
+{
+  "name": "string",
+  "shortName": "string",
+  "street": "string",
+  "city": "string",
+  "state": "string",
+  "country": "string"
+}
+```
+
+### Update Company (Admin)
+Update admin's own company information.
+
+```http
+PUT /api/company/info
+Authorization: Bearer {token}
+Role Required: Admin
+Content-Type: application/json
+
+{
+  "name": "string",
+  "shortName": "string",
+  "street": "string",
+  "city": "string",
+  "state": "string",
+  "country": "string"
+}
+```
+
+### Activate/Deactivate Company (SuperAdmin)
+Control company status.
+
+```http
+GET /api/company/sa/activate/{companyId}
+GET /api/company/sa/deactivate/{companyId}
+Authorization: Bearer {token}
+Role Required: SuperAdmin
+```
+
+---
+
 ## 🎯 **Common Use Cases**
 
 ### 1. SuperAdmin Monitoring All Loans

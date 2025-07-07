@@ -6,8 +6,8 @@ namespace LendingSolution.Application.Services.Interfaces;
 public interface IAuthService
 {
     Task<ApiResponse> Login(LoginRequestDto body);
-    Task<ApiResponse> CreateSuperAdmin(CreateSuperAdminRequestDto body);
-    Task<ApiResponse> CreateAdmin(CreateAdminRequestDto body);
+    Task<object> CreateSuperAdmin(CreateSuperAdminRequestDto body);
+    Task<object> CreateAdmin(CreateAdminRequestDto body);
     Task<object> AdminLogin(LoginRequestDto body);
     bool VerifyOtp(VerifyOtpRequestDto body);
     Task<bool> SavePersonalDetails(SavePersonalDetailsRequestDto body, System.Security.Claims.ClaimsPrincipal user);
