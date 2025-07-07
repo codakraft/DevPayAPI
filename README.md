@@ -282,4 +282,4 @@ GET /api/admin/loans?search=john&status=Approved&minAmount=50000&maxAmount=20000
 4. Update documentation for API changes
 
 ## License
-[Add appropriate license information]
+MIT
