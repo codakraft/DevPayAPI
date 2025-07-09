@@ -1,3 +1,4 @@
+using LendingSolution.Application.Exceptions;
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos.Response;
 using Microsoft.AspNetCore.Authorization;
@@ -23,11 +24,17 @@ public class LoanController(
         try
         {
             var result = await _loanService.GetAllLoans();
-            return Ok(result);
+            _logger.LogInformation("Successfully fetched all loans");
+            return Ok(ApiResponse.Ok("Loans fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "All loans fetched successfully.");
+            _logger.LogError(ex, "Error occurred while fetching all loans.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }

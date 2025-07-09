@@ -67,7 +67,6 @@ public class BorrowerController(
     {
         try
         {
-
             var result = await _authService.SavePersonalDetails(body, User);
             return Ok(ApiResponse.Ok("Personal details saved successfully"));
         }
@@ -153,7 +152,8 @@ public class BorrowerController(
         try
         {
             var result = await _remitaService.ValidateMandate(loanId, body);
-            return Ok(result);
+            _logger.LogInformation("Mandate validated successfully for loan {LoanId}", loanId);
+            return Ok(ApiResponse.Ok("Mandate validated successfully", result));
         }
         catch (AppException ex)
         {
@@ -172,19 +172,22 @@ public class BorrowerController(
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequestDto body)
     {
-        if (!ModelState.IsValid)
+        try
         {
-            return BadRequest(ApiResponse.Fail("Invalid model state"));
+            var result = await _authService.Login(body);
+            _logger.LogInformation("User logged in successfully");
+            return Ok(ApiResponse.Ok("Logged in successfully", result));
         }
-
-        var result = await _authService.Login(body);
-
-        if (!result.Success)
+        catch (AppException ex)
         {
-            return BadRequest(result);
+            _logger.LogError(ex, "Error during login");
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
-
-        return Ok(result);
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error during login");
+            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
+        }
     }
 
     // [GET]    /api/loans/user/{userId}       // View all loan applications by the user  

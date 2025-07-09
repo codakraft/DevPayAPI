@@ -49,6 +49,16 @@ A comprehensive .NET 8 Web API for managing loan operations in a multi-tenant en
 - User role and permission management
 - Company oversight and management
 
+#### 7. Remita Integration
+- **Salary History Verification**: Retrieve borrower employment and salary data
+- **Account Verification**: Validate bank account details via BVN matching
+- **Mandate Management**: Create and manage standing orders for automated repayments
+- **Loan Disbursement**: Process loan disbursements through Remita payment gateway
+- **Repayment Collection**: Automated collection via standing order mandates
+- **Transaction Status**: Real-time transaction monitoring and status updates
+- **Webhook Processing**: Handle real-time notifications from Remita
+- **Banks Integration**: Access to supported banks list for account verification
+
 ## Technical Architecture
 
 ### Backend Structure
@@ -185,6 +195,17 @@ GET /api/admin/loans?search=john&status=Approved&minAmount=50000&maxAmount=20000
 - `GET /api/finance/dashboard` - Financial dashboard
 - `GET /api/finance/disbursements` - Disbursement history
 - `GET /api/finance/repayments` - Repayment tracking
+
+### 🔄 Remita Integration
+- `POST /api/remita/salary-history` - Get borrower salary history
+- `POST /api/remita/verify-account` - Verify bank account details
+- `POST /api/remita/loans/{loanId}/mandate` - Create loan mandate
+- `POST /api/remita/loans/{loanId}/mandate/validate` - Validate mandate with OTP
+- `POST /api/remita/loans/{loanId}/disburse` - Disburse loan via Remita
+- `POST /api/remita/loans/{loanId}/collect-repayment` - Collect repayment
+- `GET /api/remita/transactions/{transactionRef}/status` - Check transaction status
+- `GET /api/remita/banks` - Get supported banks list
+- `POST /api/remita/webhook/notifications` - Handle Remita webhooks
 
 ## Getting Started
 

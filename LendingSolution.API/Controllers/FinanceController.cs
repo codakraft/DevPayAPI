@@ -1,3 +1,4 @@
+using LendingSolution.Application.Exceptions;
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Dtos.Response;
@@ -24,7 +25,13 @@ public class FinanceController(
         try
         {
             var result = await _financeService.GetAllDisbursementsAsync();
-            return Ok(result);
+            _logger.LogInformation("Successfully fetched all disbursements");
+            return Ok(ApiResponse.Ok("Disbursements fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
@@ -40,7 +47,13 @@ public class FinanceController(
         try
         {
             var result = await _financeService.GetAllRepaymentsAsync();
-            return Ok(result);
+            _logger.LogInformation("Successfully fetched all repayments");
+            return Ok(ApiResponse.Ok("Repayments fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
@@ -55,24 +68,19 @@ public class FinanceController(
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.Fail("Invalid model state"));
-            }
-
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             var result = await _financeService.ProcessDisbursementAsync(loanId, request, userId);
-
-            if (!result.Success)
-            {
-                return BadRequest(result);
-            }
-
-            return Ok(result);
+            _logger.LogInformation("Successfully processed disbursement for loan {LoanId}", loanId);
+            return Ok(ApiResponse.Ok("Disbursement processed successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while processing disbursement for loan {LoanId}.", loanId);
+            _logger.LogError(ex, "Error occurred while processing disbursement.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -83,20 +91,15 @@ public class FinanceController(
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.Fail("Invalid model state"));
-            }
-
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             var result = await _financeService.ProcessRepaymentAsync(request, userId);
-
-            if (!result.Success)
-            {
-                return BadRequest(result);
-            }
-
-            return Ok(result);
+            _logger.LogInformation("Successfully processed repayment");
+            return Ok(ApiResponse.Ok("Repayment processed successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
@@ -112,11 +115,17 @@ public class FinanceController(
         try
         {
             var result = await _financeService.GetMonthlyFinanceReportAsync(year, month);
-            return Ok(result);
+            _logger.LogInformation("Successfully fetched monthly finance report for {Year}-{Month}", year, month);
+            return Ok(ApiResponse.Ok("Monthly finance report fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while fetching monthly finance report for {Year}-{Month}.", year, month);
+            _logger.LogError(ex, "Error occurred while fetching monthly finance report.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -128,11 +137,17 @@ public class FinanceController(
         try
         {
             var result = await _financeService.GetCompanyFinanceReportAsync(companyId);
-            return Ok(result);
+            _logger.LogInformation("Successfully fetched finance report for company {CompanyId}", companyId);
+            return Ok(ApiResponse.Ok("Company finance report fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while fetching finance report for company {CompanyId}.", companyId);
+            _logger.LogError(ex, "Error occurred while fetching company finance report.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -141,16 +156,9 @@ public class FinanceController(
     [HttpGet("wallet/{companyId}")]
     public async Task<IActionResult> GetCompanyWallet(string companyId)
     {
-        try
-        {
-            var result = await _financeService.GetCompanyWalletAsync(companyId);
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error occurred while fetching wallet for company {CompanyId}.", companyId);
-            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
-        }
+        var result = await _financeService.GetCompanyWalletAsync(companyId);
+        _logger.LogInformation("Successfully fetched wallet for company {CompanyId}", companyId);
+        return Ok(ApiResponse.Ok("Company wallet fetched successfully", result));
     }
 }
 

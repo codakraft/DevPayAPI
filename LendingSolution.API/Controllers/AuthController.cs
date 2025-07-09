@@ -28,11 +28,18 @@ public class AuthController(
         try
         {
             var result = await _authService.AdminLogin(body);
+            _logger.LogInformation("User logged in successfully: {Email}", body.Email);
             return Ok(ApiResponse.Ok("Login successful", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred: " + ex.Message));
+            _logger.LogError(ex, "Error occurred during login.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
 
@@ -43,16 +50,17 @@ public class AuthController(
         try
         {
             var result = await _authService.CreateSuperAdmin(body);
-            return Ok(result);
+            _logger.LogInformation("Super admin created successfully: {Email}", body.Email);
+            return Ok(ApiResponse.Ok("Super admin created successfully", result));
         }
         catch (AppException ex)
         {
-            _logger.LogError(ex, "Error occurred while creating super admin.");
-            return BadRequest(ApiResponse.Fail(ex.Message));
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "An unexpected error occurred while creating super admin.");
+            _logger.LogError(ex, "Error occurred while creating super admin.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -64,7 +72,13 @@ public class AuthController(
         try
         {
             var result = await _authService.CreateAdmin(body);
-            return Ok(result);
+            _logger.LogInformation("Admin created successfully: {Email}", body.Email);
+            return Ok(ApiResponse.Ok("Admin created successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
@@ -79,14 +93,14 @@ public class AuthController(
     {
         try
         {
-
             var result = await _authService.RefreshToken(request);
-            return Ok(result);
+            _logger.LogInformation("Token refreshed successfully");
+            return Ok(ApiResponse.Ok("Token refreshed successfully", result));
         }
         catch (AppException ex)
         {
-            _logger.LogError(ex, "Error occurred while refreshing token.");
-            return BadRequest(ApiResponse.Fail($"Failed to refresh token: {ex.Message}"));
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail($"Failed to refresh token: {ex.Message}"));
         }
         catch (Exception ex)
         {
@@ -101,20 +115,15 @@ public class AuthController(
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.Fail("Invalid model state"));
-            }
-
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             var result = await _authService.RevokeToken(request, userId);
-
-            if (!result.Success)
-            {
-                return BadRequest(result);
-            }
-
-            return Ok(result);
+            _logger.LogInformation("User {UserId} revoked a token", userId);
+            return Ok(ApiResponse.Ok("JWT revoked successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
@@ -131,13 +140,13 @@ public class AuthController(
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             var result = await _authService.Logout(userId);
-
-            if (!result.Success)
-            {
-                return BadRequest(result);
-            }
-
-            return Ok(result);
+            _logger.LogInformation("User {UserId} logged out successfully", userId);
+            return Ok(ApiResponse.Ok("Logout successful"));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {

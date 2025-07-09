@@ -15,4 +15,8 @@ public class Repayment : Base
     public DateTime? ProcessedAt { get; set; }
     public string? ProcessedBy { get; set; }
     public string? Notes { get; set; }
+    
+    // Additional properties for Remita integration
+    public DateTime? RepaymentDate { get; set; }
+    public string? TransactionReference { get; set; }
 }

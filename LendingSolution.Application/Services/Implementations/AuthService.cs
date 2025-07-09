@@ -4,7 +4,6 @@ using LendingSolution.Core.Models;
 using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Dtos.Response;
 using LendingSolution.Application.Services.Interfaces;
-using LendingSolution.Infrastructure.Data;
 using LendingSolution.Core.Enum;
 using LendingSolution.Application.Repositories.Interfaces;
 using LendingSolution.Application.Exceptions;
@@ -13,9 +12,10 @@ namespace LendingSolution.Application.Services.Implementations;
 public class AuthService(
     UserManager<ApplicationUser> userManager,
     ITokenService tokenService,
-    ApplicationDbContext db,
     ICompanyRepository companyRepository,
     ILoanRepository loanRepository,
+    IEmployeeRepository employeeRepository,
+    IUserRepository userRepository,
     IRemitaService remitaService,
     RoleManager<IdentityRole> roleManager,
     IDisbursementRepository disbursementRepository,
@@ -25,16 +25,17 @@ public class AuthService(
 {
     private readonly UserManager<ApplicationUser> _userManager = userManager;
     private readonly ITokenService _tokenService = tokenService;
-    private readonly ApplicationDbContext _db = db;
     private readonly ICompanyRepository _companyRepository = companyRepository;
     private readonly ILoanRepository _loanRepository = loanRepository;
+    private readonly IEmployeeRepository _employeeRepository = employeeRepository;
+    private readonly IUserRepository _userRepository = userRepository;
     private readonly IRemitaService _remitaService = remitaService;
     private readonly RoleManager<IdentityRole> _roleManager = roleManager;
     private readonly IDisbursementRepository _disbursementRepository = disbursementRepository;
     private readonly IRepaymentRepository _repaymentRepository = repaymentRepository;
     private readonly ISupportTicketRepository _supportTicketRepository = supportTicketRepository;
 
-    private bool VerifyBvn(String Bvn)
+    private static bool VerifyBvn(String Bvn)
     {
         // if (!Bvn.Contains("2222222"))
         // {
@@ -43,7 +44,7 @@ public class AuthService(
         return true;
     }
 
-    public async Task<ApiResponse> Login(LoginRequestDto body)
+    public async Task<object> Login(LoginRequestDto body)
     {
         ApplicationUser? user;
 
@@ -51,7 +52,7 @@ public class AuthService(
 
         if (user is null || !await _userManager.CheckPasswordAsync(user, body.Password))
         {
-            return ApiResponse.Fail("Invalid credentials");
+            throw new AppException("Invalid credentials", 401);
         }
 
         var tokenResponse = await _tokenService.GenerateTokenWithRefreshAsync(user);
@@ -73,7 +74,7 @@ public class AuthService(
             }
         };
 
-        return ApiResponse.Ok("Logged in successfully", data);
+        return data;
     }
 
     public async Task<object> AdminLogin(LoginRequestDto body)
@@ -82,7 +83,7 @@ public class AuthService(
 
         if (user is null || !await _userManager.CheckPasswordAsync(user, body.Password))
         {
-            throw new AppException("Invalid credentials");
+            throw new AppException("Invalid credentials", 401);
         }
 
         var tokenResponse = await _tokenService.GenerateTokenWithRefreshAsync(user);
@@ -111,7 +112,7 @@ public class AuthService(
     {
         if (body.Otp != "1234")
         {
-            throw new AppException("Invalid OTP");
+            throw new AppException("Invalid OTP", 400);
         }
         return true;
     }
@@ -120,28 +121,28 @@ public class AuthService(
     {
         if (body is null)
         {
-            throw new AppException("Request body cannot be null");
+            throw new AppException("Request body cannot be null", 400);
         }
 
         var userId = _userManager.GetUserId(user);
 
         if (string.IsNullOrWhiteSpace(userId))
         {
-            throw new AppException("User not found");
+            throw new AppException("User not found", 404);
         }
 
-        var loan = await _db.Loans.FirstOrDefaultAsync(l => l.Id == body.LoanId && l.UserId == userId);
+        var loan = await _loanRepository.GetLoanById(body.LoanId);
 
-        if (loan == null)
+        if (loan == null || loan.UserId != userId)
         {
-            throw new AppException("Loan not found for user");
+            throw new AppException("Loan not found for user", 404);
         }
 
-        var existingEmployee = await _db.Employees.FirstOrDefaultAsync(e => e.UserId == userId && e.LoanId == body.LoanId);
+        var existingEmployee = await _employeeRepository.ExistsAsync(userId, body.LoanId);
 
-        if (existingEmployee != null)
+        if (existingEmployee)
         {
-            throw new AppException("Personal details already submitted for this loan");
+            throw new AppException("Personal details already submitted for this loan", 409);
         }
 
         var employee = new Employee
@@ -154,8 +155,13 @@ public class AuthService(
             ResidentialAddress = body.ResidentialAddress,
             LoanId = body.LoanId
         };
-        _db.Employees.Add(employee);
-        await _db.SaveChangesAsync();
+
+        var result = await _employeeRepository.CreateEmployeeAsync(employee);
+        
+        if (!result)
+        {
+            throw new AppException("Failed to save personal details", 500);
+        }
 
         return true;
     }
@@ -175,7 +181,7 @@ public class AuthService(
 
         if (!result.Succeeded)
         {
-            throw new AppException("Failed to create super admin: " + string.Join(", ", result.Errors.Select(e => e.Description)));
+            throw new AppException("Failed to create super admin: " + string.Join(", ", result.Errors.Select(e => e.Description)), 400);
         }
 
         // Assign SuperAdmin role
@@ -199,16 +205,16 @@ public class AuthService(
 
         if (!result.Succeeded)
         {
-            throw new AppException("Failed to create admin: " + string.Join(", ", result.Errors.Select(e => e.Description)));
+            throw new AppException("Failed to create admin: " + string.Join(", ", result.Errors.Select(e => e.Description)), 400);
         }
 
-        // Assign SuperAdmin role
+        // Assign Admin role
         await _userManager.AddToRoleAsync(user, "Admin");
 
         return new { userId = user.Id };
     }
 
-    public Task<ApiResponse> GetRoles()
+    public Task<object> GetRoles()
     {
         var roles = _roleManager.Roles.Select(r => new
         {
@@ -217,150 +223,119 @@ public class AuthService(
         })
         .ToList();
 
-        return Task.FromResult(ApiResponse.Ok("Roles fetched successfully", roles));
+        return Task.FromResult((object)roles);
     }
 
-    public async Task<ApiResponse> AssignRole(RoleAssignDto body)
+    public async Task<object> AssignRole(RoleAssignDto body)
     {
         var user = await _userManager.FindByIdAsync(body.UserId);
 
         if (user is null)
         {
-            return ApiResponse.Fail("User not found");
+            throw new AppException("User not found", 404);
         }
 
         var role = await _roleManager.FindByIdAsync(body.RoleId);
 
         if (role is null)
         {
-            return ApiResponse.Fail("Role not found.");
+            throw new AppException("Role not found", 404);
         }
 
         var result = await _userManager.AddToRoleAsync(user, role.Name!);
 
-        return ApiResponse.Ok("role added successfully", result);
+        return result;
     }
 
-    public async Task<ApiResponse> RefreshToken(RefreshTokenRequestDto request)
+    public async Task<object> RefreshToken(RefreshTokenRequestDto request)
     {
-        try
-        {
-            var tokenResponse = await _tokenService.RefreshTokenAsync(request.RefreshToken);
-            return ApiResponse.Ok("Token refreshed successfully", tokenResponse);
-        }
-        catch (AppException ex)
-        {
-            return ApiResponse.Fail($"Failed to refresh token: {ex.Message}");
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse.Fail($"Failed to refresh token: {ex.Message}");
-        }
+        var tokenResponse = await _tokenService.RefreshTokenAsync(request.RefreshToken);
+
+        return tokenResponse;
+
     }
 
-    public async Task<ApiResponse> RevokeToken(RevokeTokenRequestDto request, string? userId = null)
+    public async Task<bool> RevokeToken(RevokeTokenRequestDto request, string? userId = null)
     {
-        try
-        {
-            var result = await _tokenService.RevokeTokenAsync(request.RefreshToken, userId, request.Reason);
-            return result
-                ? ApiResponse.Ok("Token revoked successfully")
-                : ApiResponse.Fail("Failed to revoke token");
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse.Fail($"Failed to revoke token: {ex.Message}");
-        }
+        var result = await _tokenService.RevokeTokenAsync(request.RefreshToken, userId, request.Reason);
+        return result;
     }
 
-    public async Task<ApiResponse> Logout(string? userId = null)
+    public async Task<bool> Logout(string? userId = null)
     {
-        try
+        if (string.IsNullOrEmpty(userId))
         {
-            if (string.IsNullOrEmpty(userId))
-            {
-                return ApiResponse.Fail("User ID is required for logout");
-            }
+            throw new AppException("User ID is required for logout", 400);
+        }
 
-            await _tokenService.RevokeAllUserTokensAsync(userId, userId, "User logged out");
-            return ApiResponse.Ok("Logged out successfully");
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse.Fail($"Failed to logout: {ex.Message}");
-        }
+        await _tokenService.RevokeAllUserTokensAsync(userId, userId, "User logged out");
+        return true;
     }
 
-    public async Task<ApiResponse> GetSuperAdminDashboardAsync()
+    public async Task<object> GetSuperAdminDashboardAsync()
     {
-        try
+        var now = DateTime.UtcNow;
+        var todayStart = now.Date;
+        var weekStart = now.Date.AddDays(-(int)now.DayOfWeek);
+        var monthStart = new DateTime(now.Year, now.Month, 1);
+        var yearStart = new DateTime(now.Year, 1, 1);
+
+        // Get all companies
+        var allCompanies = await _companyRepository.GetAllCompanies();
+        var companiesList = allCompanies.ToList();
+
+        // Get all users
+        var allUsers = await _userRepository.GetAllUsersAsync();
+
+        // Get all loans
+        var allLoans = new List<Loan>();
+        foreach (var company in companiesList)
         {
-            var now = DateTime.UtcNow;
-            var todayStart = now.Date;
-            var weekStart = now.Date.AddDays(-(int)now.DayOfWeek);
-            var monthStart = new DateTime(now.Year, now.Month, 1);
-            var yearStart = new DateTime(now.Year, 1, 1);
-
-            // Get all companies
-            var allCompanies = await _companyRepository.GetAllCompanies();
-            var companiesList = allCompanies.ToList();
-
-            // Get all users
-            var allUsers = await _userManager.Users.ToListAsync();
-
-            // Get all loans
-            var allLoans = new List<Loan>();
-            foreach (var company in companiesList)
-            {
-                var companyLoans = await _loanRepository.GetAllLoansByCompanyId(company.Id);
-                allLoans.AddRange(companyLoans);
-            }
-
-            // Get financial data
-            var allDisbursements = await _disbursementRepository.GetAllDisbursements();
-            var allRepayments = await _repaymentRepository.GetAllRepayments();
-            var allSupportTickets = await _supportTicketRepository.GetAllAsync();
-
-            // Calculate system-wide statistics
-            var systemStats = CalculateSystemWideStatistics(companiesList, allUsers, allLoans, now, todayStart, weekStart, monthStart, yearStart);
-
-            // Calculate company overviews
-            var companyOverviews = await CalculateCompanyOverviews(companiesList, allLoans, allDisbursements);
-
-            // Calculate system-wide analytics
-            var analytics = CalculateSystemWideAnalytics(allUsers, allLoans, companiesList);
-
-            // Calculate financial metrics
-            var financialMetrics = CalculateSystemWideFinancialMetrics(allLoans, allDisbursements, allRepayments);
-
-            // Calculate performance metrics
-            var performanceMetrics = CalculatePlatformPerformanceMetrics(allSupportTickets.ToList());
-
-            // Calculate growth trends
-            var companyGrowthTrend = CalculateCompanyGrowthTrend(companiesList, now);
-            var userGrowthTrend = CalculateUserGrowthTrend(allUsers, now);
-            var loanVolumeTrend = CalculateLoanVolumeTrend(allLoans, now);
-            var revenueGrowthTrend = CalculateRevenueGrowthTrend(allDisbursements, allRepayments, now);
-
-            var dashboard = new SuperAdminDashboardDto
-            {
-                SystemStats = systemStats,
-                Companies = companyOverviews,
-                Analytics = analytics,
-                FinancialMetrics = financialMetrics,
-                Performance = performanceMetrics,
-                CompanyGrowthTrend = companyGrowthTrend,
-                UserGrowthTrend = userGrowthTrend,
-                LoanVolumeTrend = loanVolumeTrend,
-                RevenueGrowthTrend = revenueGrowthTrend
-            };
-
-            return ApiResponse.Ok("Super admin dashboard retrieved successfully", dashboard);
+            var companyLoans = await _loanRepository.GetAllLoansByCompanyId(company.Id);
+            allLoans.AddRange(companyLoans);
         }
-        catch (Exception ex)
+
+        // Get financial data
+        var allDisbursements = await _disbursementRepository.GetAllDisbursements();
+        var allRepayments = await _repaymentRepository.GetAllRepayments();
+        var allSupportTickets = await _supportTicketRepository.GetAllAsync();
+
+        // Calculate system-wide statistics
+        var systemStats = CalculateSystemWideStatistics(companiesList, allUsers, allLoans, now, todayStart, weekStart, monthStart, yearStart);
+
+        // Calculate company overviews
+        var companyOverviews = await CalculateCompanyOverviews(companiesList, allLoans, allDisbursements);
+
+        // Calculate system-wide analytics
+        var analytics = CalculateSystemWideAnalytics(allUsers, allLoans, companiesList);
+
+        // Calculate financial metrics
+        var financialMetrics = CalculateSystemWideFinancialMetrics(allLoans, allDisbursements, allRepayments);
+
+        // Calculate performance metrics
+        var performanceMetrics = CalculatePlatformPerformanceMetrics(allSupportTickets.ToList());
+
+        // Calculate growth trends
+        var companyGrowthTrend = CalculateCompanyGrowthTrend(companiesList, now);
+        var userGrowthTrend = CalculateUserGrowthTrend(allUsers, now);
+        var loanVolumeTrend = CalculateLoanVolumeTrend(allLoans, now);
+        var revenueGrowthTrend = CalculateRevenueGrowthTrend(allDisbursements, allRepayments, now);
+
+        var dashboard = new SuperAdminDashboardDto
         {
-            return ApiResponse.Fail($"Failed to retrieve super admin dashboard: {ex.Message}");
-        }
+            SystemStats = systemStats,
+            Companies = companyOverviews,
+            Analytics = analytics,
+            FinancialMetrics = financialMetrics,
+            Performance = performanceMetrics,
+            CompanyGrowthTrend = companyGrowthTrend,
+            UserGrowthTrend = userGrowthTrend,
+            LoanVolumeTrend = loanVolumeTrend,
+            RevenueGrowthTrend = revenueGrowthTrend
+        };
+
+        return dashboard;
+
     }
 
     private SystemWideStatistics CalculateSystemWideStatistics(
@@ -399,9 +374,7 @@ public class AuthService(
 
         foreach (var company in companies)
         {
-            var companyUsers = await _userManager.Users
-                .Where(u => u.CompanyId == company.Id.ToString())
-                .ToListAsync();
+            var companyUsers = await _userRepository.GetUsersByCompanyIdAsync(company.Id.ToString());
 
             var companyLoans = allLoans.Where(l => l.CompanyId == company.Id).ToList();
             var companyDisbursements = allDisbursements.Where(d =>
@@ -614,7 +587,7 @@ public class AuthService(
         return result;
     }
 
-    private List<GraphDataPoint> CalculateUserGrowthTrend(List<ApplicationUser> users, DateTime now)
+    private static List<GraphDataPoint> CalculateUserGrowthTrend(List<ApplicationUser> users, DateTime now)
     {
         var result = new List<GraphDataPoint>();
         for (int i = 11; i >= 0; i--)
@@ -679,133 +652,127 @@ public class AuthService(
         return result;
     }
 
-    public async Task<ApiResponse> GetAdminListAsync(AdminFilterDto filter)
+    public async Task<object> GetAdminListAsync(AdminFilterDto filter)
     {
-        try
+        var adminRoles = new[] { "Admin", "SuperAdmin" };
+        var adminUsers = new List<ApplicationUser>();
+
+        foreach (var role in adminRoles)
         {
-            // Get users in Admin and SuperAdmin roles
-            var adminRoles = new[] { "Admin", "SuperAdmin" };
-            var adminUsers = new List<ApplicationUser>();
-
-            foreach (var role in adminRoles)
-            {
-                var usersInRole = await _userManager.GetUsersInRoleAsync(role);
-                adminUsers.AddRange(usersInRole);
-            }
-
-            // Remove duplicates (users with multiple admin roles)
-            adminUsers = adminUsers.DistinctBy(u => u.Id).ToList();
-
-            // Apply filters
-            var query = adminUsers.AsQueryable();
-
-            // Search filter (name or email)
-            if (!string.IsNullOrEmpty(filter.Search))
-            {
-                var searchTerm = filter.Search.ToLower();
-                query = query.Where(u =>
-                    u.FirstName.ToLower().Contains(searchTerm) ||
-                    u.LastName.ToLower().Contains(searchTerm) ||
-                    (u.Email != null && u.Email.ToLower().Contains(searchTerm)));
-            }
-
-            // Role filter
-            if (!string.IsNullOrEmpty(filter.Role))
-            {
-                var usersInFilterRole = await _userManager.GetUsersInRoleAsync(filter.Role);
-                var userIdsInRole = usersInFilterRole.Select(u => u.Id).ToHashSet();
-                query = query.Where(u => userIdsInRole.Contains(u.Id));
-            }
-
-            // Company filter
-            if (!string.IsNullOrEmpty(filter.CompanyId))
-            {
-                query = query.Where(u => u.CompanyId == filter.CompanyId);
-            }
-
-            // Gender filter
-            if (!string.IsNullOrEmpty(filter.Gender))
-            {
-                query = query.Where(u => u.Gender == filter.Gender);
-            }
-
-            // Active status filter
-            if (filter.IsActive.HasValue)
-            {
-                query = query.Where(u => u.IsActive == filter.IsActive.Value);
-            }
-
-            // Get total count before pagination
-            var totalCount = query.Count();
-
-            // Apply sorting
-            query = filter.SortBy?.ToLower() switch
-            {
-                "firstname" => filter.SortOrder?.ToLower() == "desc"
-                    ? query.OrderByDescending(u => u.FirstName)
-                    : query.OrderBy(u => u.FirstName),
-                "lastname" => filter.SortOrder?.ToLower() == "desc"
-                    ? query.OrderByDescending(u => u.LastName)
-                    : query.OrderBy(u => u.LastName),
-                "email" => filter.SortOrder?.ToLower() == "desc"
-                    ? query.OrderByDescending(u => u.Email)
-                    : query.OrderBy(u => u.Email),
-                "createdat" => filter.SortOrder?.ToLower() == "desc"
-                    ? query.OrderByDescending(u => u.CreatedAt)
-                    : query.OrderBy(u => u.CreatedAt),
-                _ => query.OrderByDescending(u => u.CreatedAt)
-            };
-
-            // Apply pagination
-            var pagedUsers = query
-                .Skip((filter.Page - 1) * filter.PageSize)
-                .Take(filter.PageSize)
-                .ToList();
-
-            // Map to DTOs with additional data
-            var adminDtos = new List<AdminListDto>();
-
-            foreach (var user in pagedUsers)
-            {
-                var userRoles = await _userManager.GetRolesAsync(user);
-                var company = user.CompanyId != null
-                    ? await _companyRepository.GetCompanyById(Guid.Parse(user.CompanyId))
-                    : null;
-
-                adminDtos.Add(new AdminListDto
-                {
-                    Id = user.Id,
-                    FirstName = user.FirstName,
-                    LastName = user.LastName,
-                    Email = user.Email ?? string.Empty,
-                    Role = string.Join(", ", userRoles),
-                    CompanyName = company?.Name,
-                    PhoneNumber = user.PhoneNumber,
-                    Gender = user.Gender,
-                    IsActive = user.IsActive,
-                    CreatedAt = user.CreatedAt,
-                    LastLoginAt = user.LastLoginAt
-                });
-            }
-
-            var totalPages = (int)Math.Ceiling((double)totalCount / filter.PageSize);
-
-            var result = new PagedAdminListDto
-            {
-                Admins = adminDtos,
-                TotalCount = totalCount,
-                Page = filter.Page,
-                PageSize = filter.PageSize,
-                TotalPages = totalPages,
-                HasNextPage = filter.Page < totalPages,
-                HasPreviousPage = filter.Page > 1
-            };
-
-            return ApiResponse.Ok("Admin list retrieved successfully", result);
+            var usersInRole = await _userRepository.GetUsersInRoleAsync(role);
+            adminUsers.AddRange(usersInRole);
         }
-        catch (Exception ex)
+
+        // Remove duplicates (users with multiple admin roles)
+        adminUsers = adminUsers.DistinctBy(u => u.Id).ToList();
+
+        // Apply filters
+        var query = adminUsers.AsQueryable();
+
+        // Search filter (name or email)
+        if (!string.IsNullOrEmpty(filter.Search))
         {
-            return ApiResponse.Fail($"Error retrieving admin list: {ex.Message}");
+            var searchTerm = filter.Search.ToLower();
+            query = query.Where(u =>
+                u.FirstName.ToLower().Contains(searchTerm) ||
+                u.LastName.ToLower().Contains(searchTerm) ||
+                (u.Email != null && u.Email.ToLower().Contains(searchTerm)));
         }
+
+        // Role filter
+        if (!string.IsNullOrEmpty(filter.Role))
+        {
+            var usersInFilterRole = await _userRepository.GetUsersInRoleAsync(filter.Role);
+            var userIdsInRole = usersInFilterRole.Select(u => u.Id).ToHashSet();
+            query = query.Where(u => userIdsInRole.Contains(u.Id));
+        }
+
+        // Company filter
+        if (!string.IsNullOrEmpty(filter.CompanyId))
+        {
+            query = query.Where(u => u.CompanyId == filter.CompanyId);
+        }
+
+        // Gender filter
+        if (!string.IsNullOrEmpty(filter.Gender))
+        {
+            query = query.Where(u => u.Gender == filter.Gender);
+        }
+
+        // Active status filter
+        if (filter.IsActive.HasValue)
+        {
+            query = query.Where(u => u.IsActive == filter.IsActive.Value);
+        }
+
+        // Get total count before pagination
+        var totalCount = query.Count();
+
+        // Apply sorting
+        query = filter.SortBy?.ToLower() switch
+        {
+            "firstname" => filter.SortOrder?.ToLower() == "desc"
+                ? query.OrderByDescending(u => u.FirstName)
+                : query.OrderBy(u => u.FirstName),
+            "lastname" => filter.SortOrder?.ToLower() == "desc"
+                ? query.OrderByDescending(u => u.LastName)
+                : query.OrderBy(u => u.LastName),
+            "email" => filter.SortOrder?.ToLower() == "desc"
+                ? query.OrderByDescending(u => u.Email)
+                : query.OrderBy(u => u.Email),
+            "createdat" => filter.SortOrder?.ToLower() == "desc"
+                ? query.OrderByDescending(u => u.CreatedAt)
+                : query.OrderBy(u => u.CreatedAt),
+            _ => query.OrderByDescending(u => u.CreatedAt)
+        };
+
+        // Apply pagination
+        var pagedUsers = query
+            .Skip((filter.Page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
+            .ToList();
+
+        // Map to DTOs with additional data
+        var adminDtos = new List<AdminListDto>();
+
+        foreach (var user in pagedUsers)
+        {
+            var userRoles = await _userManager.GetRolesAsync(user);
+            var company = user.CompanyId != null
+                ? await _companyRepository.GetCompanyById(Guid.Parse(user.CompanyId))
+                : null;
+
+            adminDtos.Add(new AdminListDto
+            {
+                Id = user.Id,
+                FirstName = user.FirstName,
+                LastName = user.LastName,
+                Email = user.Email ?? string.Empty,
+                Role = string.Join(", ", userRoles),
+                CompanyName = company?.Name,
+                PhoneNumber = user.PhoneNumber,
+                Gender = user.Gender,
+                IsActive = user.IsActive,
+                CreatedAt = user.CreatedAt,
+                LastLoginAt = user.LastLoginAt
+            });
+        }
+
+        var totalPages = (int)Math.Ceiling((double)totalCount / filter.PageSize);
+
+        var result = new PagedAdminListDto
+        {
+            Admins = adminDtos,
+            TotalCount = totalCount,
+            Page = filter.Page,
+            PageSize = filter.PageSize,
+            TotalPages = totalPages,
+            HasNextPage = filter.Page < totalPages,
+            HasPreviousPage = filter.Page > 1
+        };
+
+        return result;
+
     }
 }
+

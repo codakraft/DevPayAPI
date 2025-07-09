@@ -25,4 +25,11 @@ public class Loan : Base
     public bool IsMandateGenerated { get; set; } = false;
     public string MandateId { get; set; } = string.Empty;
     public string RemitaTransRef { get; set; } = string.Empty;
+    
+    // Additional properties for Remita integration
+    public DateTime? DisbursementDate { get; set; }
+    public string? DisbursementReference { get; set; }
+    public string? MandateStatus { get; set; }
+    public DateTime? MandateActivationDate { get; set; }
+    public string? FailureReason { get; set; }
 }

@@ -1,3 +1,4 @@
+using LendingSolution.Application.Exceptions;
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Dtos.Response;
@@ -28,7 +29,13 @@ public class SupportController : Controller
         try
         {
             var result = await _supportService.GetSupportDashboardAsync();
-            return Ok(result);
+            _logger.LogInformation("Successfully fetched support dashboard");
+            return Ok(ApiResponse.Ok("Support dashboard fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
@@ -44,11 +51,17 @@ public class SupportController : Controller
         try
         {
             var result = await _supportService.GetAllTicketsAsync();
-            return Ok(result);
+            _logger.LogInformation("Successfully fetched all support tickets");
+            return Ok(ApiResponse.Ok("Support tickets fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while fetching support tickets.");
+            _logger.LogError(ex, "Error occurred while fetching all tickets.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -59,11 +72,17 @@ public class SupportController : Controller
         try
         {
             var result = await _supportService.GetTicketByIdAsync(ticketId);
-            return Ok(result);
+            _logger.LogInformation("Successfully fetched support ticket {TicketId}", ticketId);
+            return Ok(ApiResponse.Ok("Support ticket fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while fetching support ticket {TicketId}.", ticketId);
+            _logger.LogError(ex, "Error occurred while fetching ticket by ID.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -73,20 +92,15 @@ public class SupportController : Controller
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.Fail("Invalid model state"));
-            }
-
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
             var result = await _supportService.CreateTicketAsync(request, userId);
-
-            if (!result.Success)
-            {
-                return BadRequest(result);
-            }
-
-            return Ok(result);
+            _logger.LogInformation("Successfully created support ticket");
+            return Ok(ApiResponse.Ok("Support ticket created successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
@@ -100,24 +114,19 @@ public class SupportController : Controller
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.Fail("Invalid model state"));
-            }
-
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
             var result = await _supportService.UpdateTicketAsync(ticketId, request, userId);
-
-            if (!result.Success)
-            {
-                return BadRequest(result);
-            }
-
-            return Ok(result);
+            _logger.LogInformation("Successfully updated support ticket {TicketId}", ticketId);
+            return Ok(ApiResponse.Ok("Support ticket updated successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while updating support ticket {TicketId}.", ticketId);
+            _logger.LogError(ex, "Error occurred while updating support ticket.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -127,24 +136,19 @@ public class SupportController : Controller
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.Fail("Invalid model state"));
-            }
-
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
             var result = await _supportService.AddCommentToTicketAsync(ticketId, request, userId);
-
-            if (!result.Success)
-            {
-                return BadRequest(result);
-            }
-
-            return Ok(result);
+            _logger.LogInformation("Successfully added comment to ticket {TicketId}", ticketId);
+            return Ok(ApiResponse.Ok("Comment added to support ticket successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while adding comment to ticket {TicketId}.", ticketId);
+            _logger.LogError(ex, "Error occurred while adding comment to ticket.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -155,11 +159,17 @@ public class SupportController : Controller
         try
         {
             var result = await _supportService.GetTicketsByStatusAsync(status);
-            return Ok(result);
+            _logger.LogInformation("Successfully fetched tickets by status {Status}", status);
+            return Ok(ApiResponse.Ok("Tickets fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while fetching tickets by status {Status}.", status);
+            _logger.LogError(ex, "Error occurred while fetching tickets by status.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -170,11 +180,17 @@ public class SupportController : Controller
         try
         {
             var result = await _supportService.GetTicketsByCategoryAsync(category);
-            return Ok(result);
+            _logger.LogInformation("Successfully fetched tickets by category {Category}", category);
+            return Ok(ApiResponse.Ok("Tickets fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while fetching tickets by category {Category}.", category);
+            _logger.LogError(ex, "Error occurred while fetching tickets by category.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -185,11 +201,17 @@ public class SupportController : Controller
         try
         {
             var result = await _supportService.GetTicketsByPriorityAsync(priority);
-            return Ok(result);
+            _logger.LogInformation("Successfully fetched tickets by priority {Priority}", priority);
+            return Ok(ApiResponse.Ok("Tickets fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while fetching tickets by priority {Priority}.", priority);
+            _logger.LogError(ex, "Error occurred while fetching tickets by priority.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -200,13 +222,14 @@ public class SupportController : Controller
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(searchTerm))
-            {
-                return BadRequest(ApiResponse.Fail("Search term is required"));
-            }
-
             var result = await _supportService.SearchUsersAsync(searchTerm);
-            return Ok(result);
+            _logger.LogInformation("Successfully searched users with term: {SearchTerm}", searchTerm);
+            return Ok(ApiResponse.Ok("User search results", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
@@ -221,11 +244,17 @@ public class SupportController : Controller
         try
         {
             var result = await _supportService.GetUserAccountDetailsAsync(userId);
-            return Ok(result);
+            _logger.LogInformation("Successfully fetched user account details for {UserId}", userId);
+            return Ok(ApiResponse.Ok("User account details fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while fetching user account details for {UserId}.", userId);
+            _logger.LogError(ex, "Error occurred while fetching user account details.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -236,11 +265,17 @@ public class SupportController : Controller
         try
         {
             var result = await _supportService.GetTicketsByUserIdAsync(userId);
-            return Ok(result);
+            _logger.LogInformation("Successfully fetched tickets for user {UserId}", userId);
+            return Ok(ApiResponse.Ok("User tickets fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while fetching tickets for user {UserId}.", userId);
+            _logger.LogError(ex, "Error occurred while fetching tickets for user.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -251,11 +286,17 @@ public class SupportController : Controller
         try
         {
             var result = await _supportService.GetUserLoansAsync(userId);
-            return Ok(result);
+            _logger.LogInformation("Successfully fetched loans for user {UserId}", userId);
+            return Ok(ApiResponse.Ok("User loans fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while fetching loans for user {UserId}.", userId);
+            _logger.LogError(ex, "Error occurred while fetching loans for user.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -265,24 +306,19 @@ public class SupportController : Controller
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.Fail("Invalid model state"));
-            }
-
             var performedBy = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
             var result = await _supportService.PerformUserActionAsync(userId, request, performedBy);
-
-            if (!result.Success)
-            {
-                return BadRequest(result);
-            }
-
-            return Ok(result);
+            _logger.LogInformation("Successfully performed action on user {UserId}", userId);
+            return Ok(ApiResponse.Ok("User action performed successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while performing action on user {UserId}.", userId);
+            _logger.LogError(ex, "Error occurred while performing action on user.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -293,13 +329,14 @@ public class SupportController : Controller
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(searchTerm))
-            {
-                return BadRequest(ApiResponse.Fail("Search term is required"));
-            }
-
             var result = await _supportService.SearchLoansAsync(searchTerm);
-            return Ok(result);
+            _logger.LogInformation("Successfully searched loans with term: {SearchTerm}", searchTerm);
+            return Ok(ApiResponse.Ok("Loan search results", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
@@ -314,11 +351,17 @@ public class SupportController : Controller
         try
         {
             var result = await _supportService.GetLoanDetailsAsync(loanId);
-            return Ok(result);
+            _logger.LogInformation("Successfully fetched loan details for {LoanId}", loanId);
+            return Ok(ApiResponse.Ok("Loan details fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while fetching loan details for {LoanId}.", loanId);
+            _logger.LogError(ex, "Error occurred while fetching loan details.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -329,11 +372,17 @@ public class SupportController : Controller
         try
         {
             var result = await _supportService.GetLoansByStatusAsync(status);
-            return Ok(result);
+            _logger.LogInformation("Successfully fetched loans by status {Status}", status);
+            return Ok(ApiResponse.Ok("Loans fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while fetching loans by status {Status}.", status);
+            _logger.LogError(ex, "Error occurred while fetching loans by status.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -344,7 +393,13 @@ public class SupportController : Controller
         try
         {
             var result = await _supportService.GetOverdueLoansAsync();
-            return Ok(result);
+            _logger.LogInformation("Successfully fetched overdue loans");
+            return Ok(ApiResponse.Ok("Overdue loans fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {

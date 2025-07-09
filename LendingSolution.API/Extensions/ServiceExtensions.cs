@@ -150,6 +150,8 @@ public static class ServiceExtensions
             var companyRepository = provider.GetRequiredService<ICompanyRepository>();
             var loanRepository = provider.GetRequiredService<ILoanRepository>();
             var loanProductRepository = provider.GetRequiredService<ILoanProductRepository>();
+            var employeeRepository = provider.GetRequiredService<IEmployeeRepository>();
+            var userRepository = provider.GetRequiredService<IUserRepository>();
             var remitaService = provider.GetRequiredService<IRemitaService>();
             var configuration = provider.GetRequiredService<IConfiguration>();
             var remitaSettings = provider.GetRequiredService<IOptions<RemitaSettings>>();
@@ -172,6 +174,8 @@ public static class ServiceExtensions
                 companyRepository,
                 loanRepository,
                 loanProductRepository,
+                employeeRepository,
+                userRepository,
                 remitaService,
                 configuration,
                 remitaSettings,
@@ -214,6 +218,8 @@ public static class ServiceExtensions
         services.AddScoped<IRepaymentRepository, RepaymentRepository>();
         services.AddScoped<ISupportTicketRepository, SupportTicketRepository>();
         services.AddScoped<ISupportCommentRepository, SupportCommentRepository>();
+        services.AddScoped<IEmployeeRepository, EmployeeRepository>();
+        services.AddScoped<IUserRepository, UserRepository>();
     }
 
     public static void ConfigureServices(this IServiceCollection services, IConfiguration configuration)

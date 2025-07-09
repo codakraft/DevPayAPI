@@ -1,3 +1,4 @@
+using LendingSolution.Application.Exceptions;
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Dtos.Response;
@@ -39,11 +40,17 @@ public class AdminController(
         try
         {
             var result = await _authService.GetRoles();
-            return Ok(result);
+            _logger.LogInformation("Roles fetched successfully");
+            return Ok(ApiResponse.Ok("Roles fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while fetching all roles.");
+            _logger.LogError(ex, "Error occurred while fetching roles.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -55,11 +62,17 @@ public class AdminController(
         try
         {
             var result = await _authService.AssignRole(body);
-            return Ok(result);
+            _logger.LogInformation("Role assigned successfully to user {UserId}", body.UserId);
+            return Ok(ApiResponse.Ok("Role assigned successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while assigning role to user.");
+            _logger.LogError(ex, "Error occurred while assigning role.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -72,7 +85,13 @@ public class AdminController(
         try
         {
             var result = await _adminSettingsService.GetAllSettingsAsync();
-            return Ok(result);
+            _logger.LogInformation("Admin settings fetched successfully");
+            return Ok(ApiResponse.Ok("Admin settings fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
@@ -88,11 +107,6 @@ public class AdminController(
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.Fail("Invalid model state"));
-            }
-
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrEmpty(userId))
             {
@@ -101,12 +115,13 @@ public class AdminController(
 
             var result = await _adminSettingsService.CreateSettingAsync(settingsDto, userId);
             
-            if (!result.Success)
-            {
-                return BadRequest(result);
-            }
-
-            return Ok(result);
+            _logger.LogInformation("Admin settings created successfully by user {UserId}", userId);
+            return Ok(ApiResponse.Ok("Admin settings created successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
@@ -122,11 +137,6 @@ public class AdminController(
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.Fail("Invalid model state"));
-            }
-
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrEmpty(userId))
             {
@@ -135,12 +145,13 @@ public class AdminController(
 
             var result = await _adminSettingsService.UpdateSettingAsync(id, settingsDto, userId);
             
-            if (!result.Success)
-            {
-                return BadRequest(result);
-            }
-
-            return Ok(result);
+            _logger.LogInformation("Admin settings {SettingId} updated successfully by user {UserId}", id, userId);
+            return Ok(ApiResponse.Ok("Admin settings updated successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
@@ -157,7 +168,13 @@ public class AdminController(
         try
         {
             var result = await _approvalService.GetPendingApprovalsAsync();
-            return Ok(result);
+            _logger.LogInformation("Pending approvals fetched successfully");
+            return Ok(ApiResponse.Ok("Pending approvals fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
@@ -181,12 +198,13 @@ public class AdminController(
 
             var result = await _approvalService.ApproveRequestAsync(id, userId, processDto?.Reason);
             
-            if (!result.Success)
-            {
-                return BadRequest(result);
-            }
-
-            return Ok(result);
+            _logger.LogInformation("Approval request {RequestId} approved by user {UserId}", id, userId);
+            return Ok(ApiResponse.Ok("Request approved successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
@@ -210,12 +228,13 @@ public class AdminController(
 
             var result = await _approvalService.RejectRequestAsync(id, userId, processDto?.Reason);
             
-            if (!result.Success)
-            {
-                return BadRequest(result);
-            }
-
-            return Ok(result);
+            _logger.LogInformation("Approval request {RequestId} rejected by user {UserId}", id, userId);
+            return Ok(ApiResponse.Ok("Request rejected successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
@@ -236,7 +255,13 @@ public class AdminController(
         try
         {
             var result = await _authService.GetSuperAdminDashboardAsync();
-            return Ok(result);
+            _logger.LogInformation("Super admin dashboard fetched successfully");
+            return Ok(ApiResponse.Ok("Super admin dashboard fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
@@ -258,11 +283,17 @@ public class AdminController(
         try
         {
             var result = await _authService.GetAdminListAsync(filter);
-            return Ok(result);
+            _logger.LogInformation("Admin list fetched successfully with filters");
+            return Ok(ApiResponse.Ok("Admin list fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while fetching admin list with filters: {@Filter}", filter);
+            _logger.LogError(ex, "Error occurred while fetching admin list.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -280,11 +311,17 @@ public class AdminController(
         try
         {
             var result = await _loanProductService.GetAllLoanProductsAsync(filter);
-            return Ok(result);
+            _logger.LogInformation("All loan products fetched successfully with filters");
+            return Ok(ApiResponse.Ok("Loan products fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while fetching all loan products with filters: {@Filter}", filter);
+            _logger.LogError(ex, "Error occurred while fetching all loan products.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -302,11 +339,17 @@ public class AdminController(
         try
         {
             var result = await _loanService.GetAllLoansAsync(filter);
-            return Ok(result);
+            _logger.LogInformation("All loans fetched successfully with filters");
+            return Ok(ApiResponse.Ok("Loans fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while fetching all loans with filters: {@Filter}", filter);
+            _logger.LogError(ex, "Error occurred while fetching all loans.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -325,11 +368,17 @@ public class AdminController(
         try
         {
             var result = await _loanService.GetCompanyLoansAsync(companyId, filter);
-            return Ok(result);
+            _logger.LogInformation("Company {CompanyId} loans fetched successfully with filters", companyId);
+            return Ok(ApiResponse.Ok("Company loans fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while fetching company loans with filters: {@Filter}", filter);
+            _logger.LogError(ex, "Error occurred while fetching company loans.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -348,11 +397,17 @@ public class AdminController(
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             var result = await _loanService.GetLoanByIdAsync(loanId, userId);
-            return Ok(result);
+            _logger.LogInformation("Loan {LoanId} fetched successfully", loanId);
+            return Ok(ApiResponse.Ok("Loan fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while fetching loan {LoanId}", loanId);
+            _logger.LogError(ex, "Error occurred while fetching loan by ID.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }

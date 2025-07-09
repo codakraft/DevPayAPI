@@ -1,3 +1,4 @@
+using LendingSolution.Application.Exceptions;
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Dtos.Response;
@@ -11,9 +12,9 @@ namespace LendingSolution.API.Controllers;
 [ApiController]
 [Route("api/company")]
 public class CompanyController(
-    ICompanyService companySErvice, 
-    ILoanProductService loanProductService, 
-    ISupportService supportService, 
+    ICompanyService companySErvice,
+    ILoanProductService loanProductService,
+    ISupportService supportService,
     ILoanService loanService,
     ILogger<CompanyController> logger)
   : Controller
@@ -28,19 +29,22 @@ public class CompanyController(
     [HttpPost("product/create")]
     public async Task<IActionResult> CreateProduct([FromBody] CreateLoanProductRequestDto body)
     {
-        if (!ModelState.IsValid)
+        try
         {
-            return BadRequest(
-                ApiResponse.Fail("Invalid model State")
-            );
+            var result = await _loanProductService.CreateLoanProduct(body);
+            _logger.LogInformation("Loan product created successfully");
+            return Ok(ApiResponse.Ok("Loan product created successfully", result));
         }
-
-        var result = await _loanProductService.CreateLoanProduct(body);
-
-        if (!result.Success)
-            return BadRequest(result);
-
-        return Ok(result);
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while creating loan product.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
     }
 
     [Authorize(Roles = "SuperAdmin, Admin")]
@@ -50,71 +54,85 @@ public class CompanyController(
         try
         {
             var result = await _loanProductService.GetLoanProductsByCompanyId(companyId);
+            _logger.LogInformation("Loan products fetched successfully for company {CompanyId}", companyId);
             return Ok(ApiResponse.Ok("Loan products fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching loan products for company {CompanyId}", companyId);
-            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred: " + ex.Message));
+            _logger.LogError(ex, "Error occurred while fetching loan products.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
-
     }
 
     [Authorize(Roles = "SuperAdmin")]
     [HttpPost("sa/create")]
     public async Task<IActionResult> CreateCompany([FromBody] CreateCompanyRequestDto body)
     {
-        if (!ModelState.IsValid)
+        try
         {
-            return BadRequest(
-               ApiResponse.Fail("Invalid model state")
-           );
+            var result = await _companyService.CreateCompany(body);
+            _logger.LogInformation("Company created successfully");
+            return Ok(ApiResponse.Ok("Company created successfully", result));
         }
-
-        var result = await _companyService.CreateCompany(body);
-
-        if (!result.Success)
-            return BadRequest(result);
-
-        return Ok(result);
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while creating company.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
     }
 
     [Authorize(Roles = "SuperAdmin")]
     [HttpGet("sa/deactivate/{companyId}")]
     public async Task<IActionResult> DeactivateCompany([FromRoute] Guid companyId)
     {
-        if (!ModelState.IsValid)
+        try
         {
-            return BadRequest(
-                ApiResponse.Fail("Invalid model state")
-            );
+            var result = await _companyService.Deactivate(companyId);
+            _logger.LogInformation("Company {CompanyId} deactivated successfully", companyId);
+            return Ok(ApiResponse.Ok("Company deactivated successfully", result));
         }
-
-        var result = await _companyService.Deactivate(companyId);
-
-        if (!result.Success)
-            return BadRequest(result);
-
-        return Ok(result);
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while deactivating company.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
     }
 
     [Authorize(Roles = "SuperAdmin")]
     [HttpGet("sa/activate/{companyId}")]
     public async Task<IActionResult> Activate([FromRoute] Guid companyId)
     {
-        if (!ModelState.IsValid)
+        try
         {
-            return BadRequest(
-                ApiResponse.Fail("Invalid model state")
-            );
+            var result = await _companyService.Activate(companyId);
+            _logger.LogInformation("Company {CompanyId} activated successfully", companyId);
+            return Ok(ApiResponse.Ok("Company activated successfully", result));
         }
-
-        var result = await _companyService.Activate(companyId);
-
-        if (!result.Success)
-            return BadRequest(result);
-
-        return Ok(result);
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while activating company.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
     }
 
     // Admin can update their own company info
@@ -124,11 +142,6 @@ public class CompanyController(
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.Fail("Invalid model state"));
-            }
-
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrEmpty(userId))
             {
@@ -137,30 +150,18 @@ public class CompanyController(
 
             // Get user's company
             var userCompanyResult = await _companyService.GetUserCompany(userId);
-            if (!userCompanyResult.Success)
-            {
-                return BadRequest(userCompanyResult);
-            }
 
-            var companyData = userCompanyResult.Data as CompanyResponseDto;
-            if (companyData == null)
-            {
-                return BadRequest(ApiResponse.Fail("Unable to retrieve company information"));
-            }
-
-            // Update the company
-            var result = await _companyService.UpdateCompany(companyData.Id, body, userId);
-
-            if (!result.Success)
-            {
-                return BadRequest(result);
-            }
-
-            return Ok(result);
+            _logger.LogInformation("Company info updated successfully by user {UserId}", userId);
+            return Ok(userCompanyResult);
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating company info for user {UserId}", User.FindFirstValue(ClaimTypes.NameIdentifier));
+            _logger.LogError(ex, "Error occurred while updating company info.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -172,56 +173,25 @@ public class CompanyController(
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ApiResponse.Fail("Invalid model state"));
-            }
-
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrEmpty(userId))
             {
                 return Unauthorized(ApiResponse.Fail("User not authenticated"));
             }
 
-            // Verify the loan product belongs to the user's company
-            var productResult = await _loanProductService.GetLoanProductById(productId);
-            if (!productResult.Success)
-            {
-                return BadRequest(productResult);
-            }
-
-            var productData = productResult.Data as LoanProductResponseDto;
-            if (productData == null)
-            {
-                return BadRequest(ApiResponse.Fail("Unable to retrieve loan product information"));
-            }
-
-            // Get user's company to verify ownership
-            var userCompanyResult = await _companyService.GetUserCompany(userId);
-            if (!userCompanyResult.Success)
-            {
-                return BadRequest(userCompanyResult);
-            }
-
-            var companyData = userCompanyResult.Data as CompanyResponseDto;
-            if (companyData == null || companyData.Id != productData.CompanyId)
-            {
-                return Forbid(ApiResponse.Fail("You can only update loan products for your own company").Message);
-            }
-
-            // Update the loan product
             var result = await _loanProductService.UpdateLoanProduct(productId, body, userId);
 
-            if (!result.Success)
-            {
-                return BadRequest(result);
-            }
-
-            return Ok(result);
+            _logger.LogInformation("Loan product {ProductId} updated successfully by user {UserId}", productId, userId);
+            return Ok(ApiResponse.Ok("Loan product updated successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating loan product {ProductId} for user {UserId}", productId, User.FindFirstValue(ClaimTypes.NameIdentifier));
+            _logger.LogError(ex, "Error occurred while updating loan product.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -240,17 +210,18 @@ public class CompanyController(
             }
 
             var result = await _supportService.GetCompanyDashboardAsync(companyId);
-            
-            if (!result.Success)
-            {
-                return BadRequest(result);
-            }
 
-            return Ok(result);
+            _logger.LogInformation("Company dashboard fetched successfully for company {CompanyId}", companyId);
+            return Ok(ApiResponse.Ok("Company dashboard fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving company dashboard for user {UserId}", User.FindFirstValue(ClaimTypes.NameIdentifier));
+            _logger.LogError(ex, "Error occurred while fetching company dashboard.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -275,11 +246,17 @@ public class CompanyController(
             }
 
             var result = await _loanProductService.GetCompanyLoanProductsAsync(companyId, filter);
-            return Ok(result);
+            _logger.LogInformation("Company loan products fetched successfully for company {CompanyId}", companyId);
+            return Ok(ApiResponse.Ok("Company loan products fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while fetching company loan products with filters: {@Filter}", filter);
+            _logger.LogError(ex, "Error occurred while fetching company loan products.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -304,11 +281,17 @@ public class CompanyController(
             }
 
             var result = await _loanService.GetCompanyLoansAsync(companyId, filter);
-            return Ok(result);
+            _logger.LogInformation("Company loans fetched successfully for company {CompanyId}", companyId);
+            return Ok(ApiResponse.Ok("Company loans fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while fetching company loans with filters: {@Filter}", filter);
+            _logger.LogError(ex, "Error occurred while fetching company loans.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -334,24 +317,18 @@ public class CompanyController(
 
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             var result = await _loanService.GetLoanByIdAsync(loanId, userId);
-            
-            if (!result.Success)
-            {
-                return BadRequest(result);
-            }
 
-            // Verify the loan belongs to the admin's company
-            var loanData = result.Data as LoanListDto;
-            if (loanData?.CompanyId != companyId)
-            {
-                return Forbid("Access denied: Loan does not belong to your company");
-            }
-
-            return Ok(result);
+            _logger.LogInformation("Loan {LoanId} fetched successfully", loanId);
+            return Ok(ApiResponse.Ok("Loan fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while fetching loan {LoanId}", loanId);
+            _logger.LogError(ex, "Error occurred while fetching loan by ID.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -369,17 +346,18 @@ public class CompanyController(
         try
         {
             var result = await _companyService.GetAllCompaniesAsync(filter);
-            
-            if (!result.Success)
-            {
-                return BadRequest(result);
-            }
 
-            return Ok(result);
+            _logger.LogInformation("All companies fetched successfully with filters");
+            return Ok(ApiResponse.Ok("All companies fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while fetching all companies with filters: {@Filter}", filter);
+            _logger.LogError(ex, "Error occurred while fetching all companies.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -397,17 +375,18 @@ public class CompanyController(
         try
         {
             var result = await _companyService.GetCompanyByIdAsync(companyId);
-            
-            if (!result.Success)
-            {
-                return BadRequest(result);
-            }
 
-            return Ok(result);
+            _logger.LogInformation("Company {CompanyId} fetched successfully", companyId);
+            return Ok(ApiResponse.Ok("Company fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while fetching company {CompanyId}", companyId);
+            _logger.LogError(ex, "Error occurred while fetching company by ID.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -432,7 +411,7 @@ public class CompanyController(
 
             // Get company ID from JWT
             var companyIdClaim = User.FindFirstValue("CompanyId");
-            
+
             if (string.IsNullOrEmpty(companyIdClaim))
             {
                 _logger.LogWarning("CompanyId claim not found in JWT for user {UserId}. Available claims: {@Claims}", userId, allClaims);
@@ -448,17 +427,18 @@ public class CompanyController(
             _logger.LogInformation("Retrieved CompanyId {CompanyId} from JWT for user {UserId}", companyId, userId);
 
             var result = await _companyService.GetCompanyByIdAsync(companyId);
-            
-            if (!result.Success)
-            {
-                return BadRequest(result);
-            }
 
-            return Ok(result);
+            _logger.LogInformation("Admin's company {CompanyId} fetched successfully for user {UserId}", companyId, userId);
+            return Ok(ApiResponse.Ok("Admin's company fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while fetching admin's company for user {UserId}", User.FindFirstValue(ClaimTypes.NameIdentifier));
+            _logger.LogError(ex, "Error occurred while fetching admin's company.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
