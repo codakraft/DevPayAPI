@@ -96,17 +96,12 @@ public class LoanService(
         return loan.Id.ToString();
     }
 
-    public async Task<ApiResponse> ApplyForLoan(LoanApplicationDto dto, ClaimsPrincipal user)
+    public async Task<Loan> ApplyForLoan(LoanApplicationDto dto, ClaimsPrincipal user)
     {
         var userId = _userManager.GetUserId(user);
         if (userId == null)
         {
-            return new ApiResponse
-            {
-                Success = false,
-                Message = "User not found",
-                Data = null
-            };
+            throw new AppException("User not found", 404);
         }
 
         var loan = new Loan
@@ -123,59 +118,20 @@ public class LoanService(
         _db.Loans.Add(loan);
         await _db.SaveChangesAsync();
 
-        return new ApiResponse
-        {
-            Success = true,
-            Message = "Loan application submitted",
-            Data = loan
-        };
+        return loan;
     }
 
-    public async Task<ApiResponse> GetUserLoans(string userId)
-    {
-        if (string.IsNullOrEmpty(userId))
-        {
-            return new ApiResponse
-            {
-                Success = false,
-                Message = "User ID is required",
-                Data = null
-            };
-        }
-
-        var loans = await _db.Loans
-            .Where(l => l.UserId == userId)
-            .ToListAsync();
-
-        return new ApiResponse
-        {
-            Success = true,
-            Message = "User loans fetched successfully",
-            Data = loans
-        };
-    }
-
-    public async Task<ApiResponse> ApproveLoan(Guid loanId)
+    public async Task<Loan> ApproveLoan(Guid loanId)
     {
         var loan = await _db.Loans.FindAsync(loanId);
         if (loan == null)
         {
-            return new ApiResponse
-            {
-                Success = false,
-                Message = "Loan not found",
-                Data = null
-            };
+            throw new AppException("Loan not found", 404);
         }
 
         if (loan.Status == LoanStatus.Approved)
         {
-            return new ApiResponse
-            {
-                Success = false,
-                Message = "Loan already approved",
-                Data = loan
-            };
+            throw new AppException("Loan already approved", 400);
         }
 
         loan.Status = LoanStatus.Approved;
@@ -185,12 +141,7 @@ public class LoanService(
         _db.Loans.Update(loan);
         await _db.SaveChangesAsync();
 
-        return new ApiResponse
-        {
-            Success = true,
-            Message = "Loan approved",
-            Data = loan
-        };
+        return loan;
     }
 
     public async Task<List<Loan>> GetAllLoans()
@@ -200,142 +151,116 @@ public class LoanService(
             .ToListAsync();
     }
 
-    public async Task<ApiResponse> GetAllLoansAsync(LoanFilterDto filter)
+    public async Task<PagedLoanListDto> GetAllLoansAsync(LoanFilterDto filter)
     {
-        try
+        var query = _loanRepository.GetAllLoansQueryable();
+
+        // Apply filters
+        query = ApplyFilters(query, filter);
+
+        // Get total count before pagination
+        var totalCount = await query.CountAsync();
+
+        // Calculate summary statistics
+        var totalAmount = await query.SumAsync(l => l.Amount);
+        var avgAmount = totalCount > 0 ? totalAmount / totalCount : 0;
+        var statusCounts = await query
+            .GroupBy(l => l.Status)
+            .ToDictionaryAsync(g => g.Key.ToString(), g => g.Count());
+
+        // Apply sorting
+        query = ApplySorting(query, filter);
+
+        // Apply pagination
+        var pagedLoans = await query
+            .Skip((filter.Page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
+            .ToListAsync();
+
+        // Map to DTOs
+        var loanDtos = pagedLoans.Select(MapToLoanListDto).ToList();
+
+        var totalPages = (int)Math.Ceiling((double)totalCount / filter.PageSize);
+
+        return new PagedLoanListDto
         {
-            var query = _loanRepository.GetAllLoansQueryable();
-
-            // Apply filters
-            query = ApplyFilters(query, filter);
-
-            // Get total count before pagination
-            var totalCount = await query.CountAsync();
-
-            // Calculate summary statistics
-            var totalAmount = await query.SumAsync(l => l.Amount);
-            var avgAmount = totalCount > 0 ? totalAmount / totalCount : 0;
-            var statusCounts = await query
-                .GroupBy(l => l.Status)
-                .ToDictionaryAsync(g => g.Key.ToString(), g => g.Count());
-
-            // Apply sorting
-            query = ApplySorting(query, filter);
-
-            // Apply pagination
-            var pagedLoans = await query
-                .Skip((filter.Page - 1) * filter.PageSize)
-                .Take(filter.PageSize)
-                .ToListAsync();
-
-            // Map to DTOs
-            var loanDtos = pagedLoans.Select(MapToLoanListDto).ToList();
-
-            var totalPages = (int)Math.Ceiling((double)totalCount / filter.PageSize);
-
-            var result = new PagedLoanListDto
-            {
-                Loans = loanDtos,
-                TotalCount = totalCount,
-                Page = filter.Page,
-                PageSize = filter.PageSize,
-                TotalPages = totalPages,
-                HasNextPage = filter.Page < totalPages,
-                HasPreviousPage = filter.Page > 1,
-                TotalLoanAmount = totalAmount,
-                AverageAmount = avgAmount,
-                StatusCounts = statusCounts
-            };
-
-            return ApiResponse.Ok("Loans retrieved successfully", result);
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse.Fail($"Error retrieving loans: {ex.Message}");
-        }
+            Loans = loanDtos,
+            TotalCount = totalCount,
+            Page = filter.Page,
+            PageSize = filter.PageSize,
+            TotalPages = totalPages,
+            HasNextPage = filter.Page < totalPages,
+            HasPreviousPage = filter.Page > 1,
+            TotalLoanAmount = totalAmount,
+            AverageAmount = avgAmount,
+            StatusCounts = statusCounts
+        };
     }
 
-    public async Task<ApiResponse> GetCompanyLoansAsync(Guid companyId, LoanFilterDto filter)
+    public async Task<PagedLoanListDto> GetCompanyLoansAsync(Guid companyId, LoanFilterDto filter)
     {
-        try
+        var query = _loanRepository.GetCompanyLoansQueryable(companyId);
+
+        // Apply filters (excluding company filter since it's already filtered)
+        query = ApplyFilters(query, filter, excludeCompanyFilter: true);
+
+        // Get total count before pagination
+        var totalCount = await query.CountAsync();
+
+        // Calculate summary statistics
+        var totalAmount = await query.SumAsync(l => l.Amount);
+        var avgAmount = totalCount > 0 ? totalAmount / totalCount : 0;
+        var statusCounts = await query
+            .GroupBy(l => l.Status)
+            .ToDictionaryAsync(g => g.Key.ToString(), g => g.Count());
+
+        // Apply sorting
+        query = ApplySorting(query, filter);
+
+        // Apply pagination
+        var pagedLoans = await query
+            .Skip((filter.Page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
+            .ToListAsync();
+
+        // Map to DTOs
+        var loanDtos = pagedLoans.Select(MapToLoanListDto).ToList();
+
+        var totalPages = (int)Math.Ceiling((double)totalCount / filter.PageSize);
+
+        return new PagedLoanListDto
         {
-            var query = _loanRepository.GetCompanyLoansQueryable(companyId);
-
-            // Apply filters (excluding company filter since it's already filtered)
-            query = ApplyFilters(query, filter, excludeCompanyFilter: true);
-
-            // Get total count before pagination
-            var totalCount = await query.CountAsync();
-
-            // Calculate summary statistics
-            var totalAmount = await query.SumAsync(l => l.Amount);
-            var avgAmount = totalCount > 0 ? totalAmount / totalCount : 0;
-            var statusCounts = await query
-                .GroupBy(l => l.Status)
-                .ToDictionaryAsync(g => g.Key.ToString(), g => g.Count());
-
-            // Apply sorting
-            query = ApplySorting(query, filter);
-
-            // Apply pagination
-            var pagedLoans = await query
-                .Skip((filter.Page - 1) * filter.PageSize)
-                .Take(filter.PageSize)
-                .ToListAsync();
-
-            // Map to DTOs
-            var loanDtos = pagedLoans.Select(MapToLoanListDto).ToList();
-
-            var totalPages = (int)Math.Ceiling((double)totalCount / filter.PageSize);
-
-            var result = new PagedLoanListDto
-            {
-                Loans = loanDtos,
-                TotalCount = totalCount,
-                Page = filter.Page,
-                PageSize = filter.PageSize,
-                TotalPages = totalPages,
-                HasNextPage = filter.Page < totalPages,
-                HasPreviousPage = filter.Page > 1,
-                TotalLoanAmount = totalAmount,
-                AverageAmount = avgAmount,
-                StatusCounts = statusCounts
-            };
-
-            return ApiResponse.Ok("Company loans retrieved successfully", result);
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse.Fail($"Error retrieving company loans: {ex.Message}");
-        }
+            Loans = loanDtos,
+            TotalCount = totalCount,
+            Page = filter.Page,
+            PageSize = filter.PageSize,
+            TotalPages = totalPages,
+            HasNextPage = filter.Page < totalPages,
+            HasPreviousPage = filter.Page > 1,
+            TotalLoanAmount = totalAmount,
+            AverageAmount = avgAmount,
+            StatusCounts = statusCounts
+        };
     }
 
-    public async Task<ApiResponse> GetLoanByIdAsync(Guid loanId, string? requestingUserId = null)
+    public async Task<LoanListDto> GetLoanByIdAsync(Guid loanId, string? requestingUserId = null)
     {
-        try
+        var loan = await _db.Loans
+            .Include(l => l.User)
+            .Include(l => l.Company)
+            .Include(l => l.Product)
+            .Include(l => l.Account)
+            .FirstOrDefaultAsync(l => l.Id == loanId);
+
+        if (loan == null)
         {
-            var loan = await _db.Loans
-                .Include(l => l.User)
-                .Include(l => l.Company)
-                .Include(l => l.Product)
-                .Include(l => l.Account)
-                .FirstOrDefaultAsync(l => l.Id == loanId);
-
-            if (loan == null)
-            {
-                return ApiResponse.Fail("Loan not found");
-            }
-
-            // Optional: Add access control if requestingUserId is provided
-            // This can be enhanced based on business rules
-
-            var loanDto = MapToLoanListDto(loan);
-            return ApiResponse.Ok("Loan retrieved successfully", loanDto);
+            throw new AppException("Loan not found", 404);
         }
-        catch (Exception ex)
-        {
-            return ApiResponse.Fail($"Error retrieving loan: {ex.Message}");
-        }
+
+        // Optional: Add access control if requestingUserId is provided
+        // This can be enhanced based on business rules
+
+        return MapToLoanListDto(loan);
     }
 
     private IQueryable<Loan> ApplyFilters(IQueryable<Loan> query, LoanFilterDto filter, bool excludeCompanyFilter = false)

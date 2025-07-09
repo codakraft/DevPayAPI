@@ -4,6 +4,7 @@ using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Dtos.Response;
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Application.Repositories.Interfaces;
+using LendingSolution.Application.Exceptions;
 
 namespace LendingSolution.Application.Services.Implementations;
 
@@ -14,196 +15,158 @@ public class ApprovalService(
     private readonly IApprovalRepository _approvalRepository = approvalRepository;
     private readonly UserManager<ApplicationUser> _userManager = userManager;
 
-    public async Task<ApiResponse> GetAllApprovalsAsync()
+    public async Task<List<ApprovalDto>> GetAllApprovalsAsync()
     {
-        try
+        var approvals = await _approvalRepository.GetAllApprovalsAsync();
+        
+        var approvalDtos = approvals.Select(a => MapToDto(a)).ToList();
+
+        return approvalDtos;
+    }
+
+    public async Task<List<ApprovalDto>> GetPendingApprovalsAsync()
+    {
+        var pendingApprovals = await _approvalRepository.GetPendingApprovalsAsync();
+        
+        var approvalDtos = pendingApprovals.Select(a => MapToDto(a)).ToList();
+
+        return approvalDtos;
+    }
+
+    public async Task<List<ApprovalDto>> GetApprovalsByStatusAsync(string status)
+    {
+        var approvals = await _approvalRepository.GetApprovalsByStatusAsync(status);
+        
+        var approvalDtos = approvals.Select(a => MapToDto(a)).ToList();
+
+        return approvalDtos;
+    }
+
+    public async Task<List<ApprovalDto>> GetApprovalsByTypeAsync(string approvalType)
+    {
+        var approvals = await _approvalRepository.GetApprovalsByTypeAsync(approvalType);
+        
+        var approvalDtos = approvals.Select(a => MapToDto(a)).ToList();
+
+        return approvalDtos;
+    }
+
+    public async Task<ApprovalDto> GetApprovalByIdAsync(string id)
+    {
+        var approval = await _approvalRepository.GetApprovalByIdAsync(id) ?? throw new AppException("Approval not found", 404);
+        var approvalDto = MapToDto(approval);
+
+        return approvalDto;
+    }
+
+    public async Task<ApprovalDto> CreateApprovalAsync(ApprovalRequestDto approvalDto, string requestedBy, string? companyId = null)
+    {
+        Guid? companyGuid = null;
+        if (companyId != null && Guid.TryParse(companyId, out var parsedGuid))
         {
-            var approvals = await _approvalRepository.GetAllApprovalsAsync();
+            companyGuid = parsedGuid;
+        }
+
+        var approval = new Approval
+        {
+            ApprovalType = approvalDto.ApprovalType,
+            ReferenceId = approvalDto.ReferenceId,
+            RequestedBy = requestedBy,
+            Description = approvalDto.Description,
+            CompanyId = companyGuid
+        };
+
+        var result = await _approvalRepository.CreateApprovalAsync(approval);
+        
+        // Check if the repository returns an ApiResponse (legacy)
+        if (result is ApiResponse apiResponse)
+        {
+            if (!apiResponse.Success)
+            {
+                throw new AppException(apiResponse.Message);
+            }
             
-            var approvalDtos = approvals.Select(a => MapToDto(a)).ToList();
-
-            return ApiResponse.Ok("Approvals retrieved successfully", approvalDtos);
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse.Fail($"Failed to retrieve approvals: {ex.Message}");
-        }
-    }
-
-    public async Task<ApiResponse> GetPendingApprovalsAsync()
-    {
-        try
-        {
-            var pendingApprovals = await _approvalRepository.GetPendingApprovalsAsync();
+            // Get the created approval
+            var createdApproval = await _approvalRepository.GetApprovalByIdAsync(approval.Id);
+            if (createdApproval == null)
+            {
+                throw new AppException("Failed to retrieve created approval");
+            }
             
-            var approvalDtos = pendingApprovals.Select(a => MapToDto(a)).ToList();
-
-            return ApiResponse.Ok("Pending approvals retrieved successfully", approvalDtos);
+            return MapToDto(createdApproval);
         }
-        catch (Exception ex)
-        {
-            return ApiResponse.Fail($"Failed to retrieve pending approvals: {ex.Message}");
-        }
+        
+        // If repository returns the approval directly
+        return MapToDto(approval);
     }
 
-    public async Task<ApiResponse> GetApprovalsByStatusAsync(string status)
+    public async Task<ApprovalDto> ApproveRequestAsync(string approvalId, string processedBy, string? reason = null)
     {
-        try
+        var approval = await _approvalRepository.GetApprovalByIdAsync(approvalId) ?? throw new AppException("Approval not found", 404);
+        if (approval.Status != "Pending")
         {
-            var approvals = await _approvalRepository.GetApprovalsByStatusAsync(status);
-            
-            var approvalDtos = approvals.Select(a => MapToDto(a)).ToList();
+            throw new AppException("Only pending approvals can be processed", 400);
+        }
 
-            return ApiResponse.Ok($"Approvals with status '{status}' retrieved successfully", approvalDtos);
-        }
-        catch (Exception ex)
+        approval.Status = "Approved";
+        approval.ProcessedBy = processedBy;
+        approval.ProcessedAt = DateTime.UtcNow;
+        approval.Reason = reason;
+
+        var result = await _approvalRepository.UpdateApprovalAsync(approval);
+        
+        // Check if the repository returns an ApiResponse (legacy)
+        if (result is ApiResponse apiResponse)
         {
-            return ApiResponse.Fail($"Failed to retrieve approvals: {ex.Message}");
+            if (!apiResponse.Success)
+            {
+                throw new AppException(apiResponse.Message);
+            }
         }
+        
+        return MapToDto(approval);
     }
 
-    public async Task<ApiResponse> GetApprovalsByTypeAsync(string approvalType)
+    public async Task<ApprovalDto> RejectRequestAsync(string approvalId, string processedBy, string? reason = null)
     {
-        try
+        var approval = await _approvalRepository.GetApprovalByIdAsync(approvalId) ?? throw new AppException("Approval not found", 404);
+        if (approval.Status != "Pending")
         {
-            var approvals = await _approvalRepository.GetApprovalsByTypeAsync(approvalType);
-            
-            var approvalDtos = approvals.Select(a => MapToDto(a)).ToList();
+            throw new AppException("Only pending approvals can be processed", 400);
+        }
 
-            return ApiResponse.Ok($"Approvals of type '{approvalType}' retrieved successfully", approvalDtos);
-        }
-        catch (Exception ex)
+        approval.Status = "Rejected";
+        approval.ProcessedBy = processedBy;
+        approval.ProcessedAt = DateTime.UtcNow;
+        approval.Reason = reason;
+
+        var result = await _approvalRepository.UpdateApprovalAsync(approval);
+        
+        // Check if the repository returns an ApiResponse (legacy)
+        if (result is ApiResponse apiResponse)
         {
-            return ApiResponse.Fail($"Failed to retrieve approvals: {ex.Message}");
+            if (!apiResponse.Success)
+            {
+                throw new AppException(apiResponse.Message);
+            }
         }
+        
+        return MapToDto(approval);
     }
 
-    public async Task<ApiResponse> GetApprovalByIdAsync(string id)
+    public async Task<ApprovalDto> ProcessApprovalAsync(ProcessApprovalDto processDto, string processedBy)
     {
-        try
+        if (processDto.Action.ToLower() == "approve")
         {
-            var approval = await _approvalRepository.GetApprovalByIdAsync(id);
-            
-            if (approval == null)
-            {
-                return ApiResponse.Fail("Approval not found");
-            }
-
-            var approvalDto = MapToDto(approval);
-
-            return ApiResponse.Ok("Approval retrieved successfully", approvalDto);
+            return await ApproveRequestAsync(processDto.ApprovalId, processedBy, processDto.Reason);
         }
-        catch (Exception ex)
+        else if (processDto.Action.ToLower() == "reject")
         {
-            return ApiResponse.Fail($"Failed to retrieve approval: {ex.Message}");
+            return await RejectRequestAsync(processDto.ApprovalId, processedBy, processDto.Reason);
         }
-    }
-
-    public async Task<ApiResponse> CreateApprovalAsync(ApprovalRequestDto approvalDto, string requestedBy, string? companyId = null)
-    {
-        try
+        else
         {
-            Guid? companyGuid = null;
-            if (companyId != null && Guid.TryParse(companyId, out var parsedGuid))
-            {
-                companyGuid = parsedGuid;
-            }
-
-            var approval = new Approval
-            {
-                ApprovalType = approvalDto.ApprovalType,
-                ReferenceId = approvalDto.ReferenceId,
-                RequestedBy = requestedBy,
-                Description = approvalDto.Description,
-                CompanyId = companyGuid
-            };
-
-            return await _approvalRepository.CreateApprovalAsync(approval);
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse.Fail($"Failed to create approval: {ex.Message}");
-        }
-    }
-
-    public async Task<ApiResponse> ApproveRequestAsync(string approvalId, string processedBy, string? reason = null)
-    {
-        try
-        {
-            var approval = await _approvalRepository.GetApprovalByIdAsync(approvalId);
-            
-            if (approval == null)
-            {
-                return ApiResponse.Fail("Approval not found");
-            }
-
-            if (approval.Status != "Pending")
-            {
-                return ApiResponse.Fail("Only pending approvals can be processed");
-            }
-
-            approval.Status = "Approved";
-            approval.ProcessedBy = processedBy;
-            approval.ProcessedAt = DateTime.UtcNow;
-            approval.Reason = reason;
-
-            return await _approvalRepository.UpdateApprovalAsync(approval);
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse.Fail($"Failed to approve request: {ex.Message}");
-        }
-    }
-
-    public async Task<ApiResponse> RejectRequestAsync(string approvalId, string processedBy, string? reason = null)
-    {
-        try
-        {
-            var approval = await _approvalRepository.GetApprovalByIdAsync(approvalId);
-            
-            if (approval == null)
-            {
-                return ApiResponse.Fail("Approval not found");
-            }
-
-            if (approval.Status != "Pending")
-            {
-                return ApiResponse.Fail("Only pending approvals can be processed");
-            }
-
-            approval.Status = "Rejected";
-            approval.ProcessedBy = processedBy;
-            approval.ProcessedAt = DateTime.UtcNow;
-            approval.Reason = reason;
-
-            return await _approvalRepository.UpdateApprovalAsync(approval);
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse.Fail($"Failed to reject request: {ex.Message}");
-        }
-    }
-
-    public async Task<ApiResponse> ProcessApprovalAsync(ProcessApprovalDto processDto, string processedBy)
-    {
-        try
-        {
-            if (processDto.Action.ToLower() == "approve")
-            {
-                return await ApproveRequestAsync(processDto.ApprovalId, processedBy, processDto.Reason);
-            }
-            else if (processDto.Action.ToLower() == "reject")
-            {
-                return await RejectRequestAsync(processDto.ApprovalId, processedBy, processDto.Reason);
-            }
-            else
-            {
-                return ApiResponse.Fail("Invalid action. Use 'approve' or 'reject'");
-            }
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse.Fail($"Failed to process approval: {ex.Message}");
+            throw new AppException("Invalid action. Use 'approve' or 'reject'", 400);
         }
     }
 

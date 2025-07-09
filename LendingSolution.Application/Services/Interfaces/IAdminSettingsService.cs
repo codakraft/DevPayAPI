@@ -5,10 +5,10 @@ namespace LendingSolution.Application.Services.Interfaces;
 
 public interface IAdminSettingsService
 {
-    Task<ApiResponse> GetAllSettingsAsync();
-    Task<ApiResponse> GetSettingByKeyAsync(string settingKey);
-    Task<ApiResponse> GetSettingByIdAsync(string id);
-    Task<ApiResponse> CreateSettingAsync(UpdateAdminSettingsDto settingDto, string userId);
-    Task<ApiResponse> UpdateSettingAsync(string id, UpdateAdminSettingsDto settingDto, string userId);
-    Task<ApiResponse> DeleteSettingAsync(string id);
+    Task<List<AdminSettingsDto>> GetAllSettingsAsync();
+    Task<AdminSettingsDto> GetSettingByKeyAsync(string settingKey);
+    Task<AdminSettingsDto> GetSettingByIdAsync(string id);
+    Task<AdminSettingsDto> CreateSettingAsync(UpdateAdminSettingsDto settingDto, string userId);
+    Task<AdminSettingsDto> UpdateSettingAsync(string id, UpdateAdminSettingsDto settingDto, string userId);
+    Task DeleteSettingAsync(string id);
 }

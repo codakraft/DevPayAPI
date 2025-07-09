@@ -5,13 +5,13 @@ namespace LendingSolution.Application.Services.Interfaces;
 
 public interface IApprovalService
 {
-    Task<ApiResponse> GetAllApprovalsAsync();
-    Task<ApiResponse> GetPendingApprovalsAsync();
-    Task<ApiResponse> GetApprovalsByStatusAsync(string status);
-    Task<ApiResponse> GetApprovalsByTypeAsync(string approvalType);
-    Task<ApiResponse> GetApprovalByIdAsync(string id);
-    Task<ApiResponse> CreateApprovalAsync(ApprovalRequestDto approvalDto, string requestedBy, string? companyId = null);
-    Task<ApiResponse> ApproveRequestAsync(string approvalId, string processedBy, string? reason = null);
-    Task<ApiResponse> RejectRequestAsync(string approvalId, string processedBy, string? reason = null);
-    Task<ApiResponse> ProcessApprovalAsync(ProcessApprovalDto processDto, string processedBy);
+    Task<List<ApprovalDto>> GetAllApprovalsAsync();
+    Task<List<ApprovalDto>> GetPendingApprovalsAsync();
+    Task<List<ApprovalDto>> GetApprovalsByStatusAsync(string status);
+    Task<List<ApprovalDto>> GetApprovalsByTypeAsync(string approvalType);
+    Task<ApprovalDto> GetApprovalByIdAsync(string id);
+    Task<ApprovalDto> CreateApprovalAsync(ApprovalRequestDto approvalDto, string requestedBy, string? companyId = null);
+    Task<ApprovalDto> ApproveRequestAsync(string approvalId, string processedBy, string? reason = null);
+    Task<ApprovalDto> RejectRequestAsync(string approvalId, string processedBy, string? reason = null);
+    Task<ApprovalDto> ProcessApprovalAsync(ProcessApprovalDto processDto, string processedBy);
 }

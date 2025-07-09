@@ -97,9 +97,9 @@ public class CompanyController(
     {
         try
         {
-            var result = await _companyService.Deactivate(companyId);
+            await _companyService.Deactivate(companyId);
             _logger.LogInformation("Company {CompanyId} deactivated successfully", companyId);
-            return Ok(ApiResponse.Ok("Company deactivated successfully", result));
+            return Ok(ApiResponse.Ok("Company deactivated successfully", new { }));
         }
         catch (AppException ex)
         {
@@ -119,9 +119,9 @@ public class CompanyController(
     {
         try
         {
-            var result = await _companyService.Activate(companyId);
+            await _companyService.Activate(companyId);
             _logger.LogInformation("Company {CompanyId} activated successfully", companyId);
-            return Ok(ApiResponse.Ok("Company activated successfully", result));
+            return Ok(ApiResponse.Ok("Company activated successfully", new { }));
         }
         catch (AppException ex)
         {

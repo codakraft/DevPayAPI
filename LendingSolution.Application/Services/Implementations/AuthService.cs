@@ -228,13 +228,7 @@ public class AuthService(
 
     public async Task<object> AssignRole(RoleAssignDto body)
     {
-        var user = await _userManager.FindByIdAsync(body.UserId);
-
-        if (user is null)
-        {
-            throw new AppException("User not found", 404);
-        }
-
+        var user = await _userManager.FindByIdAsync(body.UserId) ?? throw new AppException("User not found", 404);
         var role = await _roleManager.FindByIdAsync(body.RoleId);
 
         if (role is null)

@@ -115,9 +115,9 @@ public class SupportController : Controller
         try
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
-            var result = await _supportService.UpdateTicketAsync(ticketId, request, userId);
+            await _supportService.UpdateTicketAsync(ticketId, request, userId);
             _logger.LogInformation("Successfully updated support ticket {TicketId}", ticketId);
-            return Ok(ApiResponse.Ok("Support ticket updated successfully", result));
+            return Ok(ApiResponse.Ok("Support ticket updated successfully"));
         }
         catch (AppException ex)
         {
@@ -307,9 +307,9 @@ public class SupportController : Controller
         try
         {
             var performedBy = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
-            var result = await _supportService.PerformUserActionAsync(userId, request, performedBy);
+            await _supportService.PerformUserActionAsync(userId, request, performedBy);
             _logger.LogInformation("Successfully performed action on user {UserId}", userId);
-            return Ok(ApiResponse.Ok("User action performed successfully", result));
+            return Ok(ApiResponse.Ok("User action performed successfully"));
         }
         catch (AppException ex)
         {

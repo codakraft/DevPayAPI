@@ -1,36 +1,35 @@
 using LendingSolution.Core.Dtos;
-using LendingSolution.Core.Dtos.Response;
 
 namespace LendingSolution.Application.Services.Interfaces;
 
 public interface ISupportService
 {
     // Ticket Management
-    Task<ApiResponse> CreateTicketAsync(CreateSupportTicketDto dto, string userId);
-    Task<ApiResponse> GetAllTicketsAsync();
-    Task<ApiResponse> GetTicketByIdAsync(string ticketId);
-    Task<ApiResponse> UpdateTicketAsync(string ticketId, UpdateSupportTicketDto dto, string userId);
-    Task<ApiResponse> AddCommentToTicketAsync(string ticketId, AddSupportCommentDto dto, string userId);
-    Task<ApiResponse> GetTicketsByUserIdAsync(string userId);
+    Task<SupportTicketDto> CreateTicketAsync(CreateSupportTicketDto dto, string userId);
+    Task<List<SupportTicketDto>> GetAllTicketsAsync();
+    Task<SupportTicketDto> GetTicketByIdAsync(string ticketId);
+    Task UpdateTicketAsync(string ticketId, UpdateSupportTicketDto dto, string userId);
+    Task<SupportCommentDto> AddCommentToTicketAsync(string ticketId, AddSupportCommentDto dto, string userId);
+    Task<List<SupportTicketDto>> GetTicketsByUserIdAsync(string userId);
     
     // User Account Support
-    Task<ApiResponse> GetUserAccountDetailsAsync(string userId);
-    Task<ApiResponse> SearchUsersAsync(string searchTerm);
-    Task<ApiResponse> PerformUserActionAsync(string userId, UserActionDto dto, string performedBy);
-    Task<ApiResponse> GetUserLoansAsync(string userId);
+    Task<UserAccountSupportDto> GetUserAccountDetailsAsync(string userId);
+    Task<object> SearchUsersAsync(string searchTerm);
+    Task PerformUserActionAsync(string userId, UserActionDto dto, string performedBy);
+    Task<List<LoanSupportDto>> GetUserLoansAsync(string userId);
     
     // Loan Support
-    Task<ApiResponse> GetLoanDetailsAsync(string loanId);
-    Task<ApiResponse> SearchLoansAsync(string searchTerm);
-    Task<ApiResponse> GetLoansByStatusAsync(string status);
-    Task<ApiResponse> GetOverdueLoansAsync();
+    Task<LoanSupportDto> GetLoanDetailsAsync(string loanId);
+    Task<object> SearchLoansAsync(string searchTerm);
+    Task<object> GetLoansByStatusAsync(string status);
+    Task<object> GetOverdueLoansAsync();
     
     // Support Dashboard
-    Task<ApiResponse> GetSupportDashboardAsync();
-    Task<ApiResponse> GetTicketsByStatusAsync(string status);
-    Task<ApiResponse> GetTicketsByCategoryAsync(string category);
-    Task<ApiResponse> GetTicketsByPriorityAsync(string priority);
+    Task<SupportDashboardDto> GetSupportDashboardAsync();
+    Task<List<SupportTicketDto>> GetTicketsByStatusAsync(string status);
+    Task<List<SupportTicketDto>> GetTicketsByCategoryAsync(string category);
+    Task<List<SupportTicketDto>> GetTicketsByPriorityAsync(string priority);
     
     // Company Admin Dashboard
-    Task<ApiResponse> GetCompanyDashboardAsync(string companyId);
+    Task<CompanyDashboardDto> GetCompanyDashboardAsync(string companyId);
 }
