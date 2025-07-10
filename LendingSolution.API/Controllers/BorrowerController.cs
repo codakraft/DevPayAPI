@@ -153,7 +153,7 @@ public class BorrowerController(
         {
             var result = await _remitaService.ValidateMandate(loanId, body);
             _logger.LogInformation("Mandate validated successfully for loan {LoanId}", loanId);
-            return Ok(ApiResponse.Ok("Mandate validated successfully", result));
+            return Ok(ApiResponse.Ok("Mandate validated successfully", result!));
         }
         catch (AppException ex)
         {

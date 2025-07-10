@@ -10,7 +10,7 @@ namespace LendingSolution.API.Controllers;
 
 [ApiController]
 [Route("api/support")]
-[Authorize(Roles = "SupportAgent")]
+[Authorize(Roles = "SupportAgent,Admin,SuperAdmin")]
 public class SupportController : Controller
 {
     private readonly ISupportService _supportService;
@@ -404,6 +404,28 @@ public class SupportController : Controller
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error occurred while fetching overdue loans.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    // Company Dashboard for Support
+    [HttpGet("companies/{companyId}/dashboard")]
+    public async Task<IActionResult> GetCompanyDashboard(string companyId)
+    {
+        try
+        {
+            var result = await _supportService.GetCompanyDashboardAsync(companyId);
+            _logger.LogInformation("Successfully fetched company dashboard for company {CompanyId}", companyId);
+            return Ok(ApiResponse.Ok("Company dashboard fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while fetching company dashboard.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }

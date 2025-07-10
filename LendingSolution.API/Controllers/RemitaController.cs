@@ -31,7 +31,7 @@ public class RemitaController(
         {
             var result = await _remitaService.GetSalaryHistoryByBvnAsync(request);
             _logger.LogInformation("Salary history retrieved successfully for BVN: {BVN}", request.Bvn);
-            return Ok(ApiResponse.Ok("Salary history retrieved successfully", result));
+            return Ok(ApiResponse.Ok("Salary history retrieved successfully", result!));
         }
         catch (AppException ex)
         {
@@ -58,7 +58,7 @@ public class RemitaController(
         {
             var result = await _remitaService.VerifyAccountAsync(request);
             _logger.LogInformation("Account verified successfully: {AccountNumber}", request.AccountNumber);
-            return Ok(ApiResponse.Ok("Account verified successfully", result));
+            return Ok(ApiResponse.Ok("Account verified successfully", result!));
         }
         catch (AppException ex)
         {
@@ -87,7 +87,7 @@ public class RemitaController(
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             var result = await _remitaService.CreateLoanMandateAsync(loanId, request, userId);
             _logger.LogInformation("Loan mandate created successfully for loan: {LoanId}", loanId);
-            return Ok(ApiResponse.Ok("Loan mandate created successfully", result));
+            return Ok(ApiResponse.Ok("Loan mandate created successfully", result!));
         }
         catch (AppException ex)
         {
@@ -115,7 +115,7 @@ public class RemitaController(
         {
             var result = await _remitaService.ValidateMandate(loanId, request);
             _logger.LogInformation("Mandate validated successfully for loan: {LoanId}", loanId);
-            return Ok(ApiResponse.Ok("Mandate validated successfully", result));
+            return Ok(ApiResponse.Ok("Mandate validated successfully", result!));
         }
         catch (AppException ex)
         {
@@ -144,7 +144,7 @@ public class RemitaController(
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             var result = await _remitaService.ProcessLoanDisbursementAsync(loanId, request, userId);
             _logger.LogInformation("Loan disbursed successfully: {LoanId}", loanId);
-            return Ok(ApiResponse.Ok("Loan disbursed successfully", result));
+            return Ok(ApiResponse.Ok("Loan disbursed successfully", result!));
         }
         catch (AppException ex)
         {
@@ -173,7 +173,7 @@ public class RemitaController(
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             var result = await _remitaService.CollectRepaymentAsync(loanId, request, userId);
             _logger.LogInformation("Repayment collected successfully for loan: {LoanId}", loanId);
-            return Ok(ApiResponse.Ok("Repayment collected successfully", result));
+            return Ok(ApiResponse.Ok("Repayment collected successfully", result!));
         }
         catch (AppException ex)
         {
@@ -200,7 +200,7 @@ public class RemitaController(
         {
             var result = await _remitaService.GetTransactionStatusAsync(transactionRef);
             _logger.LogInformation("Transaction status retrieved successfully: {TransactionRef}", transactionRef);
-            return Ok(ApiResponse.Ok("Transaction status retrieved successfully", result));
+            return Ok(ApiResponse.Ok("Transaction status retrieved successfully", result!));
         }
         catch (AppException ex)
         {
@@ -226,7 +226,7 @@ public class RemitaController(
         {
             var result = await _remitaService.GetBanksAsync();
             _logger.LogInformation("Banks retrieved successfully");
-            return Ok(ApiResponse.Ok("Banks retrieved successfully", result));
+            return Ok(ApiResponse.Ok("Banks retrieved successfully", result!));
         }
         catch (AppException ex)
         {
