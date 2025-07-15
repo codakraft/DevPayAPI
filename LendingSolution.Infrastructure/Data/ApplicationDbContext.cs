@@ -19,6 +19,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<LoanProduct> LoanProducts { get; set; }
     public DbSet<Account> Accounts { get; set; }
     public DbSet<AdminSettings> AdminSettings { get; set; }
+    public DbSet<SystemSettings> SystemSettings { get; set; }
     public DbSet<Approval> Approvals { get; set; }
     public DbSet<RefreshToken> RefreshTokens { get; set; }
     public DbSet<SupportTicket> SupportTickets { get; set; }
@@ -58,6 +59,10 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         modelBuilder.Entity<AdminSettings>()
             .HasIndex(s => s.SettingKey)
             .IsUnique();
+
+        // Configure SystemSettings - only one active record should exist
+        modelBuilder.Entity<SystemSettings>()
+            .HasIndex(s => s.IsActive);
 
         // Configure Approval relationships
         modelBuilder.Entity<Approval>()

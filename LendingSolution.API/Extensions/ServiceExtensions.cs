@@ -68,7 +68,12 @@ public static class ServiceExtensions
     //     services.AddDbContext<ApplicationDbContext>(opt =>
     //             opt.UseNpgsql(configuration.GetConnectionString("DefaultConnection")));
 
-    public static void ConfigureSqlContext(this IServiceCollection services, IConfiguration configuration) =>
+    public static void ConfigureSqlContext(this IServiceCollection services, IConfiguration configuration)
+    {
+        // Configure retry policy settings
+        var retrySettings = configuration.GetSection("DatabaseRetryPolicy").Get<DatabaseRetryPolicySettings>() 
+                          ?? new DatabaseRetryPolicySettings();
+        
         services.AddDbContext<ApplicationDbContext>(opt =>
             opt.UseSqlServer(
                 configuration.GetConnectionString("DefaultConnection"),
@@ -76,12 +81,35 @@ public static class ServiceExtensions
                 {
                     sqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "dbo");
                     sqlOptions.MigrationsAssembly("LendingSolution.Infrastructure");
-                    sqlOptions.MigrationsAssembly("LendingSolution.Infrastructure");
+                    
+                    // Configure retry policy if enabled
+                    if (retrySettings.EnableRetryOnFailure)
+                    {
+                        sqlOptions.EnableRetryOnFailure(
+                            maxRetryCount: retrySettings.MaxRetryCount,
+                            maxRetryDelay: TimeSpan.FromSeconds(retrySettings.MaxRetryDelaySeconds),
+                            errorNumbersToAdd: DatabaseRetryPolicySettings.AzureSqlTransientErrors);
+                    }
+                    
+                    // Configure command timeout
+                    sqlOptions.CommandTimeout(retrySettings.CommandTimeoutSeconds);
                 }
             )
         );
+    }
 
 
+
+    public static void ConfigureHealthChecks(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddHealthChecks()
+            .AddCheck<DatabaseHealthCheckService>("database_connectivity");
+    }
+
+    public static void ConfigureDatabaseResilience(this IServiceCollection services)
+    {
+        services.AddScoped<IDatabaseResilienceService, DatabaseResilienceService>();
+    }
 
     // Identity and Authentication
     public static void AddJwtConfiguration(this IServiceCollection services, IConfiguration configuration) =>
@@ -200,9 +228,11 @@ public static class ServiceExtensions
         services.AddScoped<IRemitaService, RemitaService>();
         services.AddScoped<ISupportToolsService, SupportToolsService>();
         services.AddScoped<IAdminSettingsService, AdminSettingsService>();
+        services.AddScoped<ISystemSettingsService, SystemSettingsService>();
         services.AddScoped<IApprovalService, ApprovalService>();
         services.AddScoped<IFinanceService, FinanceService>();
         services.AddScoped<ISupportService, SupportService>();
+        services.AddScoped<IDatabaseResilienceService, DatabaseResilienceService>();
     }
 
     public static void RegisterRepositories(this IServiceCollection services)
@@ -212,6 +242,7 @@ public static class ServiceExtensions
         services.AddScoped<ILoanProductRepository, LoanProductRepository>();
         services.AddScoped<ILoanRepository, LoanRespository>();
         services.AddScoped<IAdminSettingsRepository, AdminSettingsRepository>();
+        services.AddScoped<ISystemSettingsRepository, SystemSettingsRepository>();
         services.AddScoped<IApprovalRepository, ApprovalRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IDisbursementRepository, DisbursementRepository>();

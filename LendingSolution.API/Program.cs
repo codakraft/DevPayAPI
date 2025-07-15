@@ -14,6 +14,8 @@ builder.Services.RegisterRepositories();
 builder.Services.ConfigureServiceManager();
 builder.Services.ConfigureHttpClient(builder.Configuration);
 builder.Services.ConfigureCors();
+builder.Services.ConfigureHealthChecks(builder.Configuration);
+builder.Services.ConfigureDatabaseResilience();
 builder.Services.AddJwtConfiguration(builder.Configuration);
 builder.Services.ConfigureJwt(builder.Configuration);
 builder.Services.ConfigureEndpointExplorer();
@@ -55,5 +57,14 @@ app.UseSwaggerUI();
 
 
 app.MapControllers();
+app.MapHealthChecks("/health");
+app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready")
+});
+app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("live")
+});
 // app.UseHttpsRedirection();
 app.Run();
