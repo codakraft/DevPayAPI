@@ -134,13 +134,12 @@ public class SystemSettingsController : ControllerBase
     }
 
     /// <summary>
-    /// Update system settings (SuperAdmin only)
+    /// Update system settings (SuperAdmin only) - Partial update of active settings
     /// </summary>
-    /// <param name="id">Settings ID</param>
-    /// <param name="settingsDto">Updated system settings data</param>
+    /// <param name="settingsDto">System settings data to update (only provided fields will be updated)</param>
     /// <returns>Updated system settings</returns>
-    [HttpPut("settings/{id}")]
-    public async Task<IActionResult> UpdateSystemSettings(Guid id, [FromBody] UpdateSystemSettingsDto settingsDto)
+    [HttpPatch("settings")]
+    public async Task<IActionResult> PatchSystemSettings([FromBody] PatchSystemSettingsDto settingsDto)
     {
         try
         {
@@ -150,9 +149,9 @@ public class SystemSettingsController : ControllerBase
                 return Unauthorized(ApiResponse.Fail("User not authenticated"));
             }
 
-            var result = await _systemSettingsService.UpdateSettingsAsync(id, settingsDto, userId);
+            var result = await _systemSettingsService.PatchActiveSettingsAsync(settingsDto, userId);
             
-            _logger.LogInformation("System settings {SettingsId} updated successfully by user {UserId}", id, userId);
+            _logger.LogInformation("System settings updated successfully by user {UserId}", userId);
             return Ok(ApiResponse.Ok("System settings updated successfully", result));
         }
         catch (AppException ex)
@@ -162,7 +161,7 @@ public class SystemSettingsController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while updating system settings {SettingsId}.", id);
+            _logger.LogError(ex, "Error occurred while updating system settings.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }

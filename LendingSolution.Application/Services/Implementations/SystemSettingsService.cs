@@ -98,6 +98,57 @@ public class SystemSettingsService : ISystemSettingsService
         return MapToDto(existingSettings);
     }
 
+    public async Task<SystemSettingsDto> PatchActiveSettingsAsync(PatchSystemSettingsDto settingsDto, string userId)
+    {
+        var activeSettings = await _systemSettingsRepository.GetActiveSettingsAsync();
+        
+        if (activeSettings == null)
+        {
+            throw new AppException("No active system settings found to update", 404);
+        }
+
+        // Update only the properties that are provided (not null)
+        if (settingsDto.LegalFees.HasValue)
+            activeSettings.LegalFees = settingsDto.LegalFees.Value;
+            
+        if (settingsDto.ManagementFees.HasValue)
+            activeSettings.ManagementFees = settingsDto.ManagementFees.Value;
+            
+        if (settingsDto.ProcessingFees.HasValue)
+            activeSettings.ProcessingFees = settingsDto.ProcessingFees.Value;
+            
+        if (settingsDto.PenaltyFees.HasValue)
+            activeSettings.PenaltyFees = settingsDto.PenaltyFees.Value;
+            
+        if (settingsDto.LateFees.HasValue)
+            activeSettings.LateFees = settingsDto.LateFees.Value;
+            
+        if (settingsDto.DocumentationFees.HasValue)
+            activeSettings.DocumentationFees = settingsDto.DocumentationFees.Value;
+            
+        if (!string.IsNullOrEmpty(settingsDto.LegalFeesType))
+            activeSettings.LegalFeesType = settingsDto.LegalFeesType;
+            
+        if (!string.IsNullOrEmpty(settingsDto.ManagementFeesType))
+            activeSettings.ManagementFeesType = settingsDto.ManagementFeesType;
+            
+        if (!string.IsNullOrEmpty(settingsDto.ProcessingFeesType))
+            activeSettings.ProcessingFeesType = settingsDto.ProcessingFeesType;
+
+        // Update audit fields
+        activeSettings.UpdatedBy = userId;
+        activeSettings.UpdatedAt = DateTime.UtcNow;
+
+        var updateResult = await _systemSettingsRepository.UpdateSettingsAsync(activeSettings);
+        
+        if (!updateResult)
+        {
+            throw new AppException("Failed to update system settings", 500);
+        }
+
+        return MapToDto(activeSettings);
+    }
+
     public async Task<List<SystemSettingsDto>> GetAllSettingsAsync()
     {
         var settingsList = await _systemSettingsRepository.GetAllSettingsAsync();

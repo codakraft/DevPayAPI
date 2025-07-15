@@ -8,5 +8,6 @@ public interface ISystemSettingsService
     Task<SystemSettingsDto> GetSettingsByIdAsync(Guid id);
     Task<SystemSettingsDto> CreateSettingsAsync(UpdateSystemSettingsDto settingsDto, string userId);
     Task<SystemSettingsDto> UpdateSettingsAsync(Guid id, UpdateSystemSettingsDto settingsDto, string userId);
+    Task<SystemSettingsDto> PatchActiveSettingsAsync(PatchSystemSettingsDto settingsDto, string userId);
     Task<List<SystemSettingsDto>> GetAllSettingsAsync();
 }
