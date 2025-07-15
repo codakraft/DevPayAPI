@@ -233,6 +233,8 @@ public static class ServiceExtensions
         services.AddScoped<IFinanceService, FinanceService>();
         services.AddScoped<ISupportService, SupportService>();
         services.AddScoped<IDatabaseResilienceService, DatabaseResilienceService>();
+        services.AddScoped<IDocumentService, DocumentService>();
+        services.AddScoped<IThirdPartyDocumentService, MockThirdPartyDocumentService>();
     }
 
     public static void RegisterRepositories(this IServiceCollection services)
@@ -251,6 +253,7 @@ public static class ServiceExtensions
         services.AddScoped<ISupportCommentRepository, SupportCommentRepository>();
         services.AddScoped<IEmployeeRepository, EmployeeRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IDocumentRepository, DocumentRepository>();
     }
 
     public static void ConfigureServices(this IServiceCollection services, IConfiguration configuration)

@@ -20,6 +20,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Account> Accounts { get; set; }
     public DbSet<AdminSettings> AdminSettings { get; set; }
     public DbSet<SystemSettings> SystemSettings { get; set; }
+    public DbSet<Document> Documents { get; set; }
     public DbSet<Approval> Approvals { get; set; }
     public DbSet<RefreshToken> RefreshTokens { get; set; }
     public DbSet<SupportTicket> SupportTickets { get; set; }
