@@ -234,7 +234,7 @@ public static class ServiceExtensions
         services.AddScoped<ISupportService, SupportService>();
         services.AddScoped<IDatabaseResilienceService, DatabaseResilienceService>();
         services.AddScoped<IDocumentService, DocumentService>();
-        services.AddScoped<IThirdPartyDocumentService, MockThirdPartyDocumentService>();
+        services.AddScoped<IThirdPartyDocumentService, FirebaseDocumentService>();
     }
 
     public static void RegisterRepositories(this IServiceCollection services)
@@ -297,6 +297,11 @@ public static class ServiceExtensions
                     .AllowAnyHeader();
             });
         });
+    }
+
+    public static void ConfigureFirebase(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<FirebaseSettings>(configuration.GetSection("Firebase"));
     }
 
 }

@@ -1,4 +1,3 @@
-using LendingSolution.Core.Settings;
 using LendingSolution.API.Extensions;
 using LendingSolution.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -16,17 +15,18 @@ builder.Services.ConfigureHttpClient(builder.Configuration);
 builder.Services.ConfigureCors();
 builder.Services.ConfigureHealthChecks(builder.Configuration);
 builder.Services.ConfigureDatabaseResilience();
+builder.Services.ConfigureFirebase(builder.Configuration);
 builder.Services.AddJwtConfiguration(builder.Configuration);
 builder.Services.ConfigureJwt(builder.Configuration);
 builder.Services.ConfigureEndpointExplorer();
 
 var app = builder.Build();
 
-// using (var scope = app.Services.CreateScope())
-// {
-//     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-//     db.Database.Migrate();
-// }
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    db.Database.Migrate();
+}
 
 using (var scope = app.Services.CreateScope())
 {
@@ -48,12 +48,8 @@ app.UseCors(x => x.AllowAnyHeader().AllowAnyOrigin().AllowAnyMethod());
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Enable Swagger in development environment
-// if (app.Environment.IsDevelopment())
-// {
 app.UseSwagger();
 app.UseSwaggerUI();
-// }
 
 
 app.MapControllers();
@@ -66,5 +62,4 @@ app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthC
 {
     Predicate = check => check.Tags.Contains("live")
 });
-// app.UseHttpsRedirection();
 app.Run();
