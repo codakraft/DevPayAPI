@@ -75,65 +75,6 @@ public class SystemSettingsController : ControllerBase
     }
 
     /// <summary>
-    /// Get system settings by ID (SuperAdmin only)
-    /// </summary>
-    /// <param name="id">Settings ID</param>
-    /// <returns>System settings details</returns>
-    [HttpGet("settings/{id}")]
-    public async Task<IActionResult> GetSystemSettingsById(Guid id)
-    {
-        try
-        {
-            var result = await _systemSettingsService.GetSettingsByIdAsync(id);
-            _logger.LogInformation("System settings {SettingsId} fetched successfully", id);
-            return Ok(ApiResponse.Ok("System settings fetched successfully", result));
-        }
-        catch (AppException ex)
-        {
-            _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error occurred while fetching system settings {SettingsId}.", id);
-            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
-        }
-    }
-
-    /// <summary>
-    /// Create new system settings (SuperAdmin only)
-    /// </summary>
-    /// <param name="settingsDto">System settings data</param>
-    /// <returns>Created system settings</returns>
-    [HttpPost("settings")]
-    public async Task<IActionResult> CreateSystemSettings([FromBody] UpdateSystemSettingsDto settingsDto)
-    {
-        try
-        {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId))
-            {
-                return Unauthorized(ApiResponse.Fail("User not authenticated"));
-            }
-
-            var result = await _systemSettingsService.CreateSettingsAsync(settingsDto, userId);
-            
-            _logger.LogInformation("System settings created successfully by user {UserId}", userId);
-            return Ok(ApiResponse.Ok("System settings created successfully", result));
-        }
-        catch (AppException ex)
-        {
-            _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error occurred while creating system settings.");
-            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
-        }
-    }
-
-    /// <summary>
     /// Update system settings (SuperAdmin only) - Partial update of active settings
     /// </summary>
     /// <param name="settingsDto">System settings data to update (only provided fields will be updated)</param>
@@ -150,7 +91,7 @@ public class SystemSettingsController : ControllerBase
             }
 
             var result = await _systemSettingsService.PatchActiveSettingsAsync(settingsDto, userId);
-            
+
             _logger.LogInformation("System settings updated successfully by user {UserId}", userId);
             return Ok(ApiResponse.Ok("System settings updated successfully", result));
         }
