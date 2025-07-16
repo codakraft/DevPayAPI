@@ -235,6 +235,8 @@ public static class ServiceExtensions
         services.AddScoped<IDatabaseResilienceService, DatabaseResilienceService>();
         services.AddScoped<IDocumentService, DocumentService>();
         services.AddScoped<IThirdPartyDocumentService, FirebaseDocumentService>();
+        services.AddScoped<IWalletService, WalletService>();
+        services.AddScoped<IPaystackService, PaystackService>();
     }
 
     public static void RegisterRepositories(this IServiceCollection services)
@@ -254,6 +256,8 @@ public static class ServiceExtensions
         services.AddScoped<IEmployeeRepository, EmployeeRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IDocumentRepository, DocumentRepository>();
+        services.AddScoped<IWalletRepository, WalletRepository>();
+        services.AddScoped<IWalletTransactionRepository, WalletTransactionRepository>();
     }
 
     public static void ConfigureServices(this IServiceCollection services, IConfiguration configuration)
@@ -302,6 +306,11 @@ public static class ServiceExtensions
     public static void ConfigureFirebase(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<FirebaseSettings>(configuration.GetSection("Firebase"));
+    }
+
+    public static void ConfigurePaystack(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<PaystackSettings>(configuration.GetSection("Paystack"));
     }
 
 }

@@ -16,6 +16,7 @@ builder.Services.ConfigureCors();
 builder.Services.ConfigureHealthChecks(builder.Configuration);
 builder.Services.ConfigureDatabaseResilience();
 builder.Services.ConfigureFirebase(builder.Configuration);
+builder.Services.ConfigurePaystack(builder.Configuration);
 builder.Services.AddJwtConfiguration(builder.Configuration);
 builder.Services.ConfigureJwt(builder.Configuration);
 builder.Services.ConfigureEndpointExplorer();

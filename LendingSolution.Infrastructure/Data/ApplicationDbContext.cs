@@ -25,6 +25,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<RefreshToken> RefreshTokens { get; set; }
     public DbSet<SupportTicket> SupportTickets { get; set; }
     public DbSet<SupportComment> SupportComments { get; set; }
+    public DbSet<Wallet> Wallets { get; set; }
+    public DbSet<WalletTransaction> WalletTransactions { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -184,6 +186,67 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 
         modelBuilder.Entity<SupportTicket>()
             .HasIndex(st => new { st.UserId, st.Status });
+
+        // Configure Wallet relationships
+        modelBuilder.Entity<Wallet>()
+            .HasOne(w => w.Company)
+            .WithMany()
+            .HasForeignKey(w => w.CompanyId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        // Configure WalletTransaction relationships
+        modelBuilder.Entity<WalletTransaction>()
+            .HasOne(wt => wt.Wallet)
+            .WithMany(w => w.Transactions)
+            .HasForeignKey(wt => wt.WalletId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<WalletTransaction>()
+            .HasOne(wt => wt.InitiatedByUser)
+            .WithMany()
+            .HasForeignKey(wt => wt.InitiatedBy)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        // Configure decimal precision for wallet entities
+        modelBuilder.Entity<Wallet>()
+            .Property(w => w.Balance)
+            .HasPrecision(18, 2);
+
+        modelBuilder.Entity<Wallet>()
+            .Property(w => w.TotalCredits)
+            .HasPrecision(18, 2);
+
+        modelBuilder.Entity<Wallet>()
+            .Property(w => w.TotalDebits)
+            .HasPrecision(18, 2);
+
+        modelBuilder.Entity<WalletTransaction>()
+            .Property(wt => wt.Amount)
+            .HasPrecision(18, 2);
+
+        modelBuilder.Entity<WalletTransaction>()
+            .Property(wt => wt.BalanceAfter)
+            .HasPrecision(18, 2);
+
+        // Configure indexes for wallet entities
+        modelBuilder.Entity<Wallet>()
+            .HasIndex(w => w.CompanyId)
+            .IsUnique();
+
+        modelBuilder.Entity<Wallet>()
+            .HasIndex(w => w.IsSuperAdminWallet);
+
+        modelBuilder.Entity<WalletTransaction>()
+            .HasIndex(wt => wt.WalletId);
+
+        modelBuilder.Entity<WalletTransaction>()
+            .HasIndex(wt => wt.TransactionType);
+
+        modelBuilder.Entity<WalletTransaction>()
+            .HasIndex(wt => wt.CreatedAt);
+
+        modelBuilder.Entity<WalletTransaction>()
+            .HasIndex(wt => wt.PaystackReference);
     }
 
     // protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
