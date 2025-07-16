@@ -25,14 +25,21 @@ public class CompanyController(
     private readonly ILoanService _loanService = loanService;
     private readonly ILogger<CompanyController> _logger = logger;
 
-    [Authorize(Roles = "SuperAdmin, Admin")]
+    [Authorize(Roles = "Admin")]
     [HttpPost("product/create")]
     public async Task<IActionResult> CreateProduct([FromBody] CreateLoanProductRequestDto body)
     {
         try
         {
-            var result = await _loanProductService.CreateLoanProduct(body);
-            _logger.LogInformation("Loan product created successfully");
+            // Get company ID from JWT
+            var companyIdClaim = User.FindFirstValue("CompanyId");
+            if (string.IsNullOrEmpty(companyIdClaim) || !Guid.TryParse(companyIdClaim, out var companyId))
+            {
+                return BadRequest(ApiResponse.Fail("Company ID not found in token"));
+            }
+
+            var result = await _loanProductService.CreateLoanProduct(body, companyId);
+            _logger.LogInformation("Loan product created successfully for company {CompanyId}", companyId);
             return Ok(ApiResponse.Ok("Loan product created successfully", result));
         }
         catch (AppException ex)

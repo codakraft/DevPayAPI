@@ -4,6 +4,7 @@ using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Dtos.Response;
 using LendingSolution.Core.Models;
+using LendingSolution.Core.Enum;
 using Microsoft.EntityFrameworkCore;
 
 namespace LendingSolution.Application.Services.Implementations;
@@ -16,20 +17,31 @@ public class LoanProductService(
     private readonly ILoanProductRepository _loanProductRepository = loanProductRepository;
     private readonly ICompanyRepository _companyRepository = companyRepository;
 
-    public async Task<ApiResponse> CreateLoanProduct(CreateLoanProductRequestDto dto)
+    public async Task<ApiResponse> CreateLoanProduct(CreateLoanProductRequestDto dto, Guid companyId)
     {
-        if (!await CompanyExistsAsync(dto.CompanyId))
+        if (!await CompanyExistsAsync(companyId))
             return ApiResponse.Fail("Company does not exist");
 
         var loanProduct = new LoanProduct
         {
+            CompanyId = companyId,
             Name = dto.Name,
-            InterestRate = dto.InterestRate,
+            Code = dto.Code,
+            ShortName = dto.ShortName,
+            Description = dto.Description,
             MinAmount = dto.MinAmount,
             MaxAmount = dto.MaxAmount,
-            Description = dto.Description,
-            CompanyId = dto.CompanyId,
-            ShortName = dto.ShortName
+            MinTenor = dto.MinTenor,
+            MaxTenor = dto.MaxTenor,
+            InterestRate = dto.InterestRate,
+            PenaltyOnDefaultPrincipal = dto.PenaltyOnDefaultPrincipal,
+            Moratorium = dto.Moratorium,
+            NotifyApprovalsViaEmail = dto.NotifyApprovalsViaEmail,
+            TurnoverEligibilityPercent = dto.TurnoverEligibilityPercent,
+            InterestComputationBasis = dto.InterestComputationBasis,
+            InterestCostComputation = dto.InterestCostComputation,
+            PaymentScheduleBreakdown = dto.PaymentScheduleBreakdown,
+            PaymentScheduleType = dto.PaymentScheduleType
         };
 
         var created = await _loanProductRepository.CreateLoanProduct(loanProduct);
@@ -49,13 +61,27 @@ public class LoanProductService(
         var data = loanProducts.Select(lp => new LoanProductResponseDto
         {
             Id = lp.Id,
+            CompanyId = lp.CompanyId,
             Name = lp.Name,
-            InterestRate = lp.InterestRate,
+            Code = lp.Code,
+            ShortName = lp.ShortName,
+            Description = lp.Description,
             MinAmount = lp.MinAmount,
             MaxAmount = lp.MaxAmount,
-            Description = lp.Description,
-            CompanyId = lp.CompanyId,
-            ShortName = lp.ShortName
+            MinTenor = lp.MinTenor,
+            MaxTenor = lp.MaxTenor,
+            InterestRate = lp.InterestRate,
+            PenaltyOnDefaultPrincipal = lp.PenaltyOnDefaultPrincipal,
+            Moratorium = lp.Moratorium,
+            NotifyApprovalsViaEmail = lp.NotifyApprovalsViaEmail,
+            TurnoverEligibilityPercent = lp.TurnoverEligibilityPercent,
+            InterestComputationBasis = lp.InterestComputationBasis,
+            InterestCostComputation = lp.InterestCostComputation,
+            PaymentScheduleBreakdown = lp.PaymentScheduleBreakdown,
+            PaymentScheduleType = lp.PaymentScheduleType,
+            IsActive = lp.IsActive,
+            CreatedAt = lp.CreatedAt,
+            UpdatedAt = lp.UpdatedAt
         }).ToList();
 
         return data;
@@ -74,14 +100,22 @@ public class LoanProductService(
 
             // Update the loan product properties
             existingProduct.Name = dto.Name;
+            existingProduct.Code = dto.Code;
             existingProduct.ShortName = dto.ShortName;
             existingProduct.Description = dto.Description;
-            existingProduct.InterestRate = dto.InterestRate;
             existingProduct.MinAmount = dto.MinAmount;
             existingProduct.MaxAmount = dto.MaxAmount;
             existingProduct.MinTenor = dto.MinTenor;
             existingProduct.MaxTenor = dto.MaxTenor;
+            existingProduct.InterestRate = dto.InterestRate;
+            existingProduct.PenaltyOnDefaultPrincipal = dto.PenaltyOnDefaultPrincipal;
             existingProduct.Moratorium = dto.Moratorium;
+            existingProduct.NotifyApprovalsViaEmail = dto.NotifyApprovalsViaEmail;
+            existingProduct.TurnoverEligibilityPercent = dto.TurnoverEligibilityPercent;
+            existingProduct.InterestComputationBasis = dto.InterestComputationBasis;
+            existingProduct.InterestCostComputation = dto.InterestCostComputation;
+            existingProduct.PaymentScheduleBreakdown = dto.PaymentScheduleBreakdown;
+            existingProduct.PaymentScheduleType = dto.PaymentScheduleType;
             existingProduct.UpdatedAt = DateTime.UtcNow;
 
             var updateResult = await _loanProductRepository.UpdateLoanProduct(existingProduct);
@@ -94,16 +128,27 @@ public class LoanProductService(
             return ApiResponse.Ok("Loan product updated successfully", new LoanProductResponseDto
             {
                 Id = existingProduct.Id,
+                CompanyId = existingProduct.CompanyId,
                 Name = existingProduct.Name,
+                Code = existingProduct.Code,
                 ShortName = existingProduct.ShortName,
                 Description = existingProduct.Description,
-                InterestRate = existingProduct.InterestRate,
                 MinAmount = existingProduct.MinAmount,
                 MaxAmount = existingProduct.MaxAmount,
                 MinTenor = existingProduct.MinTenor,
                 MaxTenor = existingProduct.MaxTenor,
+                InterestRate = existingProduct.InterestRate,
+                PenaltyOnDefaultPrincipal = existingProduct.PenaltyOnDefaultPrincipal,
                 Moratorium = existingProduct.Moratorium,
-                CompanyId = existingProduct.CompanyId
+                NotifyApprovalsViaEmail = existingProduct.NotifyApprovalsViaEmail,
+                TurnoverEligibilityPercent = existingProduct.TurnoverEligibilityPercent,
+                InterestComputationBasis = existingProduct.InterestComputationBasis,
+                InterestCostComputation = existingProduct.InterestCostComputation,
+                PaymentScheduleBreakdown = existingProduct.PaymentScheduleBreakdown,
+                PaymentScheduleType = existingProduct.PaymentScheduleType,
+                IsActive = existingProduct.IsActive,
+                CreatedAt = existingProduct.CreatedAt,
+                UpdatedAt = existingProduct.UpdatedAt
             });
         }
         catch (Exception ex)
@@ -126,16 +171,27 @@ public class LoanProductService(
             return ApiResponse.Ok("Loan product retrieved successfully", new LoanProductResponseDto
             {
                 Id = loanProduct.Id,
+                CompanyId = loanProduct.CompanyId,
                 Name = loanProduct.Name,
+                Code = loanProduct.Code,
                 ShortName = loanProduct.ShortName,
                 Description = loanProduct.Description,
-                InterestRate = loanProduct.InterestRate,
                 MinAmount = loanProduct.MinAmount,
                 MaxAmount = loanProduct.MaxAmount,
                 MinTenor = loanProduct.MinTenor,
                 MaxTenor = loanProduct.MaxTenor,
+                InterestRate = loanProduct.InterestRate,
+                PenaltyOnDefaultPrincipal = loanProduct.PenaltyOnDefaultPrincipal,
                 Moratorium = loanProduct.Moratorium,
-                CompanyId = loanProduct.CompanyId
+                NotifyApprovalsViaEmail = loanProduct.NotifyApprovalsViaEmail,
+                TurnoverEligibilityPercent = loanProduct.TurnoverEligibilityPercent,
+                InterestComputationBasis = loanProduct.InterestComputationBasis,
+                InterestCostComputation = loanProduct.InterestCostComputation,
+                PaymentScheduleBreakdown = loanProduct.PaymentScheduleBreakdown,
+                PaymentScheduleType = loanProduct.PaymentScheduleType,
+                IsActive = loanProduct.IsActive,
+                CreatedAt = loanProduct.CreatedAt,
+                UpdatedAt = loanProduct.UpdatedAt
             });
         }
         catch (Exception ex)
@@ -170,15 +226,23 @@ public class LoanProductService(
             {
                 Id = lp.Id,
                 Name = lp.Name,
+                Code = lp.Code,
                 Description = lp.Description,
                 ShortName = lp.ShortName,
-                InterestRate = lp.InterestRate,
                 MinAmount = lp.MinAmount,
                 MaxAmount = lp.MaxAmount,
                 MinTenor = lp.MinTenor,
                 MaxTenor = lp.MaxTenor,
-                IsActive = lp.IsActive,
+                InterestRate = lp.InterestRate,
+                PenaltyOnDefaultPrincipal = lp.PenaltyOnDefaultPrincipal,
                 Moratorium = lp.Moratorium,
+                NotifyApprovalsViaEmail = lp.NotifyApprovalsViaEmail,
+                TurnoverEligibilityPercent = lp.TurnoverEligibilityPercent,
+                InterestComputationBasis = lp.InterestComputationBasis,
+                InterestCostComputation = lp.InterestCostComputation,
+                PaymentScheduleBreakdown = lp.PaymentScheduleBreakdown,
+                PaymentScheduleType = lp.PaymentScheduleType,
+                IsActive = lp.IsActive,
                 CreatedAt = lp.CreatedAt,
                 UpdatedAt = lp.UpdatedAt,
                 CompanyId = lp.CompanyId,
@@ -234,15 +298,23 @@ public class LoanProductService(
             {
                 Id = lp.Id,
                 Name = lp.Name,
+                Code = lp.Code,
                 Description = lp.Description,
                 ShortName = lp.ShortName,
-                InterestRate = lp.InterestRate,
                 MinAmount = lp.MinAmount,
                 MaxAmount = lp.MaxAmount,
                 MinTenor = lp.MinTenor,
                 MaxTenor = lp.MaxTenor,
-                IsActive = lp.IsActive,
+                InterestRate = lp.InterestRate,
+                PenaltyOnDefaultPrincipal = lp.PenaltyOnDefaultPrincipal,
                 Moratorium = lp.Moratorium,
+                NotifyApprovalsViaEmail = lp.NotifyApprovalsViaEmail,
+                TurnoverEligibilityPercent = lp.TurnoverEligibilityPercent,
+                InterestComputationBasis = lp.InterestComputationBasis,
+                InterestCostComputation = lp.InterestCostComputation,
+                PaymentScheduleBreakdown = lp.PaymentScheduleBreakdown,
+                PaymentScheduleType = lp.PaymentScheduleType,
+                IsActive = lp.IsActive,
                 CreatedAt = lp.CreatedAt,
                 UpdatedAt = lp.UpdatedAt,
                 CompanyId = lp.CompanyId,
@@ -325,6 +397,24 @@ public class LoanProductService(
         if (filter.MaxTenor.HasValue)
         {
             query = query.Where(lp => lp.MinTenor <= filter.MaxTenor.Value);
+        }
+
+        // Enum filters
+        if (filter.InterestComputationBasis.HasValue)
+        {
+            query = query.Where(lp => lp.InterestComputationBasis == filter.InterestComputationBasis.Value);
+        }
+        if (filter.InterestCostComputation.HasValue)
+        {
+            query = query.Where(lp => lp.InterestCostComputation == filter.InterestCostComputation.Value);
+        }
+        if (filter.PaymentScheduleBreakdown.HasValue)
+        {
+            query = query.Where(lp => lp.PaymentScheduleBreakdown == filter.PaymentScheduleBreakdown.Value);
+        }
+        if (filter.PaymentScheduleType.HasValue)
+        {
+            query = query.Where(lp => lp.PaymentScheduleType == filter.PaymentScheduleType.Value);
         }
 
         return query;
