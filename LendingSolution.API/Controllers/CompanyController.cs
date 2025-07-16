@@ -443,4 +443,91 @@ public class CompanyController(
         }
     }
 
+    // Admin can update their own company logo
+    [Authorize(Roles = "Admin")]
+    [HttpPatch("logo")]
+    public async Task<IActionResult> UpdateCompanyLogo([FromBody] UpdateCompanyLogoDto body)
+    {
+        try
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized(ApiResponse.Fail("User not authenticated"));
+            }
+
+            // Get company ID from JWT
+            var companyIdClaim = User.FindFirstValue("CompanyId");
+            if (string.IsNullOrEmpty(companyIdClaim) || !Guid.TryParse(companyIdClaim, out var companyId))
+            {
+                return BadRequest(ApiResponse.Fail("Company ID not found in token"));
+            }
+
+            var company = await _companyService.GetCompanyById(companyId);
+            
+            // Create an update request with current company data but new logo
+            var updateRequest = new UpdateCompanyRequestDto
+            {
+                Name = company.Name,
+                ShortName = company.ShortName,
+                Street = company.Street,
+                City = company.City,
+                State = company.State,
+                LogoDocumentId = body.LogoDocumentId
+            };
+
+            var result = await _companyService.UpdateCompany(companyId, updateRequest, userId);
+
+            _logger.LogInformation("Company logo updated successfully by user {UserId} for company {CompanyId}", userId, companyId);
+            return Ok(ApiResponse.Ok("Company logo updated successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while updating company logo.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    // SuperAdmin can update any company logo
+    [Authorize(Roles = "SuperAdmin")]
+    [HttpPatch("sa/{companyId}/logo")]
+    public async Task<IActionResult> UpdateCompanyLogoByAdmin(Guid companyId, [FromBody] UpdateCompanyLogoDto body)
+    {
+        try
+        {
+            var company = await _companyService.GetCompanyById(companyId);
+            
+            // Create an update request with current company data but new logo
+            var updateRequest = new UpdateCompanyRequestDto
+            {
+                Name = company.Name,
+                ShortName = company.ShortName,
+                Street = company.Street,
+                City = company.City,
+                State = company.State,
+                LogoDocumentId = body.LogoDocumentId
+            };
+
+            var result = await _companyService.UpdateCompany(companyId, updateRequest);
+
+            _logger.LogInformation("Company {CompanyId} logo updated successfully by SuperAdmin", companyId);
+            return Ok(ApiResponse.Ok("Company logo updated successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while updating company logo.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
 }

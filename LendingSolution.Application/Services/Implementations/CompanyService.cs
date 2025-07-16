@@ -64,7 +64,8 @@ public class CompanyService : ICompanyService
             Street = body.Street,
             ShortName = body.ShortName,
             State = body.State,
-            City = body.City
+            City = body.City,
+            LogoDocumentId = body.LogoDocumentId
 
         };
         var dbResponse = await _companyRepository.CreateCompany(company);
@@ -81,7 +82,8 @@ public class CompanyService : ICompanyService
             Street = company.Street,
             ShortName = company.ShortName,
             State = company.State,
-            City = company.City
+            City = company.City,
+            LogoDocumentId = company.LogoDocumentId
         };
     }
 
@@ -124,6 +126,7 @@ public class CompanyService : ICompanyService
         company.Street = body.Street;
         company.City = body.City;
         company.State = body.State;
+        company.LogoDocumentId = body.LogoDocumentId;
         company.UpdatedAt = DateTime.UtcNow;
 
         var updateResult = await _companyRepository.UpdateCompany(company);
@@ -140,7 +143,8 @@ public class CompanyService : ICompanyService
             ShortName = company.ShortName,
             Street = company.Street,
             City = company.City,
-            State = company.State
+            State = company.State,
+            LogoDocumentId = company.LogoDocumentId
         };
     }
 
@@ -160,7 +164,8 @@ public class CompanyService : ICompanyService
             ShortName = company.ShortName,
             Street = company.Street,
             City = company.City,
-            State = company.State
+            State = company.State,
+            LogoDocumentId = company.LogoDocumentId
         };
     }
 
@@ -180,7 +185,8 @@ public class CompanyService : ICompanyService
             ShortName = company.ShortName,
             Street = company.Street,
             City = company.City,
-            State = company.State
+            State = company.State,
+            LogoDocumentId = company.LogoDocumentId
         };
     }
 
@@ -262,6 +268,8 @@ public class CompanyService : ICompanyService
                 PhoneNumber = null, // Company model doesn't have PhoneNumber
                 Address = $"{company.Street}, {company.City}, {company.State}".Trim(' ', ','),
                 IsActive = company.IsActive,
+                LogoDocumentId = company.LogoDocumentId,
+                LogoUrl = null, // We can populate this when we have document service integration
                 CreatedAt = company.CreatedAt,
                 UpdatedAt = company.UpdatedAt,
                 TotalUsers = users.Count,
@@ -419,6 +427,8 @@ public class CompanyService : ICompanyService
             PhoneNumber = null, // Company model doesn't have PhoneNumber
             Address = $"{company.Street}, {company.City}, {company.State}".Trim(' ', ','),
             IsActive = company.IsActive,
+            LogoDocumentId = company.LogoDocumentId,
+            LogoUrl = null, // We can populate this when we have document service integration
             CreatedAt = company.CreatedAt,
             UpdatedAt = company.UpdatedAt,
             TotalUsers = users.Count,

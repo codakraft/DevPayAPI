@@ -8,5 +8,6 @@ public class Company : Base
     public string? City { get; set; }
     public string? State { get; set; }
     public bool IsActive { get; set; } = true;
+    public Guid? LogoDocumentId { get; set; }
     public ICollection<LoanProduct> LoanProducts { get; set; } = [];
 }

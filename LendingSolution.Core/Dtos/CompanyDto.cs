@@ -7,6 +7,7 @@ public class CompanyDto
     public string? Street { get; set; }
     public string? City { get; set; }
     public string? State { get; set; }
+    public Guid? LogoDocumentId { get; set; }
 }
 
 public class CompanyResponseDto : CompanyDto
@@ -18,4 +19,9 @@ public class CreateCompanyRequestDto : CompanyDto;
 
 public class UpdateCompanyRequestDto : CompanyDto
 {
+}
+
+public class UpdateCompanyLogoDto
+{
+    public Guid? LogoDocumentId { get; set; }
 }
