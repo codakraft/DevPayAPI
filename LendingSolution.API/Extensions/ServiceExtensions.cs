@@ -237,6 +237,7 @@ public static class ServiceExtensions
         services.AddScoped<IThirdPartyDocumentService, FirebaseDocumentService>();
         services.AddScoped<IWalletService, WalletService>();
         services.AddScoped<IPaystackService, PaystackService>();
+        services.AddScoped<IBorrowerOnboardingService, BorrowerOnboardingService>();
     }
 
     public static void RegisterRepositories(this IServiceCollection services)
@@ -258,6 +259,7 @@ public static class ServiceExtensions
         services.AddScoped<IDocumentRepository, DocumentRepository>();
         services.AddScoped<IWalletRepository, WalletRepository>();
         services.AddScoped<IWalletTransactionRepository, WalletTransactionRepository>();
+        services.AddScoped<IBorrowerApplicationRepository, BorrowerApplicationRepository>();
     }
 
     public static void ConfigureServices(this IServiceCollection services, IConfiguration configuration)

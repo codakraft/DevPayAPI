@@ -27,6 +27,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<SupportComment> SupportComments { get; set; }
     public DbSet<Wallet> Wallets { get; set; }
     public DbSet<WalletTransaction> WalletTransactions { get; set; }
+    public DbSet<BorrowerApplication> BorrowerApplications { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -166,7 +167,46 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             .HasForeignKey(sc => sc.UserId)
             .OnDelete(DeleteBehavior.NoAction);
 
+        // Configure BorrowerApplication relationships with NO ACTION cascade
+        modelBuilder.Entity<BorrowerApplication>()
+            .HasOne(ba => ba.Company)
+            .WithMany()
+            .HasForeignKey(ba => ba.CompanyId)
+            .OnDelete(DeleteBehavior.NoAction);
 
+        modelBuilder.Entity<BorrowerApplication>()
+            .HasOne(ba => ba.Product)
+            .WithMany()
+            .HasForeignKey(ba => ba.ProductId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        modelBuilder.Entity<BorrowerApplication>()
+            .HasOne(ba => ba.Loan)
+            .WithMany()
+            .HasForeignKey(ba => ba.LoanId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        // Configure decimal precision for BorrowerApplication
+        modelBuilder.Entity<BorrowerApplication>()
+            .Property(ba => ba.MaxLoanEligible)
+            .HasPrecision(18, 2);
+
+        modelBuilder.Entity<BorrowerApplication>()
+            .Property(ba => ba.MinLoanEligible)
+            .HasPrecision(18, 2);
+
+        // Configure indexes for BorrowerApplication
+        modelBuilder.Entity<BorrowerApplication>()
+            .HasIndex(ba => ba.Email);
+
+        modelBuilder.Entity<BorrowerApplication>()
+            .HasIndex(ba => ba.CompanyId);
+
+        modelBuilder.Entity<BorrowerApplication>()
+            .HasIndex(ba => ba.ProductId);
+
+        modelBuilder.Entity<BorrowerApplication>()
+            .HasIndex(ba => ba.CurrentStep);
 
         // Configure indexes for better performance
         modelBuilder.Entity<SupportTicket>()

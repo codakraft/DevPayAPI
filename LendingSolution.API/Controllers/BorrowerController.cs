@@ -3,196 +3,242 @@ using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Dtos.Response;
 using Microsoft.AspNetCore.Mvc;
 using LendingSolution.Application.Exceptions;
-using Microsoft.OpenApi.Exceptions;
 
 namespace LendingSolution.API.Controllers;
 
 [ApiController]
+[Route("api/[controller]")]
 public class BorrowerController(
-    IAuthService authService,
-    ILoanService loanService,
-    ILoanProductService loanProductService,
-    IRemitaService remitaService,
+    IBorrowerOnboardingService borrowerOnboardingService,
     ILogger<BorrowerController> logger
 ) : Controller
 {
-    private readonly IAuthService _authService = authService;
-    private readonly ILoanProductService _loanProductService = loanProductService;
-    private readonly ILoanService _loanService = loanService;
-    private readonly IRemitaService _remitaService = remitaService;
+    private readonly IBorrowerOnboardingService _borrowerOnboardingService = borrowerOnboardingService;
     private readonly ILogger<BorrowerController> _logger = logger;
 
-    [HttpPost("onboarding")]
-    public async Task<IActionResult> Register([FromBody] RegisterRequestDto body)
+    // Step 1: Initial borrower registration with basic info
+    [HttpPost("step1")]
+    public async Task<IActionResult> Step1([FromBody] BorrowerStep1RequestDto request)
     {
         try
         {
-            var result = await _loanService.Register(body);
-            return Ok(ApiResponse.Ok("User registered successfully", new { loanId = result }));
+            var result = await _borrowerOnboardingService.Step1_SaveBorrowerInfoAsync(request);
+            return Ok(ApiResponse.Ok(result.Message, new { loanId = result.LoanId }));
         }
         catch (AppException ex)
         {
-            _logger.LogError(ex, "Error during user onboarding");
+            _logger.LogError(ex, "Error during Step 1 for borrower onboarding");
             return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unhandled error during registration");
+            _logger.LogError(ex, "Unhandled error during Step 1");
             return StatusCode(500, ApiResponse.Fail("Something went wrong"));
         }
     }
 
-    [HttpPost("verify-otp")]
-    public IActionResult VerifyOtp([FromBody] VerifyOtpRequestDto body)
+    // Step 1B: Email OTP validation
+    [HttpPost("step1b")]
+    public async Task<IActionResult> Step1B([FromBody] BorrowerStep1BRequestDto request)
     {
         try
         {
-            var result = _authService.VerifyOtp(body);
-            return Ok(ApiResponse.Ok("OTP verification successful", new { }));
+            var result = await _borrowerOnboardingService.Step1B_ValidateEmailOtpAsync(request);
+            return Ok(ApiResponse.Ok(result.Message, new { loanId = request.LoanId }));
         }
         catch (AppException ex)
         {
-            _logger.LogError(ex, "Error verifying OTP");
+            _logger.LogError(ex, "Error during Step 1B for borrower onboarding");
             return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unhandled error during OTP verification");
+            _logger.LogError(ex, "Unhandled error during Step 1B");
             return StatusCode(500, ApiResponse.Fail("Something went wrong"));
         }
     }
 
-    [HttpPost("save-personal-details")]
-    public async Task<IActionResult> SavePersonalDetails([FromBody] SavePersonalDetailsRequestDto body)
+    // Step 2: Bank and BVN information
+    [HttpPost("step2")]
+    public async Task<IActionResult> Step2([FromBody] BorrowerStep2RequestDto request)
     {
         try
         {
-            var result = await _authService.SavePersonalDetails(body, User);
-            return Ok(ApiResponse.Ok("Personal details saved successfully"));
+            var result = await _borrowerOnboardingService.Step2_SaveBankBvnInfoAsync(request);
+            return Ok(ApiResponse.Ok(result.Message, new { loanId = request.LoanId }));
         }
         catch (AppException ex)
         {
-            _logger.LogError(ex, "Error saving personal details");
+            _logger.LogError(ex, "Error during Step 2 for borrower onboarding");
             return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unhandled error saving personal details");
+            _logger.LogError(ex, "Unhandled error during Step 2");
             return StatusCode(500, ApiResponse.Fail("Something went wrong"));
         }
     }
 
-    [HttpPost("salary-history-review/{loanID}")]
-    public async Task<IActionResult> SalaryHistoryReview([FromRoute] Guid loanId, [FromBody] ReviewHistoryRequestDto body)
+    // Step 2B: BVN OTP validation
+    [HttpPost("step2b")]
+    public async Task<IActionResult> Step2B([FromBody] BorrowerStep2BRequestDto request)
     {
         try
         {
-            var result = await _remitaService.GetSalaryHistory(loanId, body);
-            return Ok(ApiResponse.Ok("Salary history review successful"));
-
+            var result = await _borrowerOnboardingService.Step2B_ValidateBvnOtpAsync(request);
+            return Ok(ApiResponse.Ok(result.Message, new { loanId = request.LoanId }));
         }
         catch (AppException ex)
         {
-            _logger.LogError(ex, ex.Message);
+            _logger.LogError(ex, "Error during Step 2B for borrower onboarding");
             return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unhandled Error");
-            return StatusCode(400, ApiResponse.Fail("Something went wrong"));
-        }
-    }
-
-    [HttpGet("loan-products/{companyId}")]
-    public async Task<IActionResult> GetLoanProductsByCompanyId([FromRoute] Guid companyId)
-    {
-        try
-        {
-            var result = await _loanProductService.GetLoanProductsByCompanyId(companyId);
-            _logger.LogError("Loan products retrieved successfully");
-            return Ok(ApiResponse.Ok("Loan products retrieved successfully", result));
-        }
-        catch (OpenApiException ex)
-        {
-            _logger.LogError(ex, "Error fetching loan products");
-            return StatusCode(404, ApiResponse.Fail("Company not found"));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unhandled error fetching loan products");
+            _logger.LogError(ex, "Unhandled error during Step 2B");
             return StatusCode(500, ApiResponse.Fail("Something went wrong"));
         }
     }
 
-    [HttpPost("submit/{loanId}")]
-    public async Task<IActionResult> SetMandate([FromRoute] Guid loanId, [FromBody] SubmitRequestDto body)
+    // Step 3: Address and document upload
+    [HttpPost("step3")]
+    public async Task<IActionResult> Step3([FromBody] BorrowerStep3RequestDto request)
     {
         try
         {
-
-            var result = await _remitaService.GenerateMandate(loanId, body);
-            _logger.LogInformation("Mandate generated successfully for loan {LoanId}", loanId);
-            return Ok(ApiResponse.Ok("Enter otp to continue"));
+            var result = await _borrowerOnboardingService.Step3_SaveAddressDocumentsAsync(request);
+            return Ok(ApiResponse.Ok(result.Message, new 
+            { 
+                loanId = request.LoanId,
+                maxLoanEligible = result.MaxLoanEligible,
+                minLoanEligible = result.MinLoanEligible,
+                maxTenor = result.MaxTenor,
+                minTenor = result.MinTenor
+            }));
         }
         catch (AppException ex)
         {
-            _logger.LogError(ex, "Error submitting loan");
+            _logger.LogError(ex, "Error during Step 3 for borrower onboarding");
             return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unhandled error during loan submission");
+            _logger.LogError(ex, "Unhandled error during Step 3");
             return StatusCode(500, ApiResponse.Fail("Something went wrong"));
         }
     }
 
-    [HttpPost("validate/mandate/{loanId}")]
-    public async Task<IActionResult> ValidateMandate([FromRoute] Guid loanId, ValidateMandateOtpRequestDto body)
+    // Step 4: Final loan submission
+    [HttpPost("step4")]
+    public async Task<IActionResult> Step4([FromBody] BorrowerStep4RequestDto request)
     {
         try
         {
-            var result = await _remitaService.ValidateMandate(loanId, body);
-            _logger.LogInformation("Mandate validated successfully for loan {LoanId}", loanId);
-            return Ok(ApiResponse.Ok("Mandate validated successfully", result!));
+            var result = await _borrowerOnboardingService.Step4_SubmitLoanApplicationAsync(request);
+            return Ok(ApiResponse.Ok(result.Message, new 
+            { 
+                loanId = request.LoanId,
+                repaymentAmount = result.RepaymentAmount,
+                tenor = result.Tenor,
+                monthlyRepaymentAmount = result.MonthlyRepaymentAmount
+            }));
         }
         catch (AppException ex)
         {
-            _logger.LogError(ex, "Unhandled error");
+            _logger.LogError(ex, "Error during Step 4 for borrower onboarding");
             return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unhandled error");
-            return StatusCode(500, ApiResponse.Fail("Somethign went wrong."));
-
-        }
-
-    }
-
-    [HttpPost("login")]
-    public async Task<IActionResult> Login([FromBody] LoginRequestDto body)
-    {
-        try
-        {
-            var result = await _authService.Login(body);
-            _logger.LogInformation("User logged in successfully");
-            return Ok(ApiResponse.Ok("Logged in successfully", result));
-        }
-        catch (AppException ex)
-        {
-            _logger.LogError(ex, "Error during login");
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unhandled error during login");
+            _logger.LogError(ex, "Unhandled error during Step 4");
             return StatusCode(500, ApiResponse.Fail("Something went wrong"));
         }
     }
 
-    // [GET]    /api/loans/user/{userId}       // View all loan applications by the user  
-    // [GET]    /api/loans/{id}                // Get details of a specific loan  
-    // [GET]    /api/loans/status/{status}     // (Optional) Filter user loans by status  
-    // [GET]    /api/finance/disbursements     // User or admin can check which loans were disbursed  
+    // Standalone OTP endpoints
+
+    // Generate email OTP
+    [HttpPost("generate-email-otp")]
+    public async Task<IActionResult> GenerateEmailOtp([FromBody] GenerateEmailOtpRequestDto request)
+    {
+        try
+        {
+            var result = await _borrowerOnboardingService.GenerateEmailOtpAsync(request);
+            return Ok(ApiResponse.Ok(result.Message));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error generating email OTP");
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error generating email OTP");
+            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
+        }
+    }
+
+    // Validate email OTP
+    [HttpPost("validate-email-otp")]
+    public async Task<IActionResult> ValidateEmailOtp([FromBody] ValidateEmailOtpRequestDto request)
+    {
+        try
+        {
+            var result = await _borrowerOnboardingService.ValidateEmailOtpAsync(request);
+            return Ok(ApiResponse.Ok(result.Message));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error validating email OTP");
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error validating email OTP");
+            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
+        }
+    }
+
+    // Generate BVN OTP
+    [HttpPost("generate-bvn-otp")]
+    public async Task<IActionResult> GenerateBvnOtp([FromBody] GenerateBvnOtpRequestDto request)
+    {
+        try
+        {
+            var result = await _borrowerOnboardingService.GenerateBvnOtpAsync(request);
+            return Ok(ApiResponse.Ok(result.Message));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error generating BVN OTP");
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error generating BVN OTP");
+            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
+        }
+    }
+
+    // Validate BVN OTP
+    [HttpPost("validate-bvn-otp")]
+    public async Task<IActionResult> ValidateBvnOtp([FromBody] ValidateBvnOtpRequestDto request)
+    {
+        try
+        {
+            var result = await _borrowerOnboardingService.ValidateBvnOtpAsync(request);
+            return Ok(ApiResponse.Ok(result.Message));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error validating BVN OTP");
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error validating BVN OTP");
+            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
+        }
+    }
 }
 
