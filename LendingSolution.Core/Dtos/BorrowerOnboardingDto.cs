@@ -19,9 +19,6 @@ public class BorrowerStep1RequestDto
     public required string Email { get; set; }
     
     [Required]
-    public Guid CompanyId { get; set; }
-    
-    [Required]
     public Guid ProductId { get; set; }
 }
 
@@ -46,11 +43,23 @@ public class BorrowerStep1BResponseDto
     public string Message { get; set; } = "Email validated successfully";
 }
 
+// Resend Step 1 email OTP
+public class ResendStep1EmailOtpRequestDto
+{
+    [Required]
+    public Guid LoanId { get; set; }
+}
+
+public class ResendStep1EmailOtpResponseDto
+{
+    public string Message { get; set; } = "Email OTP has been resent successfully";
+}
+
 // Step 2: Bank and BVN information
 public class BorrowerStep2RequestDto
 {
     [Required]
-    public required string Bank { get; set; }
+    public required string BankCode { get; set; }
     
     [Required]
     public required string AccountNo { get; set; }

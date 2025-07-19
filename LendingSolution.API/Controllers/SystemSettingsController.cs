@@ -10,7 +10,7 @@ namespace LendingSolution.API.Controllers;
 
 [ApiController]
 [Route("api/system")]
-[Authorize(Roles = "SuperAdmin")]
+[Authorize(Roles = "SuperAdmin")]       
 public class SystemSettingsController : ControllerBase
 {
     private readonly ISystemSettingsService _systemSettingsService;

@@ -20,7 +20,7 @@ public class BorrowerApplication : Base
     public required string Employer { get; set; }
     
     // Bank and BVN information (Step 2)
-    public string? Bank { get; set; }
+    public string? BankCode { get; set; }
     public string? AccountNo { get; set; }
     public string? BVN { get; set; }
     

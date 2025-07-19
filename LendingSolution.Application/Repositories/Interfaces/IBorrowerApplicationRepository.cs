@@ -7,6 +7,7 @@ public interface IBorrowerApplicationRepository
     Task<BorrowerApplication> CreateAsync(BorrowerApplication application);
     Task<BorrowerApplication?> GetByIdAsync(Guid id);
     Task<BorrowerApplication?> GetByEmailAsync(string email);
+    Task<BorrowerApplication?> GetByBvnAsync(string bvn);
     Task<BorrowerApplication?> GetByLoanIdAsync(Guid loanId);
     Task<bool> UpdateAsync(BorrowerApplication application);
     Task<bool> DeleteAsync(Guid id);

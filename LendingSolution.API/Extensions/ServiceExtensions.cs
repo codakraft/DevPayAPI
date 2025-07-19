@@ -238,6 +238,8 @@ public static class ServiceExtensions
         services.AddScoped<IWalletService, WalletService>();
         services.AddScoped<IPaystackService, PaystackService>();
         services.AddScoped<IBorrowerOnboardingService, BorrowerOnboardingService>();
+        services.AddScoped<IEmailService, EmailService>();
+        services.AddScoped<ISmsService, SmsService>();
     }
 
     public static void RegisterRepositories(this IServiceCollection services)
@@ -313,6 +315,16 @@ public static class ServiceExtensions
     public static void ConfigurePaystack(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<PaystackSettings>(configuration.GetSection("Paystack"));
+    }
+
+    public static void ConfigureEmailSettings(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<EmailSettings>(configuration.GetSection("EmailSettings"));
+    }
+
+    public static void ConfigureSmsSettings(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<SmsSettings>(configuration.GetSection("SmsSettings"));
     }
 
 }

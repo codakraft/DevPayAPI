@@ -107,8 +107,8 @@ public class BorrowerController(
         try
         {
             var result = await _borrowerOnboardingService.Step3_SaveAddressDocumentsAsync(request);
-            return Ok(ApiResponse.Ok(result.Message, new 
-            { 
+            return Ok(ApiResponse.Ok(result.Message, new
+            {
                 loanId = request.LoanId,
                 maxLoanEligible = result.MaxLoanEligible,
                 minLoanEligible = result.MinLoanEligible,
@@ -135,8 +135,8 @@ public class BorrowerController(
         try
         {
             var result = await _borrowerOnboardingService.Step4_SubmitLoanApplicationAsync(request);
-            return Ok(ApiResponse.Ok(result.Message, new 
-            { 
+            return Ok(ApiResponse.Ok(result.Message, new
+            {
                 loanId = request.LoanId,
                 repaymentAmount = result.RepaymentAmount,
                 tenor = result.Tenor,
@@ -156,6 +156,27 @@ public class BorrowerController(
     }
 
     // Standalone OTP endpoints
+
+    // Resend email OTP for Step 1 (when original expires)
+    [HttpPost("resend-step1-email-otp")]
+    public async Task<IActionResult> ResendStep1EmailOtp([FromBody] ResendStep1EmailOtpRequestDto request)
+    {
+        try
+        {
+            var result = await _borrowerOnboardingService.ResendStep1EmailOtpAsync(request);
+            return Ok(ApiResponse.Ok("Email OTP has been resent successfully"));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error resending Step 1 email OTP for loan ID: {LoanId}", request.LoanId);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error resending Step 1 email OTP for loan ID: {LoanId}", request.LoanId);
+            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
+        }
+    }
 
     // Generate email OTP
     [HttpPost("generate-email-otp")]

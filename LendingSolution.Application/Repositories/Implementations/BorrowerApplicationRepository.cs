@@ -39,6 +39,15 @@ public class BorrowerApplicationRepository : IBorrowerApplicationRepository
             .FirstOrDefaultAsync(ba => ba.Email == email && ba.IsActive);
     }
 
+    public async Task<BorrowerApplication?> GetByBvnAsync(string bvn)
+    {
+        return await _context.BorrowerApplications
+            .Include(ba => ba.Company)
+            .Include(ba => ba.Product)
+            .Include(ba => ba.Loan)
+            .FirstOrDefaultAsync(ba => ba.BVN == bvn && ba.IsActive);
+    }
+
     public async Task<BorrowerApplication?> GetByLoanIdAsync(Guid loanId)
     {
         return await _context.BorrowerApplications

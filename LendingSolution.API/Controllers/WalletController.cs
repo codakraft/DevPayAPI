@@ -1,5 +1,7 @@
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
+using LendingSolution.API.Models;
+using LendingSolution.Application.Exceptions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -174,14 +176,15 @@ public class WalletController : ControllerBase
             var wallet = await _walletService.CreateSuperAdminWalletAsync();
             return CreatedAtAction(nameof(GetSuperAdminWallet), wallet);
         }
-        catch (InvalidOperationException ex)
+        catch (AppException ex)
         {
-            return BadRequest(ex.Message);
+            _logger.LogError(ex, "Error creating SuperAdmin wallet");
+            return StatusCode(ex.StatusCode, ex.Message);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating SuperAdmin wallet");
-            return StatusCode(500, "An error occurred while creating the SuperAdmin wallet");
+            _logger.LogError(ex, "Unhandled error creating SuperAdmin wallet");
+            return StatusCode(500, "Something went wrong");
         }
     }
 
@@ -215,10 +218,15 @@ public class WalletController : ControllerBase
             var result = await _walletService.InitiateWalletFundingAsync(fundWalletDto);
             return Ok(result);
         }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error initiating wallet funding");
+            return StatusCode(ex.StatusCode, ex.Message);
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error initiating wallet funding: {WalletId}", fundWalletDto.WalletId);
-            return StatusCode(500, "An error occurred while initiating wallet funding");
+            _logger.LogError(ex, "Unhandled error initiating wallet funding");
+            return StatusCode(500, "Something went wrong");
         }
     }
 
@@ -235,13 +243,18 @@ public class WalletController : ControllerBase
             {
                 return Ok(new { message = "Wallet funding completed successfully" });
             }
-            
+
             return BadRequest("Failed to complete wallet funding");
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error completing wallet funding");
+            return StatusCode(ex.StatusCode, ex.Message);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error completing wallet funding: {Reference}", paystackReference);
-            return StatusCode(500, "An error occurred while completing wallet funding");
+            _logger.LogError(ex, "Unhandled error completing wallet funding");
+            return StatusCode(500, "Something went wrong");
         }
     }
 
@@ -279,13 +292,18 @@ public class WalletController : ControllerBase
             {
                 return Ok(new { message = "Wallet debited successfully" });
             }
-            
+
             return BadRequest("Failed to debit wallet. Check balance and try again.");
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error debiting wallet");
+            return StatusCode(ex.StatusCode, ex.Message);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error debiting wallet: {WalletId}", debitWalletDto.WalletId);
-            return StatusCode(500, "An error occurred while debiting the wallet");
+            _logger.LogError(ex, "Unhandled error debiting wallet");
+            return StatusCode(500, "Something went wrong");
         }
     }
 
@@ -294,8 +312,8 @@ public class WalletController : ControllerBase
     /// </summary>
     [HttpGet("{walletId}/transactions")]
     public async Task<ActionResult<List<WalletTransactionDto>>> GetWalletTransactions(
-        Guid walletId, 
-        [FromQuery] int page = 1, 
+        Guid walletId,
+        [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20)
     {
         try
@@ -321,10 +339,15 @@ public class WalletController : ControllerBase
             var transactions = await _walletService.GetWalletTransactionsAsync(walletId, page, pageSize);
             return Ok(transactions);
         }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error getting wallet transactions");
+            return StatusCode(ex.StatusCode, ex.Message);
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting wallet transactions: {WalletId}", walletId);
-            return StatusCode(500, "An error occurred while retrieving wallet transactions");
+            _logger.LogError(ex, "Unhandled error getting wallet transactions");
+            return StatusCode(500, "Something went wrong");
         }
     }
 
@@ -357,10 +380,15 @@ public class WalletController : ControllerBase
             var transactions = await _walletService.GetTransactionsByQueryAsync(query);
             return Ok(transactions);
         }
-        catch (Exception ex)
+        catch (AppException ex)
         {
             _logger.LogError(ex, "Error querying wallet transactions");
-            return StatusCode(500, "An error occurred while querying wallet transactions");
+            return StatusCode(ex.StatusCode, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error querying wallet transactions");
+            return StatusCode(500, "Something went wrong");
         }
     }
 
@@ -396,10 +424,15 @@ public class WalletController : ControllerBase
             var report = await _walletService.GetWalletReportAsync(walletId, fromDate, toDate);
             return Ok(report);
         }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error getting wallet report");
+            return StatusCode(ex.StatusCode, ex.Message);
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting wallet report: {WalletId}", walletId);
-            return StatusCode(500, "An error occurred while generating the wallet report");
+            _logger.LogError(ex, "Unhandled error getting wallet report");
+            return StatusCode(500, "Something went wrong");
         }
     }
 
@@ -413,25 +446,30 @@ public class WalletController : ControllerBase
         try
         {
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value!;
-            
+
             var result = await _walletService.TransferFundsAsync(
-                transferDto.FromWalletId, 
-                transferDto.ToWalletId, 
-                transferDto.Amount, 
-                transferDto.Description, 
+                transferDto.FromWalletId,
+                transferDto.ToWalletId,
+                transferDto.Amount,
+                transferDto.Description,
                 userId);
 
             if (result)
             {
                 return Ok(new { message = "Funds transferred successfully" });
             }
-            
+
             return BadRequest("Failed to transfer funds");
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error transferring funds");
+            return StatusCode(ex.StatusCode, ex.Message);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error transferring funds");
-            return StatusCode(500, "An error occurred while transferring funds");
+            _logger.LogError(ex, "Unhandled error transferring funds");
+            return StatusCode(500, "Something went wrong");
         }
     }
 
@@ -464,21 +502,15 @@ public class WalletController : ControllerBase
             var hasSufficientBalance = await _walletService.HasSufficientBalanceAsync(walletId, amount);
             return Ok(new { hasSufficientBalance, currentBalance = wallet.Balance, requiredAmount = amount });
         }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error checking wallet balance");
+            return StatusCode(ex.StatusCode, ex.Message);
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error checking wallet balance: {WalletId}", walletId);
-            return StatusCode(500, "An error occurred while checking wallet balance");
+            _logger.LogError(ex, "Unhandled error checking wallet balance");
+            return StatusCode(500, "Something went wrong");
         }
     }
-}
-
-/// <summary>
-/// DTO for fund transfer between wallets
-/// </summary>
-public class TransferFundsDto
-{
-    public Guid FromWalletId { get; set; }
-    public Guid ToWalletId { get; set; }
-    public decimal Amount { get; set; }
-    public string Description { get; set; } = string.Empty;
 }
