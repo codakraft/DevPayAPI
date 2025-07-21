@@ -60,3 +60,6 @@ TestResults/
 # Ignore sensitive config (if you ever add them)
 appsettings.Development.json
 appsettings.Local.json
+
+# Firebase service account key (contains sensitive credentials)
+firebase-service-account-key.json

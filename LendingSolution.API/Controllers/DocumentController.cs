@@ -16,12 +16,40 @@ namespace LendingSolution.API.Controllers;
 public class DocumentController : ControllerBase
 {
     private readonly IDocumentService _documentService;
+    private readonly IThirdPartyDocumentService _firebaseService;
     private readonly ILogger<DocumentController> _logger;
 
-    public DocumentController(IDocumentService documentService, ILogger<DocumentController> logger)
+    public DocumentController(IDocumentService documentService, IThirdPartyDocumentService firebaseService, ILogger<DocumentController> logger)
     {
         _documentService = documentService;
+        _firebaseService = firebaseService;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Test Firebase connectivity
+    /// </summary>
+    [HttpGet("test-firebase")]
+    public async Task<IActionResult> TestFirebase()
+    {
+        try
+        {
+            // Test with a small dummy file
+            var testBase64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("Test file content"));
+            var result = await _firebaseService.UploadDocumentAsync(testBase64, "test-file", ".txt");
+            
+            return Ok(ApiResponse.Ok("Firebase test completed", new { 
+                Success = result.Success, 
+                DocumentId = result.DocumentId,
+                Url = result.Url,
+                ErrorMessage = result.ErrorMessage
+            }));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Firebase test failed");
+            return StatusCode(500, ApiResponse.Fail($"Firebase test failed: {ex.Message}"));
+        }
     }
 
     /// <summary>

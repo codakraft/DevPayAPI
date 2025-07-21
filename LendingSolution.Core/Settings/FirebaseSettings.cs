@@ -12,5 +12,5 @@ public class FirebaseSettings
     public string StorageBucket { get; set; } = string.Empty;
     public string MessagingSenderId { get; set; } = string.Empty;
     public string AppId { get; set; } = string.Empty;
-    public string ServiceAccountKey { get; set; } = string.Empty; // Path to service account key file or JSON content
+    public string ServiceAccountKey { get; set; } = string.Empty; // Path to service account key file (deprecated - now reads from firebase-service-account-key.json)
 }

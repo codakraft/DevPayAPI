@@ -46,14 +46,18 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-
 app.UseCors(x => x.AllowAnyHeader().AllowAnyOrigin().AllowAnyMethod());
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.UseSwagger();
 app.UseSwaggerUI();
-
+app.UseReDoc(c =>
+{
+    c.RoutePrefix = "docs"; // ReDoc UI will be at /docs
+    c.DocumentTitle = "My API Docs";
+    c.SpecUrl("/swagger/v1/swagger.json");
+});
 
 app.MapControllers();
 app.MapHealthChecks("/health");
@@ -61,8 +65,10 @@ app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.Health
 {
     Predicate = check => check.Tags.Contains("ready")
 });
+
 app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {
     Predicate = check => check.Tags.Contains("live")
 });
+
 app.Run();
