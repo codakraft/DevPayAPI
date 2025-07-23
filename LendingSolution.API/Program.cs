@@ -2,6 +2,7 @@ using LendingSolution.API.Extensions;
 using LendingSolution.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
+using System.Globalization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,6 +23,10 @@ builder.Services.ConfigureSmsSettings(builder.Configuration);
 builder.Services.AddJwtConfiguration(builder.Configuration);
 builder.Services.ConfigureJwt(builder.Configuration);
 builder.Services.ConfigureEndpointExplorer();
+
+var nigeriaCulture = new CultureInfo("en-NG");
+CultureInfo.DefaultThreadCurrentCulture = nigeriaCulture;
+CultureInfo.DefaultThreadCurrentUICulture = nigeriaCulture;
 
 var app = builder.Build();
 

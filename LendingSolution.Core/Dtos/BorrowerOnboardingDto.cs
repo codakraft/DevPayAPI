@@ -102,10 +102,17 @@ public class BorrowerStep3RequestDto
     
     [Required]
     public required string FrontImageBase64 { get; set; }
+
+    [Required]
+    public required string FrontImageExtension { get; set; } = "png"; // Default to PNG
+
     
     [Required]
     public required string BackImageBase64 { get; set; }
     
+    [Required]
+    public required string BackImageExtension { get; set; } = "png"; // Default to PNG
+
     [Required]
     public Guid LoanId { get; set; }
 }

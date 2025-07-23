@@ -112,11 +112,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
     public async Task<BorrowerStep2ResponseDto> Step2_SaveBankBvnInfoAsync(BorrowerStep2RequestDto request)
     {
-        var application = await _borrowerRepository.GetByIdAsync(request.LoanId);
-        if (application == null)
-        {
-            throw new AppException("Application not found", 404);
-        }
+        var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
 
         if (application.CurrentStep != BorrowerOnboardingStep.Step1B_EmailValidated)
         {
@@ -169,11 +165,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
     public async Task<BorrowerStep3ResponseDto> Step3_SaveAddressDocumentsAsync(BorrowerStep3RequestDto request)
     {
-        var application = await _borrowerRepository.GetByIdAsync(request.LoanId);
-        if (application == null)
-        {
-            throw new AppException("Application not found", 404);
-        }
+        var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
 
         if (application.CurrentStep != BorrowerOnboardingStep.Step2B_BvnValidated)
         {
@@ -184,25 +176,23 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         var frontDocResult = await _documentService.UploadDocumentAsync(new UploadDocumentDto
         {
             DocumentName = $"ID_Front_{application.Email}",
-            Base64String = request.FrontImageBase64
+            Base64String = request.FrontImageBase64,
+            FileExtension = request.FrontImageExtension
+
         }, application.Id.ToString());
 
         var backDocResult = await _documentService.UploadDocumentAsync(new UploadDocumentDto
         {
             DocumentName = $"ID_Back_{application.Email}",
-            Base64String = request.BackImageBase64
+            Base64String = request.BackImageBase64,
+            FileExtension = request.BackImageExtension
         }, application.Id.ToString());
 
         // Calculate loan eligibility (mock calculation based on product)
-        var product = application.Product ?? await _loanProductRepository.GetLoanProductById(application.ProductId);
+        var product = application.Product ?? await _loanProductRepository.GetLoanProductById(application.ProductId) ?? throw new AppException("Loan product not found", 404);
 
-        if (product == null)
-        {
-            throw new AppException("Loan product not found", 404);
-        }
-
-        var minLoanEligible = product.MinAmount;
-        var maxLoanEligible = product.MaxAmount * 0.8m; // 80% of max as example
+        var minLoanEligible = product.MinAmount * 0.8m;
+        var maxLoanEligible = product.MaxAmount; // 80% of max as example
         var minTenor = product.MinTenor;
         var maxTenor = product.MaxTenor;
 
@@ -227,7 +217,6 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             MaxLoanEligible = maxLoanEligible,
             MinTenor = minTenor,
             MaxTenor = maxTenor
-
         };
     }
 
@@ -317,8 +306,8 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
             // Send actual email OTP
             var emailSent = await _emailService.SendOtpEmailAsync(
-                request.EmailAddress, 
-                otp, 
+                request.EmailAddress,
+                otp,
                 "Email Verification"
             );
 
@@ -367,16 +356,16 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             // Note: In a real implementation, BVN OTP would be sent via the bank's SMS service
             // or retrieved from a BVN verification service like Mono, Paystack, or Flutterwave
             // For now, we simulate the OTP generation and logging
-            
+
             // In production, this would be:
             // 1. Call BVN verification service to get phone number
             // 2. Send OTP via that phone number
             // 3. The OTP validation would also go through the BVN service
-            
+
             // Simulate SMS sending (replace with actual BVN service integration)
             var phoneNumber = "0901234567"; // This would come from BVN service
             var smsSent = await _smsService.SendOtpSmsAsync(phoneNumber, otp, "BVN Verification");
-            
+
             if (!smsSent)
             {
                 // In development, this might be expected if SMS is not configured
@@ -413,18 +402,18 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
         // Generate new OTP
         var otp = GenerateOtp();
-        
+
         // Update application with new OTP
         application.LastEmailOtp = otp;
         application.EmailOtpGeneratedAt = DateTime.UtcNow;
         application.UpdatedAt = DateTime.UtcNow;
-        
+
         await _borrowerRepository.UpdateAsync(application);
 
         // Send actual email OTP
         var emailSent = await _emailService.SendOtpEmailAsync(
-            application.Email, 
-            otp, 
+            application.Email,
+            otp,
             "Email Verification - Resent"
         );
 
