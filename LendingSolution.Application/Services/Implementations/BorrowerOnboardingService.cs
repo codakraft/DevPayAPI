@@ -438,4 +438,149 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
         return providedOtp == storedOtp;
     }
+
+    public async Task<BorrowerCurrentStepResponseDto> GetCurrentStepAsync(BorrowerCurrentStepRequestDto request)
+    {
+        var borrowerApplication = await _borrowerRepository.GetByLoanIdAsync(request.LoanId);
+        if (borrowerApplication == null)
+        {
+            throw new AppException("Borrower application not found", 404);
+        }
+
+        var response = new BorrowerCurrentStepResponseDto
+        {
+            LoanId = borrowerApplication.LoanId ?? Guid.Empty,
+            Email = borrowerApplication.Email,
+            FirstName = borrowerApplication.FirstName,
+            LastName = borrowerApplication.LastName,
+            CurrentStep = borrowerApplication.CurrentStep,
+            CurrentStepName = GetStepName(borrowerApplication.CurrentStep),
+            CurrentStepDescription = GetStepDescription(borrowerApplication.CurrentStep),
+            IsCompleted = borrowerApplication.IsCompleted,
+            CreatedAt = borrowerApplication.CreatedAt,
+            UpdatedAt = borrowerApplication.UpdatedAt,
+            StepNumber = GetStepNumber(borrowerApplication.CurrentStep),
+            TotalSteps = 6,
+            CompanyName = borrowerApplication.Company?.Name ?? "Unknown Company",
+            ProductName = borrowerApplication.Product?.Name ?? "Unknown Product",
+            RequiredActions = GetRequiredActions(borrowerApplication.CurrentStep)
+        };
+
+        // Calculate progress percentage
+        response.ProgressPercentage = Math.Round((decimal)response.StepNumber / response.TotalSteps * 100, 2);
+
+        // Set next step information if not completed
+        if (!borrowerApplication.IsCompleted)
+        {
+            var nextStep = GetNextStep(borrowerApplication.CurrentStep);
+            if (nextStep.HasValue)
+            {
+                response.NextStepName = GetStepName(nextStep.Value);
+                response.NextStepDescription = GetStepDescription(nextStep.Value);
+            }
+        }
+
+        // Set completion timestamps based on current step
+        if (borrowerApplication.CurrentStep >= BorrowerOnboardingStep.Step1B_EmailValidated || borrowerApplication.IsCompleted)
+        {
+            response.EmailVerifiedAt = borrowerApplication.EmailVerifiedAt;
+        }
+        
+        if (borrowerApplication.CurrentStep >= BorrowerOnboardingStep.Step2B_BvnValidated || borrowerApplication.IsCompleted)
+        {
+            response.BvnVerifiedAt = borrowerApplication.BvnVerifiedAt;
+        }
+        
+        if (borrowerApplication.CurrentStep >= BorrowerOnboardingStep.Step3_DocumentsUploaded || borrowerApplication.IsCompleted)
+        {
+            response.DocumentsUploadedAt = borrowerApplication.DocumentsUploadedAt;
+        }
+        
+        if (borrowerApplication.CurrentStep >= BorrowerOnboardingStep.Step4_LoanSubmitted || borrowerApplication.IsCompleted)
+        {
+            response.LoanSubmittedAt = borrowerApplication.LoanSubmittedAt;
+        }
+
+        // Set eligibility information if available (after Step 3 completion)
+        if (borrowerApplication.CurrentStep >= BorrowerOnboardingStep.Step3_DocumentsUploaded)
+        {
+            response.MaxLoanEligible = borrowerApplication.MaxLoanEligible;
+            response.MinLoanEligible = borrowerApplication.MinLoanEligible;
+            response.MaxTenor = borrowerApplication.MaxTenor;
+            response.MinTenor = borrowerApplication.MinTenor;
+        }
+
+        return response;
+    }
+
+    private static string GetStepName(BorrowerOnboardingStep step)
+    {
+        return step switch
+        {
+            BorrowerOnboardingStep.Step1_EmailSent => "Email Verification",
+            BorrowerOnboardingStep.Step1B_EmailValidated => "Email Verified",
+            BorrowerOnboardingStep.Step2_BvnSubmitted => "Bank & BVN Information",
+            BorrowerOnboardingStep.Step2B_BvnValidated => "BVN Verified",
+            BorrowerOnboardingStep.Step3_DocumentsUploaded => "Documents Upload",
+            BorrowerOnboardingStep.Step4_LoanSubmitted => "Loan Application",
+            _ => "Unknown Step"
+        };
+    }
+
+    private static string GetStepDescription(BorrowerOnboardingStep step)
+    {
+        return step switch
+        {
+            BorrowerOnboardingStep.Step1_EmailSent => "Please verify your email address by entering the OTP sent to your email.",
+            BorrowerOnboardingStep.Step1B_EmailValidated => "Email verified successfully. Proceed to provide your bank and BVN information.",
+            BorrowerOnboardingStep.Step2_BvnSubmitted => "Please verify your BVN by entering the OTP sent to your registered phone number.",
+            BorrowerOnboardingStep.Step2B_BvnValidated => "BVN verified successfully. Please upload your required documents.",
+            BorrowerOnboardingStep.Step3_DocumentsUploaded => "Documents uploaded successfully. You can now submit your loan application.",
+            BorrowerOnboardingStep.Step4_LoanSubmitted => "Loan application submitted successfully. Your application is under review.",
+            _ => "Unknown step description"
+        };
+    }
+
+    private static int GetStepNumber(BorrowerOnboardingStep step)
+    {
+        return step switch
+        {
+            BorrowerOnboardingStep.Step1_EmailSent => 1,
+            BorrowerOnboardingStep.Step1B_EmailValidated => 2,
+            BorrowerOnboardingStep.Step2_BvnSubmitted => 3,
+            BorrowerOnboardingStep.Step2B_BvnValidated => 4,
+            BorrowerOnboardingStep.Step3_DocumentsUploaded => 5,
+            BorrowerOnboardingStep.Step4_LoanSubmitted => 6,
+            _ => 0
+        };
+    }
+
+    private static BorrowerOnboardingStep? GetNextStep(BorrowerOnboardingStep currentStep)
+    {
+        return currentStep switch
+        {
+            BorrowerOnboardingStep.Step1_EmailSent => BorrowerOnboardingStep.Step1B_EmailValidated,
+            BorrowerOnboardingStep.Step1B_EmailValidated => BorrowerOnboardingStep.Step2_BvnSubmitted,
+            BorrowerOnboardingStep.Step2_BvnSubmitted => BorrowerOnboardingStep.Step2B_BvnValidated,
+            BorrowerOnboardingStep.Step2B_BvnValidated => BorrowerOnboardingStep.Step3_DocumentsUploaded,
+            BorrowerOnboardingStep.Step3_DocumentsUploaded => BorrowerOnboardingStep.Step4_LoanSubmitted,
+            BorrowerOnboardingStep.Step4_LoanSubmitted => null, // Final step
+            _ => null
+        };
+    }
+
+    private static List<string> GetRequiredActions(BorrowerOnboardingStep step)
+    {
+        return step switch
+        {
+            BorrowerOnboardingStep.Step1_EmailSent => new List<string> { "Verify your email address using the OTP sent to your email" },
+            BorrowerOnboardingStep.Step1B_EmailValidated => new List<string> { "Provide your bank account details and BVN information" },
+            BorrowerOnboardingStep.Step2_BvnSubmitted => new List<string> { "Verify your BVN using the OTP sent to your registered phone number" },
+            BorrowerOnboardingStep.Step2B_BvnValidated => new List<string> { "Upload required documents (ID, utility bill, passport photo)" },
+            BorrowerOnboardingStep.Step3_DocumentsUploaded => new List<string> { "Submit your loan application with desired amount and tenor" },
+            BorrowerOnboardingStep.Step4_LoanSubmitted => new List<string> { "Your application is complete and under review" },
+            _ => new List<string>()
+        };
+    }
 }
+

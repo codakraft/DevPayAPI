@@ -261,5 +261,26 @@ public class BorrowerController(
             return StatusCode(500, ApiResponse.Fail("Something went wrong"));
         }
     }
+
+    // Get current step status for borrower application
+    [HttpPost("current-step")]
+    public async Task<IActionResult> GetCurrentStep([FromBody] BorrowerCurrentStepRequestDto request)
+    {
+        try
+        {
+            var result = await _borrowerOnboardingService.GetCurrentStepAsync(request);
+            return Ok(ApiResponse.Ok("Current step retrieved successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error retrieving current step for loan ID {LoanId}", request.LoanId);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error retrieving current step for loan ID {LoanId}", request.LoanId);
+            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
+        }
+    }
 }
 

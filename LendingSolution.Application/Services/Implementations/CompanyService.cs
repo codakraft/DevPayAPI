@@ -500,20 +500,12 @@ public class CompanyService : ICompanyService
             users = users.Where(u => u.LastLoginAt <= filter.LastLoginTo.Value.AddDays(1)).ToList();
         }
 
-        // Get all loans for the company to calculate user statistics
-        var companyLoans = await _loanRepository.GetAllLoansByCompanyId(companyId);
-        var loansList = companyLoans.ToList();
-
-        // Map users to DTOs with loan statistics
+        // Map users to DTOs with roles
         var userDtos = new List<CompanyUserDto>();
         foreach (var user in users)
         {
-            var userLoans = loansList.Where(l => l.UserId == user.Id).ToList();
-            var activeLoans = userLoans.Count(l => l.Status == LoanStatus.Disbursed);
-            var pendingLoans = userLoans.Count(l => l.Status == LoanStatus.Pending);
-            var totalLoanAmount = userLoans.Sum(l => l.Amount);
-            var outstandingAmount = userLoans.Where(l => l.Status == LoanStatus.Disbursed).Sum(l => l.Amount); // Simplified
-
+            var userRoles = await _userManager.GetRolesAsync(user);
+            
             var userDto = new CompanyUserDto
             {
                 Id = user.Id,
@@ -529,38 +521,20 @@ public class CompanyService : ICompanyService
                 IsActive = user.IsActive,
                 CreatedAt = user.CreatedAt,
                 LastLoginAt = user.LastLoginAt,
-                TotalLoans = userLoans.Count,
-                ActiveLoans = activeLoans,
-                PendingLoans = pendingLoans,
-                TotalLoanAmount = totalLoanAmount,
-                OutstandingAmount = outstandingAmount
+                Role = userRoles.FirstOrDefault()
             };
 
             userDtos.Add(userDto);
         }
 
-        // Apply loan-based filters
-        if (filter.MinLoans.HasValue)
-        {
-            userDtos = userDtos.Where(u => u.TotalLoans >= filter.MinLoans.Value).ToList();
-        }
-
-        if (filter.MaxLoans.HasValue)
-        {
-            userDtos = userDtos.Where(u => u.TotalLoans <= filter.MaxLoans.Value).ToList();
-        }
-
-        if (filter.MinLoanAmount.HasValue)
-        {
-            userDtos = userDtos.Where(u => u.TotalLoanAmount >= filter.MinLoanAmount.Value).ToList();
-        }
-
-        if (filter.MaxLoanAmount.HasValue)
-        {
-            userDtos = userDtos.Where(u => u.TotalLoanAmount <= filter.MaxLoanAmount.Value).ToList();
-        }
-
         var totalCount = userDtos.Count;
+
+        // Apply role-based filtering
+        if (!string.IsNullOrEmpty(filter.Role))
+        {
+            userDtos = userDtos.Where(u => u.Role == filter.Role).ToList();
+            totalCount = userDtos.Count;
+        }
 
         // Apply sorting
         userDtos = filter.SortBy?.ToLower() switch
@@ -577,12 +551,9 @@ public class CompanyService : ICompanyService
             "isactive" => filter.SortOrder?.ToLower() == "desc"
                 ? userDtos.OrderByDescending(u => u.IsActive).ToList()
                 : userDtos.OrderBy(u => u.IsActive).ToList(),
-            "totalloans" => filter.SortOrder?.ToLower() == "desc"
-                ? userDtos.OrderByDescending(u => u.TotalLoans).ToList()
-                : userDtos.OrderBy(u => u.TotalLoans).ToList(),
-            "totalloanamount" => filter.SortOrder?.ToLower() == "desc"
-                ? userDtos.OrderByDescending(u => u.TotalLoanAmount).ToList()
-                : userDtos.OrderBy(u => u.TotalLoanAmount).ToList(),
+            "role" => filter.SortOrder?.ToLower() == "desc"
+                ? userDtos.OrderByDescending(u => u.Role ?? string.Empty).ToList()
+                : userDtos.OrderBy(u => u.Role ?? string.Empty).ToList(),
             "lastloginat" => filter.SortOrder?.ToLower() == "desc"
                 ? userDtos.OrderByDescending(u => u.LastLoginAt).ToList()
                 : userDtos.OrderBy(u => u.LastLoginAt).ToList(),
@@ -603,9 +574,6 @@ public class CompanyService : ICompanyService
         // Calculate summary statistics
         var totalActiveUsers = userDtos.Count(u => u.IsActive);
         var totalInactiveUsers = userDtos.Count(u => !u.IsActive);
-        var totalUsersWithLoans = userDtos.Count(u => u.TotalLoans > 0);
-        var totalLoanAmountAcrossUsers = userDtos.Sum(u => u.TotalLoanAmount);
-        var averageLoanAmountPerUser = totalUsersWithLoans > 0 ? totalLoanAmountAcrossUsers / totalUsersWithLoans : 0;
 
         return new PagedCompanyUserListDto
         {
@@ -617,10 +585,7 @@ public class CompanyService : ICompanyService
             HasNextPage = filter.Page < totalPages,
             HasPreviousPage = filter.Page > 1,
             TotalActiveUsers = totalActiveUsers,
-            TotalInactiveUsers = totalInactiveUsers,
-            TotalUsersWithLoans = totalUsersWithLoans,
-            TotalLoanAmountAcrossUsers = totalLoanAmountAcrossUsers,
-            AverageLoanAmountPerUser = averageLoanAmountPerUser
+            TotalInactiveUsers = totalInactiveUsers
         };
     }
 

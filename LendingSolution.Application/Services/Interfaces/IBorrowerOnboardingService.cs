@@ -30,4 +30,7 @@ public interface IBorrowerOnboardingService
     
     // Resend OTP services
     Task<ResendStep1EmailOtpResponseDto> ResendStep1EmailOtpAsync(ResendStep1EmailOtpRequestDto request);
+    
+    // Current step tracking
+    Task<BorrowerCurrentStepResponseDto> GetCurrentStepAsync(BorrowerCurrentStepRequestDto request);
 }
