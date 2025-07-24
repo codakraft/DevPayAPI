@@ -12,4 +12,5 @@ public interface ICompanyService
    Task Activate(Guid id);
    Task Deactivate(Guid id);
    Task<PagedCompanyListDto> GetAllCompaniesAsync(CompanyFilterDto filter);
+   Task<PagedCompanyUserListDto> GetCompanyUsersAsync(Guid companyId, CompanyUserFilterDto filter);
 }

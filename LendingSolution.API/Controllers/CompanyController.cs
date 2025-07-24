@@ -537,4 +537,68 @@ public class CompanyController(
         }
     }
 
+    /// <summary>
+    /// Gets all users that belong to the admin's company
+    /// </summary>
+    /// <param name="filter">Filter parameters for searching and filtering users</param>
+    /// <returns>Paginated list of company users with statistics</returns>
+    // [GET] /api/company/users
+    [HttpGet("users")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetCompanyUsers([FromQuery] CompanyUserFilterDto filter)
+    {
+        try
+        {
+            // Get company ID from JWT
+            var companyIdClaim = User.FindFirstValue("CompanyId");
+            if (string.IsNullOrEmpty(companyIdClaim) || !Guid.TryParse(companyIdClaim, out var companyId))
+            {
+                return BadRequest(ApiResponse.Fail("Company ID not found in token"));
+            }
+
+            var result = await _companyService.GetCompanyUsersAsync(companyId, filter);
+            _logger.LogInformation("Company users fetched successfully for company {CompanyId}", companyId);
+            return Ok(ApiResponse.Ok("Company users fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while fetching company users.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    /// <summary>
+    /// Gets all users that belong to a specific company (SuperAdmin only)
+    /// </summary>
+    /// <param name="companyId">The ID of the company</param>
+    /// <param name="filter">Filter parameters for searching and filtering users</param>
+    /// <returns>Paginated list of company users with statistics</returns>
+    // [GET] /api/company/sa/{companyId}/users
+    [HttpGet("sa/{companyId}/users")]
+    [Authorize(Roles = "SuperAdmin")]
+    public async Task<IActionResult> GetCompanyUsersByCompanyId(Guid companyId, [FromQuery] CompanyUserFilterDto filter)
+    {
+        try
+        {
+            var result = await _companyService.GetCompanyUsersAsync(companyId, filter);
+            _logger.LogInformation("Company users fetched successfully for company {CompanyId}", companyId);
+            return Ok(ApiResponse.Ok("Company users fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while fetching company users.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
 }
