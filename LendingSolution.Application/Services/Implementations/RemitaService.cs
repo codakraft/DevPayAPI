@@ -9,6 +9,8 @@ using LendingSolution.Core.Dtos.Response.Remita;
 using LendingSolution.Core.Models;
 using LendingSolution.Core.Settings;
 using LendingSolution.Core.Enum;
+using LendingSolution.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -18,13 +20,15 @@ public class RemitaService(
     IOptions<RemitaSettings> options,
     IHttpClientFactory httpClientFactory,
     ILogger<RemitaService> logger,
-    ICombinedRepository cRepo
+    ICombinedRepository cRepo,
+    ApplicationDbContext db
 ) : IRemitaService
 {
     private readonly RemitaSettings _settings = options.Value;
     private readonly HttpClient _httpClient = httpClientFactory.CreateClient();
     private readonly ILogger<RemitaService> _logger = logger;
     private readonly ICombinedRepository _cRepo = cRepo;
+    private readonly ApplicationDbContext _db = db;
     private string? _cachedToken;
     private DateTime? _tokenExpiry;
     private void AddStandardHeaders(HttpRequestMessage request, string? token)
@@ -116,6 +120,11 @@ public class RemitaService(
         var loan = await _cRepo.GetAllLoanInfoByLoanId(loanId)
                    ?? throw new ArgumentException("Loan not found", nameof(loanId));
 
+        // Get borrower application for account information
+        var borrowerApplication = await _db.BorrowerApplications
+            .FirstOrDefaultAsync(ba => ba.LoanId == loanId)
+            ?? throw new ArgumentException("Borrower application not found for this loan", nameof(loanId));
+
         var startDate = DateTime.UtcNow.ToString("yyyy-MM-dd");
         var endDate = DateTime.Now.AddMonths(body.Tenor).AddDays(loan.Product.Moratorium).ToString("yyyy-MM-dd");
         var requestId = Guid.NewGuid().ToString();
@@ -126,11 +135,11 @@ public class RemitaService(
             merchantId = _settings.MerchantId,
             serviceTypeId = _settings.ServiceTypeId,
             hash,
-            payerName = loan.Account.AccountName,
+            payerName = $"{borrowerApplication.FirstName} {borrowerApplication.LastName}",
             payerEmail = loan.User.Email,
             payerPhone = loan.User.PhoneNumber,
-            payerBankCode = loan.Account.BankCode,
-            payeraccount = loan.Account.AccountNumber,
+            payerBankCode = borrowerApplication.BankCode,
+            payeraccount = borrowerApplication.AccountNo,
             requestId,
             amount = body.Amount,
             mandateType = "SO",
@@ -242,6 +251,11 @@ public class RemitaService(
         var loan = await _cRepo.GetAllLoanInfoByLoanId(loanId)
                    ?? throw new ArgumentException("Loan not found", nameof(loanId));
 
+        // Get borrower application for account information
+        var borrowerApplication = await _db.BorrowerApplications
+            .FirstOrDefaultAsync(ba => ba.LoanId == loanId)
+            ?? throw new ArgumentException("Borrower application not found for this loan", nameof(loanId));
+
         var requestId = Guid.NewGuid().ToString();
         var hash = HashUtils.ComputeSha512Hash($"{_settings.MerchantId}{_settings.ServiceTypeId}{loan.Amount}{_settings.ApiKey}");
         var totalAmount = loan.Amount / loan.DurationInMonths;
@@ -254,8 +268,8 @@ public class RemitaService(
             requestId,
             totalAmount,
             mandateId = loan.MandateId,
-            fundingAccount = loan.Account.AccountNumber,
-            fundingBankCode = loan.Account.BankCode
+            fundingAccount = borrowerApplication.AccountNo,
+            fundingBankCode = borrowerApplication.BankCode
         };
 
         var request = new HttpRequestMessage(HttpMethod.Post,

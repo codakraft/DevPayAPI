@@ -31,10 +31,6 @@ public class LoanListDto
     public string ProductName { get; set; } = string.Empty;
     public decimal ProductInterestRate { get; set; }
     
-    // Account Information
-    public Guid AccountId { get; set; }
-    public string AccountNumber { get; set; } = string.Empty;
-    
     // Additional Info
     public string Message { get; set; } = string.Empty;
     public bool IsMandateGenerated { get; set; }

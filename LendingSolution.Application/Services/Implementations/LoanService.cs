@@ -45,7 +45,7 @@ public class LoanService(
             throw new AppException("A user with this email already exists");
         }
 
-        var existingBvn = await _db.Accounts.FirstOrDefaultAsync(u => u.Bvn == body.Bvn);
+        var existingBvn = await _db.BorrowerApplications.FirstOrDefaultAsync(u => u.BVN == body.Bvn);
 
         if (existingBvn != null)
         {
@@ -249,7 +249,7 @@ public class LoanService(
             .Include(l => l.User)
             .Include(l => l.Company)
             .Include(l => l.Product)
-            .Include(l => l.Account)
+            .Include(l => l.BorrowerApplication)
             .FirstOrDefaultAsync(l => l.Id == loanId);
 
         if (loan == null)
@@ -265,16 +265,22 @@ public class LoanService(
 
     private IQueryable<Loan> ApplyFilters(IQueryable<Loan> query, LoanFilterDto filter, bool excludeCompanyFilter = false)
     {
-        // Search filter (user name, email, purpose, account number)
+        // Search filter (user name, email, purpose)
         if (!string.IsNullOrEmpty(filter.Search))
         {
             var searchTerm = filter.Search.ToLower();
             query = query.Where(l =>
-                l.User.FirstName.ToLower().Contains(searchTerm) ||
-                l.User.LastName.ToLower().Contains(searchTerm) ||
-                (l.User.Email != null && l.User.Email.ToLower().Contains(searchTerm)) ||
-                l.Purpose.ToLower().Contains(searchTerm) ||
-                l.Account.AccountNumber.ToLower().Contains(searchTerm));
+                (l.User != null && (
+                    l.User.FirstName.ToLower().Contains(searchTerm) ||
+                    l.User.LastName.ToLower().Contains(searchTerm) ||
+                    (l.User.Email != null && l.User.Email.ToLower().Contains(searchTerm))
+                )) ||
+                (l.BorrowerApplication != null && (
+                    l.BorrowerApplication.FirstName.ToLower().Contains(searchTerm) ||
+                    l.BorrowerApplication.LastName.ToLower().Contains(searchTerm) ||
+                    l.BorrowerApplication.Email.ToLower().Contains(searchTerm)
+                )) ||
+                l.Purpose.ToLower().Contains(searchTerm));
         }
 
         // Company filter (only for SuperAdmin view)
@@ -358,8 +364,10 @@ public class LoanService(
                 ? query.OrderByDescending(l => l.Status)
                 : query.OrderBy(l => l.Status),
             "username" => filter.SortOrder?.ToLower() == "desc"
-                ? query.OrderByDescending(l => l.User.FirstName).ThenByDescending(l => l.User.LastName)
-                : query.OrderBy(l => l.User.FirstName).ThenBy(l => l.User.LastName),
+                ? query.OrderByDescending(l => l.User != null ? l.User.FirstName : l.BorrowerApplication != null ? l.BorrowerApplication.FirstName : string.Empty)
+                       .ThenByDescending(l => l.User != null ? l.User.LastName : l.BorrowerApplication != null ? l.BorrowerApplication.LastName : string.Empty)
+                : query.OrderBy(l => l.User != null ? l.User.FirstName : l.BorrowerApplication != null ? l.BorrowerApplication.FirstName : string.Empty)
+                       .ThenBy(l => l.User != null ? l.User.LastName : l.BorrowerApplication != null ? l.BorrowerApplication.LastName : string.Empty),
             "companyname" => filter.SortOrder?.ToLower() == "desc"
                 ? query.OrderByDescending(l => l.Company.Name)
                 : query.OrderBy(l => l.Company.Name),
@@ -381,13 +389,38 @@ public class LoanService(
 
     private LoanListDto MapToLoanListDto(Loan loan)
     {
+        // Get user information from User or BorrowerApplication
+        string firstName;
+        string lastName;
+        string email;
+        
+        if (loan.User != null)
+        {
+            firstName = loan.User.FirstName;
+            lastName = loan.User.LastName;
+            email = loan.User.Email ?? string.Empty;
+        }
+        else if (loan.BorrowerApplication != null)
+        {
+            firstName = loan.BorrowerApplication.FirstName;
+            lastName = loan.BorrowerApplication.LastName;
+            email = loan.BorrowerApplication.Email;
+        }
+        else
+        {
+            // Fallback - this should rarely happen
+            firstName = "Unknown";
+            lastName = "User";
+            email = string.Empty;
+        }
+        
         return new LoanListDto
         {
             Id = loan.Id,
-            UserId = loan.UserId,
-            UserFirstName = loan.User.FirstName,
-            UserLastName = loan.User.LastName,
-            UserEmail = loan.User.Email ?? string.Empty,
+            UserId = loan.UserId ?? string.Empty,
+            UserFirstName = firstName,
+            UserLastName = lastName,
+            UserEmail = email,
             Amount = loan.Amount,
             DurationInMonths = loan.DurationInMonths,
             Purpose = loan.Purpose,
@@ -403,8 +436,6 @@ public class LoanService(
             ProductId = loan.ProductId,
             ProductName = loan.Product.Name,
             ProductInterestRate = loan.Product.InterestRate,
-            AccountId = loan.AccountId,
-            AccountNumber = loan.Account.AccountNumber,
             Message = loan.Message,
             IsMandateGenerated = loan.IsMandateGenerated,
             MandateId = loan.MandateId

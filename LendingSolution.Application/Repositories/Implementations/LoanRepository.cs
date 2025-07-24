@@ -69,7 +69,7 @@ public class LoanRespository(ApplicationDbContext db) : ILoanRepository
             .Include(l => l.User)
             .Include(l => l.Company)
             .Include(l => l.Product)
-            .Include(l => l.Account)
+            .Include(l => l.BorrowerApplication)
             .AsQueryable();
     }
 
@@ -79,7 +79,7 @@ public class LoanRespository(ApplicationDbContext db) : ILoanRepository
             .Include(l => l.User)
             .Include(l => l.Company)
             .Include(l => l.Product)
-            .Include(l => l.Account)
+            .Include(l => l.BorrowerApplication)
             .Where(l => l.CompanyId == companyId)
             .AsQueryable();
     }

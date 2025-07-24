@@ -17,7 +17,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Employee> Employees { get; set; }
     public DbSet<Company> Companies { get; set; }
     public DbSet<LoanProduct> LoanProducts { get; set; }
-    public DbSet<Account> Accounts { get; set; }
     public DbSet<AdminSettings> AdminSettings { get; set; }
     public DbSet<SystemSettings> SystemSettings { get; set; }
     public DbSet<Document> Documents { get; set; }
@@ -45,13 +44,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             .HasOne(l => l.Company)
             .WithMany()
             .HasForeignKey(l => l.CompanyId)
-            .OnDelete(DeleteBehavior.NoAction);
-
-        // Configure Account relationship (if you have one)
-        modelBuilder.Entity<Loan>()
-            .HasOne(l => l.Account)
-            .WithMany()
-            .HasForeignKey(l => l.AccountId)
             .OnDelete(DeleteBehavior.NoAction);
 
         // Configure User email unique index
@@ -118,11 +110,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             .Property(d => d.Amount)
             .HasColumnType("decimal(18,2)");
 
-        // Fix Entity Framework warnings by adding decimal precision configurations
-        modelBuilder.Entity<Account>()
-            .Property(a => a.MonthlySalary)
-            .HasPrecision(18, 2);
-
         modelBuilder.Entity<LoanProduct>()
             .Property(lp => lp.InterestRate)
             .HasPrecision(5, 4); // Allow for rates like 15.2500%
@@ -182,8 +169,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 
         modelBuilder.Entity<BorrowerApplication>()
             .HasOne(ba => ba.Loan)
-            .WithMany()
-            .HasForeignKey(ba => ba.LoanId)
+            .WithOne(l => l.BorrowerApplication)
+            .HasForeignKey<BorrowerApplication>(ba => ba.LoanId)
             .OnDelete(DeleteBehavior.NoAction);
 
         // Configure decimal precision for BorrowerApplication

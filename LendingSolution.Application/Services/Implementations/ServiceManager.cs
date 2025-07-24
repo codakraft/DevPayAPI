@@ -70,7 +70,8 @@ public class ServiceManager(
                     remitaOptions,
                     httpClientFactory,
                     logger,
-                    cRepo
+                    cRepo,
+                    db
                 ));
     private readonly Lazy<ILoanProductService> _loanProductService = new Lazy<ILoanProductService>(() =>
                 new LoanProductService(loanProductRepository, companyRepository));

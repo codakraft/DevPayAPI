@@ -247,20 +247,22 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         // Create actual loan record
         var loan = new Loan
         {
-            UserId = application.Email, // Temporary - should create actual user
             Amount = request.LoanAmount,
             DurationInMonths = request.Tenor,
-            Purpose = "Personal Loan", // Default purpose
             Status = LoanStatus.Pending,
             CompanyId = application.CompanyId,
-            ProductId = application.ProductId,
-            AccountId = Guid.NewGuid(), // Temporary - should create actual account
-            Message = "Loan application submitted"
+            ProductId = application.ProductId
         };
 
-        // Note: This would normally create the loan in the loans table
-        // For now, we'll just update the application
-        await _loanRepository.CreateLoan(loan);
+        // Create the loan
+        var loanCreated = await _loanRepository.CreateLoan(loan);
+        if (!loanCreated)
+        {
+            throw new AppException("Failed to create loan", 500);
+        }
+        
+        // Since the loan entity now has the generated ID, we can use it
+        application.LoanId = loan.Id;
 
         // Update application
         application.CurrentStep = BorrowerOnboardingStep.Step4_LoanSubmitted;

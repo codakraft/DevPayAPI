@@ -10,8 +10,7 @@ public class CombinedRepository(ApplicationDbContext db) : ICombinedRepository
     ApplicationDbContext _db = db;
     public async Task<Loan?> GetAllLoanInfoByLoanId(Guid loanId)
     {
-        return await _db.Loans.Include(l => l.Account)
-            .Include(l => l.Product)
+        return await _db.Loans.Include(l => l.Product)
             .Include(l => l.User)
             .FirstOrDefaultAsync(l => l.Id == loanId);
     }
@@ -32,16 +31,14 @@ public class CombinedRepository(ApplicationDbContext db) : ICombinedRepository
 
     public async Task<Loan?> GetLoanByMandateIdAsync(string mandateId)
     {
-        return await _db.Loans.Include(l => l.Account)
-            .Include(l => l.Product)
+        return await _db.Loans.Include(l => l.Product)
             .Include(l => l.User)
             .FirstOrDefaultAsync(l => l.MandateId == mandateId);
     }
 
     public async Task<Loan?> GetLoanByTransactionRefAsync(string transactionRef)
     {
-        return await _db.Loans.Include(l => l.Account)
-            .Include(l => l.Product)
+        return await _db.Loans.Include(l => l.Product)
             .Include(l => l.User)
             .FirstOrDefaultAsync(l => l.DisbursementReference == transactionRef || l.RemitaTransRef == transactionRef);
     }
