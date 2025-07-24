@@ -273,7 +273,7 @@ public class CompanyController(
     /// </summary>
     /// <param name="filter">Filter parameters for searching and filtering loans</param>
     /// <returns>Paginated list of loans for the admin's company</returns>
-    // [GET] /api/company/loans
+    // [GET] /api/company/loans[
     [HttpGet("loans")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> GetCompanyLoans([FromQuery] LoanFilterDto filter)
