@@ -187,7 +187,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         // Calculate loan eligibility (mock calculation based on product)
         var product = application.Product ?? await _loanProductRepository.GetLoanProductById(application.ProductId) ?? throw new AppException("Loan product not found", 404);
 
-        var minLoanEligible = product.MinAmount * 0.8m;
+        var minLoanEligible = product.MinAmount;
         var maxLoanEligible = product.MaxAmount; // 80% of max as example
         var minTenor = product.MinTenor;
         var maxTenor = product.MaxTenor;
@@ -260,6 +260,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
         // Note: This would normally create the loan in the loans table
         // For now, we'll just update the application
+        await _loanRepository.CreateLoan(loan);
 
         // Update application
         application.CurrentStep = BorrowerOnboardingStep.Step4_LoanSubmitted;

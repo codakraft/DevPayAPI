@@ -70,7 +70,8 @@ public class AuthService(
                 FirstName = user?.FirstName ?? string.Empty,
                 LastName = user?.LastName ?? string.Empty,
                 Email = user?.Email ?? string.Empty,
-                PhoneNumber = user?.PhoneNumber ?? string.Empty
+                PhoneNumber = user?.PhoneNumber ?? string.Empty,
+                CompanyId = user?.CompanyId
             }
         };
 
@@ -157,7 +158,7 @@ public class AuthService(
         };
 
         var result = await _employeeRepository.CreateEmployeeAsync(employee);
-        
+
         if (!result)
         {
             throw new AppException("Failed to save personal details", 500);
