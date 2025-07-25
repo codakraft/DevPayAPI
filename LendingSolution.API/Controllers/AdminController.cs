@@ -14,14 +14,12 @@ namespace LendingSolution.API.Controllers;
 public class AdminController(
     IAuthService authService, 
     ICompanyService companyService, 
-    IAdminSettingsService adminSettingsService,
     ILoanProductService loanProductService,
     ILoanService loanService,
     ILogger<AdminController> logger) : Controller
 {
     private readonly IAuthService _authService = authService;
     private readonly ICompanyService _companyService = companyService;
-    private readonly IAdminSettingsService _adminSettingsService = adminSettingsService;
     private readonly ILoanProductService _loanProductService = loanProductService;
     private readonly ILoanService _loanService = loanService;
     private readonly ILogger<AdminController> _logger = logger;
@@ -71,89 +69,6 @@ public class AdminController(
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error occurred while assigning role.");
-            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
-        }
-    }
-
-    // [GET]    /api/admin/settings
-    [HttpGet("settings")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
-    public async Task<IActionResult> GetAllSettings()
-    {
-        try
-        {
-            var result = await _adminSettingsService.GetAllSettingsAsync();
-            _logger.LogInformation("Admin settings fetched successfully");
-            return Ok(ApiResponse.Ok("Admin settings fetched successfully", result));
-        }
-        catch (AppException ex)
-        {
-            _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error occurred while fetching admin settings.");
-            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
-        }
-    }
-
-    // [POST]   /api/admin/settings
-    [HttpPost("settings")]
-    [Authorize(Roles = "SuperAdmin")]
-    public async Task<IActionResult> CreateSettings([FromBody] UpdateAdminSettingsDto settingsDto)
-    {
-        try
-        {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId))
-            {
-                return Unauthorized(ApiResponse.Fail("User not authenticated"));
-            }
-
-            var result = await _adminSettingsService.CreateSettingAsync(settingsDto, userId);
-            
-            _logger.LogInformation("Admin settings created successfully by user {UserId}", userId);
-            return Ok(ApiResponse.Ok("Admin settings created successfully", result));
-        }
-        catch (AppException ex)
-        {
-            _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error occurred while creating admin settings.");
-            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
-        }
-    }
-
-    // [PUT]    /api/admin/settings
-    [HttpPut("settings/{id}")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
-    public async Task<IActionResult> UpdateSettings(string id, [FromBody] UpdateAdminSettingsDto settingsDto)
-    {
-        try
-        {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId))
-            {
-                return Unauthorized(ApiResponse.Fail("User not authenticated"));
-            }
-
-            var result = await _adminSettingsService.UpdateSettingAsync(id, settingsDto, userId);
-            
-            _logger.LogInformation("Admin settings {SettingId} updated successfully by user {UserId}", id, userId);
-            return Ok(ApiResponse.Ok("Admin settings updated successfully", result));
-        }
-        catch (AppException ex)
-        {
-            _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error occurred while updating admin settings.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }

@@ -18,7 +18,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Company> Companies { get; set; }
     public DbSet<LoanProduct> LoanProducts { get; set; }
     public DbSet<AdminSettings> AdminSettings { get; set; }
-    public DbSet<SystemSettings> SystemSettings { get; set; }
+    public DbSet<Settings> Settings { get; set; }
     public DbSet<Document> Documents { get; set; }
     public DbSet<Approval> Approvals { get; set; }
     public DbSet<RefreshToken> RefreshTokens { get; set; }
@@ -56,9 +56,51 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             .HasIndex(s => s.SettingKey)
             .IsUnique();
 
-        // Configure SystemSettings - only one active record should exist
-        modelBuilder.Entity<SystemSettings>()
-            .HasIndex(s => s.IsActive);
+        // Configure Settings decimal precision
+        modelBuilder.Entity<Settings>()
+            .Property(s => s.LegalFee)
+            .HasPrecision(18, 2);
+
+        modelBuilder.Entity<Settings>()
+            .Property(s => s.ManagementFee)
+            .HasPrecision(18, 2);
+
+        modelBuilder.Entity<Settings>()
+            .Property(s => s.ProcessingFee)
+            .HasPrecision(18, 2);
+
+        modelBuilder.Entity<Settings>()
+            .Property(s => s.PenaltyFee)
+            .HasPrecision(18, 2);
+
+        modelBuilder.Entity<Settings>()
+            .Property(s => s.LateFee)
+            .HasPrecision(18, 2);
+
+        modelBuilder.Entity<Settings>()
+            .Property(s => s.OtpFee)
+            .HasPrecision(18, 2);
+
+        modelBuilder.Entity<Settings>()
+            .Property(s => s.DocumentationFee)
+            .HasPrecision(18, 2);
+
+        // Configure enum conversion for FeeType
+        modelBuilder.Entity<Settings>()
+            .Property(s => s.OtpFeeType)
+            .HasConversion<int>();
+
+        modelBuilder.Entity<Settings>()
+            .Property(s => s.LegalFeeType)
+            .HasConversion<int>();
+
+        modelBuilder.Entity<Settings>()
+            .Property(s => s.ManagementFeeType)
+            .HasConversion<int>();
+
+        modelBuilder.Entity<Settings>()
+            .Property(s => s.ProcessingFeeType)
+            .HasConversion<int>();
 
         // Configure Approval relationships
         modelBuilder.Entity<Approval>()

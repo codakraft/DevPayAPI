@@ -232,7 +232,7 @@ public static class ServiceExtensions
         services.AddScoped<IRemitaService, RemitaService>();
         services.AddScoped<ISupportToolsService, SupportToolsService>();
         services.AddScoped<IAdminSettingsService, AdminSettingsService>();
-        services.AddScoped<ISystemSettingsService, SystemSettingsService>();
+        services.AddScoped<ISettingsService, SettingsService>();
         services.AddScoped<IFinanceService, FinanceService>();
         services.AddScoped<ISupportService, SupportService>();
         services.AddScoped<IDatabaseResilienceService, DatabaseResilienceService>();
@@ -252,7 +252,7 @@ public static class ServiceExtensions
         services.AddScoped<ILoanProductRepository, LoanProductRepository>();
         services.AddScoped<ILoanRepository, LoanRespository>();
         services.AddScoped<IAdminSettingsRepository, AdminSettingsRepository>();
-        services.AddScoped<ISystemSettingsRepository, SystemSettingsRepository>();
+        services.AddScoped<ISettingsRepository, SettingsRepository>();
         services.AddScoped<IApprovalRepository, ApprovalRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IDisbursementRepository, DisbursementRepository>();
