@@ -11,9 +11,11 @@ public class SystemSettingsDto
     public decimal? PenaltyFees { get; set; }
     public decimal? LateFees { get; set; }
     public decimal? DocumentationFees { get; set; }
+    public decimal? OtpCharges { get; set; }
     public string LegalFeesType { get; set; } = string.Empty;
     public string ManagementFeesType { get; set; } = string.Empty;
     public string ProcessingFeesType { get; set; } = string.Empty;
+    public string OtpChargesType { get; set; } = string.Empty;
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
@@ -44,6 +46,9 @@ public class UpdateSystemSettingsDto
     [Range(0, double.MaxValue, ErrorMessage = "Documentation fees must be a positive value")]
     public decimal? DocumentationFees { get; set; }
     
+    [Range(0, double.MaxValue, ErrorMessage = "OTP charges must be a positive value")]
+    public decimal? OtpCharges { get; set; }
+    
     [Required]
     [RegularExpression("^(PERCENTAGE|FIXED)$", ErrorMessage = "Legal fees type must be either PERCENTAGE or FIXED")]
     public string LegalFeesType { get; set; } = "PERCENTAGE";
@@ -55,4 +60,8 @@ public class UpdateSystemSettingsDto
     [Required]
     [RegularExpression("^(PERCENTAGE|FIXED)$", ErrorMessage = "Processing fees type must be either PERCENTAGE or FIXED")]
     public string ProcessingFeesType { get; set; } = "PERCENTAGE";
+    
+    [Required]
+    [RegularExpression("^(PERCENTAGE|FIXED)$", ErrorMessage = "OTP charges type must be either PERCENTAGE or FIXED")]
+    public string OtpChargesType { get; set; } = "FIXED";
 }

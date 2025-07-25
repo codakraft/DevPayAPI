@@ -17,19 +17,22 @@ public class CompanyService : ICompanyService
     private readonly ILoanRepository _loanRepository;
     private readonly IDisbursementRepository _disbursementRepository;
     private readonly IRepaymentRepository _repaymentRepository;
+    private readonly IWalletService _walletService;
 
     public CompanyService(
         ICompanyRepository companyRepository,
         UserManager<ApplicationUser> userManager,
         ILoanRepository loanRepository,
         IDisbursementRepository disbursementRepository,
-        IRepaymentRepository repaymentRepository)
+        IRepaymentRepository repaymentRepository,
+        IWalletService walletService)
     {
         _companyRepository = companyRepository;
         _userManager = userManager;
         _loanRepository = loanRepository;
         _disbursementRepository = disbursementRepository;
         _repaymentRepository = repaymentRepository;
+        _walletService = walletService;
     }
 
     public async Task Activate(Guid id)
@@ -73,6 +76,17 @@ public class CompanyService : ICompanyService
         if (company == null)
         {
             throw new AppException("Company was not created", 500);
+        }
+
+        // Automatically create a wallet for the new company with starting balance of 0
+        try
+        {
+            await _walletService.CreateCompanyWalletAsync(company.Id);
+        }
+        catch (AppException)
+        {
+            // If wallet already exists, ignore the error - this shouldn't happen but we handle it gracefully
+            // Log this if needed but don't fail the company creation
         }
 
         return new CompanyResponseDto

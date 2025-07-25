@@ -52,9 +52,11 @@ public class SystemSettingsService : ISystemSettingsService
             PenaltyFees = settingsDto.PenaltyFees,
             LateFees = settingsDto.LateFees,
             DocumentationFees = settingsDto.DocumentationFees,
+            OtpCharges = settingsDto.OtpCharges,
             LegalFeesType = settingsDto.LegalFeesType,
             ManagementFeesType = settingsDto.ManagementFeesType,
             ProcessingFeesType = settingsDto.ProcessingFeesType,
+            OtpChargesType = settingsDto.OtpChargesType,
             IsActive = true,
             CreatedBy = userId,
             UpdatedBy = userId,
@@ -82,9 +84,11 @@ public class SystemSettingsService : ISystemSettingsService
         existingSettings.PenaltyFees = settingsDto.PenaltyFees;
         existingSettings.LateFees = settingsDto.LateFees;
         existingSettings.DocumentationFees = settingsDto.DocumentationFees;
+        existingSettings.OtpCharges = settingsDto.OtpCharges;
         existingSettings.LegalFeesType = settingsDto.LegalFeesType;
         existingSettings.ManagementFeesType = settingsDto.ManagementFeesType;
         existingSettings.ProcessingFeesType = settingsDto.ProcessingFeesType;
+        existingSettings.OtpChargesType = settingsDto.OtpChargesType;
         existingSettings.UpdatedBy = userId;
         existingSettings.UpdatedAt = DateTime.UtcNow;
 
@@ -126,6 +130,9 @@ public class SystemSettingsService : ISystemSettingsService
         if (settingsDto.DocumentationFees.HasValue)
             activeSettings.DocumentationFees = settingsDto.DocumentationFees.Value;
             
+        if (settingsDto.OtpCharges.HasValue)
+            activeSettings.OtpCharges = settingsDto.OtpCharges.Value;
+            
         if (!string.IsNullOrEmpty(settingsDto.LegalFeesType))
             activeSettings.LegalFeesType = settingsDto.LegalFeesType;
             
@@ -134,6 +141,9 @@ public class SystemSettingsService : ISystemSettingsService
             
         if (!string.IsNullOrEmpty(settingsDto.ProcessingFeesType))
             activeSettings.ProcessingFeesType = settingsDto.ProcessingFeesType;
+            
+        if (!string.IsNullOrEmpty(settingsDto.OtpChargesType))
+            activeSettings.OtpChargesType = settingsDto.OtpChargesType;
 
         // Update audit fields
         activeSettings.UpdatedBy = userId;
@@ -166,9 +176,11 @@ public class SystemSettingsService : ISystemSettingsService
             PenaltyFees = settings.PenaltyFees,
             LateFees = settings.LateFees,
             DocumentationFees = settings.DocumentationFees,
+            OtpCharges = settings.OtpCharges,
             LegalFeesType = settings.LegalFeesType,
             ManagementFeesType = settings.ManagementFeesType,
             ProcessingFeesType = settings.ProcessingFeesType,
+            OtpChargesType = settings.OtpChargesType,
             IsActive = settings.IsActive,
             CreatedAt = settings.CreatedAt,
             UpdatedAt = settings.UpdatedAt,

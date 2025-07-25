@@ -191,6 +191,8 @@ public static class ServiceExtensions
             var disbursementRepository = provider.GetRequiredService<IDisbursementRepository>();
             var repaymentRepository = provider.GetRequiredService<IRepaymentRepository>();
             var supportTicketRepository = provider.GetRequiredService<ISupportTicketRepository>();
+            var borrowerApplicationRepository = provider.GetRequiredService<IBorrowerApplicationRepository>();
+            var walletService = provider.GetRequiredService<IWalletService>();
 
             return new ServiceManager(
                 contextAccessor,
@@ -213,7 +215,9 @@ public static class ServiceExtensions
                 refreshTokenRepository,
                 disbursementRepository,
                 repaymentRepository,
-                supportTicketRepository
+                supportTicketRepository,
+                borrowerApplicationRepository,
+                walletService
             );
         });
     }
@@ -229,7 +233,6 @@ public static class ServiceExtensions
         services.AddScoped<ISupportToolsService, SupportToolsService>();
         services.AddScoped<IAdminSettingsService, AdminSettingsService>();
         services.AddScoped<ISystemSettingsService, SystemSettingsService>();
-        services.AddScoped<IApprovalService, ApprovalService>();
         services.AddScoped<IFinanceService, FinanceService>();
         services.AddScoped<ISupportService, SupportService>();
         services.AddScoped<IDatabaseResilienceService, DatabaseResilienceService>();
@@ -289,7 +292,12 @@ public static class ServiceExtensions
     public static void ConfigureEndpointExplorer(this IServiceCollection services)
     {
         services.ConfigureSwagger();
-        services.AddControllers();
+        services.AddControllers()
+            .AddJsonOptions(options =>
+            {
+                options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+                options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
+            });
         services.AddEndpointsApiExplorer();
 
     }

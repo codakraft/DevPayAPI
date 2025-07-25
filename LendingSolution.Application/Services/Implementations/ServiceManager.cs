@@ -35,7 +35,9 @@ public class ServiceManager(
     IRefreshTokenRepository refreshTokenRepository,
     IDisbursementRepository disbursementRepository,
     IRepaymentRepository repaymentRepository,
-    ISupportTicketRepository supportTicketRepository
+    ISupportTicketRepository supportTicketRepository,
+    IBorrowerApplicationRepository borrowerApplicationRepository,
+    IWalletService walletService
 ) : IServiceManager
 {
     private readonly Lazy<IAuthService> _authService = new Lazy<IAuthService>(() =>
@@ -55,14 +57,14 @@ public class ServiceManager(
     private readonly Lazy<ITokenService> _tokenService = new Lazy<ITokenService>(() =>
                 new TokenService(userManager, jwtconfig, refreshTokenRepository));
     private readonly Lazy<ICompanyService> _companyService = new Lazy<ICompanyService>(() =>
-                new CompanyService(companyRepository, userManager, loanRepository, disbursementRepository, repaymentRepository));
+                new CompanyService(companyRepository, userManager, loanRepository, disbursementRepository, repaymentRepository, walletService));
     private readonly Lazy<ILoanService> _loanService = new Lazy<ILoanService>(() =>
                 new LoanService(
-                    db,
                     userManager,
                     remitaService,
                     loanRepository,
                     companyRepository,
+                    borrowerApplicationRepository,
                     configuration
                 ));
     private readonly Lazy<IRemitaService> _remitaService = new Lazy<IRemitaService>(() =>

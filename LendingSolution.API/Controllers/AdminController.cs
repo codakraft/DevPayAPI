@@ -15,7 +15,6 @@ public class AdminController(
     IAuthService authService, 
     ICompanyService companyService, 
     IAdminSettingsService adminSettingsService,
-    IApprovalService approvalService,
     ILoanProductService loanProductService,
     ILoanService loanService,
     ILogger<AdminController> logger) : Controller
@@ -23,7 +22,6 @@ public class AdminController(
     private readonly IAuthService _authService = authService;
     private readonly ICompanyService _companyService = companyService;
     private readonly IAdminSettingsService _adminSettingsService = adminSettingsService;
-    private readonly IApprovalService _approvalService = approvalService;
     private readonly ILoanProductService _loanProductService = loanProductService;
     private readonly ILoanService _loanService = loanService;
     private readonly ILogger<AdminController> _logger = logger;
@@ -156,89 +154,6 @@ public class AdminController(
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error occurred while updating admin settings.");
-            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
-        }
-    }
-
-    // [GET]    /api/admin/approvals/pending
-    [HttpGet("approvals/pending")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
-    public async Task<IActionResult> GetPendingApprovals()
-    {
-        try
-        {
-            var result = await _approvalService.GetPendingApprovalsAsync();
-            _logger.LogInformation("Pending approvals fetched successfully");
-            return Ok(ApiResponse.Ok("Pending approvals fetched successfully", result));
-        }
-        catch (AppException ex)
-        {
-            _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error occurred while fetching pending approvals.");
-            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
-        }
-    }
-
-    // [POST]   /api/admin/approvals/{id}/approve
-    [HttpPost("approvals/{id}/approve")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
-    public async Task<IActionResult> ApproveRequest(string id, [FromBody] ProcessApprovalDto? processDto = null)
-    {
-        try
-        {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId))
-            {
-                return Unauthorized(ApiResponse.Fail("User not authenticated"));
-            }
-
-            var result = await _approvalService.ApproveRequestAsync(id, userId, processDto?.Reason);
-            
-            _logger.LogInformation("Approval request {RequestId} approved by user {UserId}", id, userId);
-            return Ok(ApiResponse.Ok("Request approved successfully", result));
-        }
-        catch (AppException ex)
-        {
-            _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error occurred while approving request.");
-            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
-        }
-    }
-
-    // [POST]   /api/admin/approvals/{id}/reject
-    [HttpPost("approvals/{id}/reject")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
-    public async Task<IActionResult> RejectRequest(string id, [FromBody] ProcessApprovalDto? processDto = null)
-    {
-        try
-        {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId))
-            {
-                return Unauthorized(ApiResponse.Fail("User not authenticated"));
-            }
-
-            var result = await _approvalService.RejectRequestAsync(id, userId, processDto?.Reason);
-            
-            _logger.LogInformation("Approval request {RequestId} rejected by user {UserId}", id, userId);
-            return Ok(ApiResponse.Ok("Request rejected successfully", result));
-        }
-        catch (AppException ex)
-        {
-            _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error occurred while rejecting request.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }

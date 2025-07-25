@@ -15,20 +15,20 @@ using LendingSolution.Application.Exceptions;
 namespace LendingSolution.Application.Services.Implementations;
 
 public class LoanService(
-    ApplicationDbContext db,
     UserManager<ApplicationUser> userManager,
     IRemitaService remitaService,
     ILoanRepository loanRepository,
     ICompanyRepository companyRepository,
+    IBorrowerApplicationRepository borrowerApplicationRepository,
     IConfiguration configuration
 ) : ILoanService
 {
-    private readonly ApplicationDbContext _db = db;
     private readonly UserManager<ApplicationUser> _userManager = userManager;
     private readonly IRemitaService _remitaService = remitaService;
     private readonly IConfiguration _configuration = configuration;
     private readonly ICompanyRepository _companyRepository = companyRepository;
     private readonly ILoanRepository _loanRepository = loanRepository;
+    private readonly IBorrowerApplicationRepository _borrowerApplicationRepository = borrowerApplicationRepository;
 
     public async Task<String> Register(RegisterRequestDto body)
     {
@@ -45,7 +45,7 @@ public class LoanService(
             throw new AppException("A user with this email already exists");
         }
 
-        var existingBvn = await _db.BorrowerApplications.FirstOrDefaultAsync(u => u.BVN == body.Bvn);
+        var existingBvn = await _borrowerApplicationRepository.GetByBvnAsync(body.Bvn);
 
         if (existingBvn != null)
         {
@@ -115,15 +115,26 @@ public class LoanService(
             CreatedAt = DateTime.UtcNow
         };
 
-        _db.Loans.Add(loan);
-        await _db.SaveChangesAsync();
+        var created = await _loanRepository.CreateLoan(loan);
+        if (!created)
+        {
+            throw new AppException("Failed to create loan application", 400);
+        }
 
-        return loan;
+        // Return the loan from the repository to get the saved entity
+        var savedLoan = await _loanRepository.GetLoanById(loan.Id);
+        if (savedLoan == null)
+        {
+            throw new AppException("Failed to retrieve created loan", 500);
+        }
+
+        return savedLoan;
     }
 
-    public async Task<Loan> ApproveLoan(Guid loanId)
+    public async Task<Loan> ApproveLoan(Guid loanId, string? approvedBy = null, string? reason = null)
     {
-        var loan = await _db.Loans.FindAsync(loanId);
+        var loan = await _loanRepository.GetLoanByIdWithIncludes(loanId);
+            
         if (loan == null)
         {
             throw new AppException("Loan not found", 404);
@@ -134,21 +145,92 @@ public class LoanService(
             throw new AppException("Loan already approved", 400);
         }
 
+        if (loan.Status == LoanStatus.Rejected)
+        {
+            throw new AppException("Cannot approve a rejected loan", 400);
+        }
+
+        if (loan.Status == LoanStatus.Disbursed)
+        {
+            throw new AppException("Loan has already been disbursed", 400);
+        }
+
         loan.Status = LoanStatus.Approved;
         loan.ApprovedAt = DateTime.UtcNow;
+        loan.ApprovedBy = approvedBy;
+        loan.ProcessingReason = reason;
         loan.DueDate = DateTime.UtcNow.AddMonths(loan.DurationInMonths);
 
-        _db.Loans.Update(loan);
-        await _db.SaveChangesAsync();
+        var updateResult = await _loanRepository.UpdateLoan(loan);
+        if (!updateResult)
+        {
+            throw new AppException("Failed to update loan status", 500);
+        }
 
         return loan;
     }
 
+    public async Task<Loan> RejectLoan(Guid loanId, string? rejectedBy = null, string? reason = null)
+    {
+        var loan = await _loanRepository.GetLoanByIdWithIncludes(loanId);
+            
+        if (loan == null)
+        {
+            throw new AppException("Loan not found", 404);
+        }
+
+        if (loan.Status == LoanStatus.Approved)
+        {
+            throw new AppException("Cannot reject an approved loan", 400);
+        }
+
+        if (loan.Status == LoanStatus.Rejected)
+        {
+            throw new AppException("Loan already rejected", 400);
+        }
+
+        if (loan.Status == LoanStatus.Disbursed)
+        {
+            throw new AppException("Cannot reject a disbursed loan", 400);
+        }
+
+        loan.Status = LoanStatus.Rejected;
+        loan.RejectedAt = DateTime.UtcNow;
+        loan.RejectedBy = rejectedBy;
+        loan.ProcessingReason = reason;
+
+        var updateResult = await _loanRepository.UpdateLoan(loan);
+        if (!updateResult)
+        {
+            throw new AppException("Failed to update loan status", 500);
+        }
+
+        return loan;
+    }
+
+    public async Task<List<Loan>> GetPendingLoans()
+    {
+        return await _loanRepository.GetPendingLoans();
+    }
+
+    public async Task<List<Loan>> GetLoansByStatus(LoanStatus status)
+    {
+        return await _loanRepository.GetLoansByStatus(status);
+    }
+
+    public async Task<Loan> ProcessLoan(Guid loanId, ProcessLoanRequestDto request, string processedBy)
+    {
+        return request.Action.ToLower() switch
+        {
+            "approve" => await ApproveLoan(loanId, processedBy, request.Reason),
+            "reject" => await RejectLoan(loanId, processedBy, request.Reason),
+            _ => throw new AppException("Invalid action. Use 'approve' or 'reject'", 400)
+        };
+    }
+
     public async Task<List<Loan>> GetAllLoans()
     {
-        return await _db.Loans
-            .OrderByDescending(l => l.CreatedAt)
-            .ToListAsync();
+        return await _loanRepository.GetAllLoansWithIncludes();
     }
 
     public async Task<PagedLoanListDto> GetAllLoansAsync(LoanFilterDto filter)
@@ -245,12 +327,7 @@ public class LoanService(
 
     public async Task<LoanListDto> GetLoanByIdAsync(Guid loanId, string? requestingUserId = null)
     {
-        var loan = await _db.Loans
-            .Include(l => l.User)
-            .Include(l => l.Company)
-            .Include(l => l.Product)
-            .Include(l => l.BorrowerApplication)
-            .FirstOrDefaultAsync(l => l.Id == loanId);
+        var loan = await _loanRepository.GetLoanByIdWithIncludes(loanId);
 
         if (loan == null)
         {

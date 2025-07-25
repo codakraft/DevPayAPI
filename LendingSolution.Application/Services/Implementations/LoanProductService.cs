@@ -17,10 +17,10 @@ public class LoanProductService(
     private readonly ILoanProductRepository _loanProductRepository = loanProductRepository;
     private readonly ICompanyRepository _companyRepository = companyRepository;
 
-    public async Task<ApiResponse> CreateLoanProduct(CreateLoanProductRequestDto dto, Guid companyId)
+    public async Task<LoanProductResponseDto> CreateLoanProduct(CreateLoanProductRequestDto dto, Guid companyId)
     {
         if (!await CompanyExistsAsync(companyId))
-            return ApiResponse.Fail("Company does not exist");
+            throw new AppException("Company does not exist", 404);
 
         var loanProduct = new LoanProduct
         {
@@ -46,9 +46,37 @@ public class LoanProductService(
 
         var created = await _loanProductRepository.CreateLoanProduct(loanProduct);
 
-        return created
-            ? ApiResponse.Ok("Loan product created successfully")
-            : ApiResponse.Fail("Failed to create loan product");
+        if (!created)
+        {
+            throw new AppException("Failed to create loan product", 400);
+        }
+
+        return new LoanProductResponseDto
+        {
+            Id = loanProduct.Id,
+            CompanyId = loanProduct.CompanyId,
+            Name = loanProduct.Name,
+            Code = loanProduct.Code,
+            ShortName = loanProduct.ShortName,
+            Description = loanProduct.Description,
+            MinAmount = loanProduct.MinAmount,
+            MaxAmount = loanProduct.MaxAmount,
+            MinTenor = loanProduct.MinTenor,
+            MaxTenor = loanProduct.MaxTenor,
+            InterestRate = loanProduct.InterestRate,
+            PenaltyOnDefaultPrincipal = loanProduct.PenaltyOnDefaultPrincipal,
+            Moratorium = loanProduct.Moratorium,
+            NotifyApprovalsViaEmail = loanProduct.NotifyApprovalsViaEmail,
+            TurnoverEligibilityPercent = loanProduct.TurnoverEligibilityPercent,
+            InterestComputationBasis = loanProduct.InterestComputationBasis,
+            InterestCostComputation = loanProduct.InterestCostComputation,
+            PaymentScheduleBreakdown = loanProduct.PaymentScheduleBreakdown,
+            PaymentScheduleType = loanProduct.PaymentScheduleType,
+            IsActive = loanProduct.IsActive,
+            CreatedAt = loanProduct.CreatedAt,
+            UpdatedAt = loanProduct.UpdatedAt
+        };
+
     }
 
     public async Task<List<LoanProductResponseDto>> GetLoanProductsByCompanyId(Guid companyId)
@@ -87,261 +115,231 @@ public class LoanProductService(
         return data;
     }
 
-    public async Task<ApiResponse> UpdateLoanProduct(Guid id, UpdateLoanProductRequestDto dto, string? userId = null)
+    public async Task<LoanProductResponseDto> UpdateLoanProduct(Guid id, UpdateLoanProductRequestDto dto, string? userId = null)
     {
-        try
+        var existingProduct = await _loanProductRepository.GetLoanProductById(id);
+
+        if (existingProduct == null)
         {
-            var existingProduct = await _loanProductRepository.GetLoanProductById(id);
-
-            if (existingProduct == null)
-            {
-                return ApiResponse.Fail("Loan product not found");
-            }
-
-            // Update the loan product properties
-            existingProduct.Name = dto.Name;
-            existingProduct.Code = dto.Code;
-            existingProduct.ShortName = dto.ShortName;
-            existingProduct.Description = dto.Description;
-            existingProduct.MinAmount = dto.MinAmount;
-            existingProduct.MaxAmount = dto.MaxAmount;
-            existingProduct.MinTenor = dto.MinTenor;
-            existingProduct.MaxTenor = dto.MaxTenor;
-            existingProduct.InterestRate = dto.InterestRate;
-            existingProduct.PenaltyOnDefaultPrincipal = dto.PenaltyOnDefaultPrincipal;
-            existingProduct.Moratorium = dto.Moratorium;
-            existingProduct.NotifyApprovalsViaEmail = dto.NotifyApprovalsViaEmail;
-            existingProduct.TurnoverEligibilityPercent = dto.TurnoverEligibilityPercent;
-            existingProduct.InterestComputationBasis = dto.InterestComputationBasis;
-            existingProduct.InterestCostComputation = dto.InterestCostComputation;
-            existingProduct.PaymentScheduleBreakdown = dto.PaymentScheduleBreakdown;
-            existingProduct.PaymentScheduleType = dto.PaymentScheduleType;
-            existingProduct.UpdatedAt = DateTime.UtcNow;
-
-            var updateResult = await _loanProductRepository.UpdateLoanProduct(existingProduct);
-
-            if (!updateResult)
-            {
-                return ApiResponse.Fail("Failed to update loan product");
-            }
-
-            return ApiResponse.Ok("Loan product updated successfully", new LoanProductResponseDto
-            {
-                Id = existingProduct.Id,
-                CompanyId = existingProduct.CompanyId,
-                Name = existingProduct.Name,
-                Code = existingProduct.Code,
-                ShortName = existingProduct.ShortName,
-                Description = existingProduct.Description,
-                MinAmount = existingProduct.MinAmount,
-                MaxAmount = existingProduct.MaxAmount,
-                MinTenor = existingProduct.MinTenor,
-                MaxTenor = existingProduct.MaxTenor,
-                InterestRate = existingProduct.InterestRate,
-                PenaltyOnDefaultPrincipal = existingProduct.PenaltyOnDefaultPrincipal,
-                Moratorium = existingProduct.Moratorium,
-                NotifyApprovalsViaEmail = existingProduct.NotifyApprovalsViaEmail,
-                TurnoverEligibilityPercent = existingProduct.TurnoverEligibilityPercent,
-                InterestComputationBasis = existingProduct.InterestComputationBasis,
-                InterestCostComputation = existingProduct.InterestCostComputation,
-                PaymentScheduleBreakdown = existingProduct.PaymentScheduleBreakdown,
-                PaymentScheduleType = existingProduct.PaymentScheduleType,
-                IsActive = existingProduct.IsActive,
-                CreatedAt = existingProduct.CreatedAt,
-                UpdatedAt = existingProduct.UpdatedAt
-            });
+            throw new AppException("Loan product not found", 404);
         }
-        catch (Exception ex)
+
+        // Update the loan product properties
+        existingProduct.Name = dto.Name;
+        existingProduct.Code = dto.Code;
+        existingProduct.ShortName = dto.ShortName;
+        existingProduct.Description = dto.Description;
+        existingProduct.MinAmount = dto.MinAmount;
+        existingProduct.MaxAmount = dto.MaxAmount;
+        existingProduct.MinTenor = dto.MinTenor;
+        existingProduct.MaxTenor = dto.MaxTenor;
+        existingProduct.InterestRate = dto.InterestRate;
+        existingProduct.PenaltyOnDefaultPrincipal = dto.PenaltyOnDefaultPrincipal;
+        existingProduct.Moratorium = dto.Moratorium;
+        existingProduct.NotifyApprovalsViaEmail = dto.NotifyApprovalsViaEmail;
+        existingProduct.TurnoverEligibilityPercent = dto.TurnoverEligibilityPercent;
+        existingProduct.InterestComputationBasis = dto.InterestComputationBasis;
+        existingProduct.InterestCostComputation = dto.InterestCostComputation;
+        existingProduct.PaymentScheduleBreakdown = dto.PaymentScheduleBreakdown;
+        existingProduct.PaymentScheduleType = dto.PaymentScheduleType;
+        existingProduct.UpdatedAt = DateTime.UtcNow;
+
+        var updateResult = await _loanProductRepository.UpdateLoanProduct(existingProduct);
+
+        if (!updateResult)
         {
-            return ApiResponse.Fail($"Failed to update loan product: {ex.Message}");
+            throw new AppException("Failed to update loan product", 400);
         }
+
+        return new LoanProductResponseDto
+        {
+            Id = existingProduct.Id,
+            CompanyId = existingProduct.CompanyId,
+            Name = existingProduct.Name,
+            Code = existingProduct.Code,
+            ShortName = existingProduct.ShortName,
+            Description = existingProduct.Description,
+            MinAmount = existingProduct.MinAmount,
+            MaxAmount = existingProduct.MaxAmount,
+            MinTenor = existingProduct.MinTenor,
+            MaxTenor = existingProduct.MaxTenor,
+            InterestRate = existingProduct.InterestRate,
+            PenaltyOnDefaultPrincipal = existingProduct.PenaltyOnDefaultPrincipal,
+            Moratorium = existingProduct.Moratorium,
+            NotifyApprovalsViaEmail = existingProduct.NotifyApprovalsViaEmail,
+            TurnoverEligibilityPercent = existingProduct.TurnoverEligibilityPercent,
+            InterestComputationBasis = existingProduct.InterestComputationBasis,
+            InterestCostComputation = existingProduct.InterestCostComputation,
+            PaymentScheduleBreakdown = existingProduct.PaymentScheduleBreakdown,
+            PaymentScheduleType = existingProduct.PaymentScheduleType,
+            IsActive = existingProduct.IsActive,
+            CreatedAt = existingProduct.CreatedAt,
+            UpdatedAt = existingProduct.UpdatedAt
+        };
+
     }
 
-    public async Task<ApiResponse> GetLoanProductById(Guid id)
+    public async Task<LoanProductResponseDto> GetLoanProductById(Guid id)
     {
-        try
-        {
-            var loanProduct = await _loanProductRepository.GetLoanProductById(id);
+        var loanProduct = await _loanProductRepository.GetLoanProductById(id);
 
-            if (loanProduct == null)
-            {
-                return ApiResponse.Fail("Loan product not found");
-            }
-
-            return ApiResponse.Ok("Loan product retrieved successfully", new LoanProductResponseDto
-            {
-                Id = loanProduct.Id,
-                CompanyId = loanProduct.CompanyId,
-                Name = loanProduct.Name,
-                Code = loanProduct.Code,
-                ShortName = loanProduct.ShortName,
-                Description = loanProduct.Description,
-                MinAmount = loanProduct.MinAmount,
-                MaxAmount = loanProduct.MaxAmount,
-                MinTenor = loanProduct.MinTenor,
-                MaxTenor = loanProduct.MaxTenor,
-                InterestRate = loanProduct.InterestRate,
-                PenaltyOnDefaultPrincipal = loanProduct.PenaltyOnDefaultPrincipal,
-                Moratorium = loanProduct.Moratorium,
-                NotifyApprovalsViaEmail = loanProduct.NotifyApprovalsViaEmail,
-                TurnoverEligibilityPercent = loanProduct.TurnoverEligibilityPercent,
-                InterestComputationBasis = loanProduct.InterestComputationBasis,
-                InterestCostComputation = loanProduct.InterestCostComputation,
-                PaymentScheduleBreakdown = loanProduct.PaymentScheduleBreakdown,
-                PaymentScheduleType = loanProduct.PaymentScheduleType,
-                IsActive = loanProduct.IsActive,
-                CreatedAt = loanProduct.CreatedAt,
-                UpdatedAt = loanProduct.UpdatedAt
-            });
-        }
-        catch (Exception ex)
+        if (loanProduct == null)
         {
-            return ApiResponse.Fail($"Failed to retrieve loan product: {ex.Message}");
+            throw new AppException("Loan product not found", 404);
         }
+
+        return new LoanProductResponseDto
+        {
+            Id = loanProduct.Id,
+            CompanyId = loanProduct.CompanyId,
+            Name = loanProduct.Name,
+            Code = loanProduct.Code,
+            ShortName = loanProduct.ShortName,
+            Description = loanProduct.Description,
+            MinAmount = loanProduct.MinAmount,
+            MaxAmount = loanProduct.MaxAmount,
+            MinTenor = loanProduct.MinTenor,
+            MaxTenor = loanProduct.MaxTenor,
+            InterestRate = loanProduct.InterestRate,
+            PenaltyOnDefaultPrincipal = loanProduct.PenaltyOnDefaultPrincipal,
+            Moratorium = loanProduct.Moratorium,
+            NotifyApprovalsViaEmail = loanProduct.NotifyApprovalsViaEmail,
+            TurnoverEligibilityPercent = loanProduct.TurnoverEligibilityPercent,
+            InterestComputationBasis = loanProduct.InterestComputationBasis,
+            InterestCostComputation = loanProduct.InterestCostComputation,
+            PaymentScheduleBreakdown = loanProduct.PaymentScheduleBreakdown,
+            PaymentScheduleType = loanProduct.PaymentScheduleType,
+            IsActive = loanProduct.IsActive,
+            CreatedAt = loanProduct.CreatedAt,
+            UpdatedAt = loanProduct.UpdatedAt
+        };
+    }
+    public async Task<PagedLoanProductListDto> GetAllLoanProductsAsync(LoanProductFilterDto filter)
+    {
+        var query = _loanProductRepository.GetAllLoanProductsQueryable();
+
+        // Apply filters
+        query = ApplyFilters(query, filter);
+
+        // Get total count before pagination
+        var totalCount = await query.CountAsync();
+
+        // Apply sorting
+        query = ApplySorting(query, filter);
+
+        // Apply pagination
+        var pagedLoanProducts = await query
+            .Skip((filter.Page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
+            .ToListAsync();
+
+        // Map to DTOs
+        var loanProductDtos = pagedLoanProducts.Select(lp => new LoanProductListDto
+        {
+            Id = lp.Id,
+            Name = lp.Name,
+            Code = lp.Code,
+            Description = lp.Description,
+            ShortName = lp.ShortName,
+            MinAmount = lp.MinAmount,
+            MaxAmount = lp.MaxAmount,
+            MinTenor = lp.MinTenor,
+            MaxTenor = lp.MaxTenor,
+            InterestRate = lp.InterestRate,
+            PenaltyOnDefaultPrincipal = lp.PenaltyOnDefaultPrincipal,
+            Moratorium = lp.Moratorium,
+            NotifyApprovalsViaEmail = lp.NotifyApprovalsViaEmail,
+            TurnoverEligibilityPercent = lp.TurnoverEligibilityPercent,
+            InterestComputationBasis = lp.InterestComputationBasis,
+            InterestCostComputation = lp.InterestCostComputation,
+            PaymentScheduleBreakdown = lp.PaymentScheduleBreakdown,
+            PaymentScheduleType = lp.PaymentScheduleType,
+            IsActive = lp.IsActive,
+            CreatedAt = lp.CreatedAt,
+            UpdatedAt = lp.UpdatedAt,
+            CompanyId = lp.CompanyId,
+            CompanyName = lp.Company.Name,
+            CompanyShortName = lp.Company.ShortName,
+            CompanyIsActive = lp.Company.IsActive
+        }).ToList();
+
+        var totalPages = (int)Math.Ceiling((double)totalCount / filter.PageSize);
+
+        return new PagedLoanProductListDto
+        {
+            LoanProducts = loanProductDtos,
+            TotalCount = totalCount,
+            Page = filter.Page,
+            PageSize = filter.PageSize,
+            TotalPages = totalPages,
+            HasNextPage = filter.Page < totalPages,
+            HasPreviousPage = filter.Page > 1
+        };
+
     }
 
-    public async Task<ApiResponse> GetAllLoanProductsAsync(LoanProductFilterDto filter)
+    public async Task<PagedLoanProductListDto> GetCompanyLoanProductsAsync(Guid companyId, LoanProductFilterDto filter)
     {
-        try
+        var query = _loanProductRepository.GetCompanyLoanProductsQueryable(companyId);
+
+        // Apply filters (excluding company filter since it's already filtered)
+        query = ApplyFilters(query, filter, excludeCompanyFilter: true);
+
+        // Get total count before pagination
+        var totalCount = await query.CountAsync();
+
+        // Apply sorting
+        query = ApplySorting(query, filter);
+
+        // Apply pagination
+        var pagedLoanProducts = await query
+            .Skip((filter.Page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
+            .ToListAsync();
+
+        // Map to DTOs
+        var loanProductDtos = pagedLoanProducts.Select(lp => new LoanProductListDto
         {
-            var query = _loanProductRepository.GetAllLoanProductsQueryable();
+            Id = lp.Id,
+            Name = lp.Name,
+            Code = lp.Code,
+            Description = lp.Description,
+            ShortName = lp.ShortName,
+            MinAmount = lp.MinAmount,
+            MaxAmount = lp.MaxAmount,
+            MinTenor = lp.MinTenor,
+            MaxTenor = lp.MaxTenor,
+            InterestRate = lp.InterestRate,
+            PenaltyOnDefaultPrincipal = lp.PenaltyOnDefaultPrincipal,
+            Moratorium = lp.Moratorium,
+            NotifyApprovalsViaEmail = lp.NotifyApprovalsViaEmail,
+            TurnoverEligibilityPercent = lp.TurnoverEligibilityPercent,
+            InterestComputationBasis = lp.InterestComputationBasis,
+            InterestCostComputation = lp.InterestCostComputation,
+            PaymentScheduleBreakdown = lp.PaymentScheduleBreakdown,
+            PaymentScheduleType = lp.PaymentScheduleType,
+            IsActive = lp.IsActive,
+            CreatedAt = lp.CreatedAt,
+            UpdatedAt = lp.UpdatedAt,
+            CompanyId = lp.CompanyId,
+            CompanyName = lp.Company.Name,
+            CompanyShortName = lp.Company.ShortName,
+            CompanyIsActive = lp.Company.IsActive
+        }).ToList();
 
-            // Apply filters
-            query = ApplyFilters(query, filter);
+        var totalPages = (int)Math.Ceiling((double)totalCount / filter.PageSize);
 
-            // Get total count before pagination
-            var totalCount = await query.CountAsync();
-
-            // Apply sorting
-            query = ApplySorting(query, filter);
-
-            // Apply pagination
-            var pagedLoanProducts = await query
-                .Skip((filter.Page - 1) * filter.PageSize)
-                .Take(filter.PageSize)
-                .ToListAsync();
-
-            // Map to DTOs
-            var loanProductDtos = pagedLoanProducts.Select(lp => new LoanProductListDto
-            {
-                Id = lp.Id,
-                Name = lp.Name,
-                Code = lp.Code,
-                Description = lp.Description,
-                ShortName = lp.ShortName,
-                MinAmount = lp.MinAmount,
-                MaxAmount = lp.MaxAmount,
-                MinTenor = lp.MinTenor,
-                MaxTenor = lp.MaxTenor,
-                InterestRate = lp.InterestRate,
-                PenaltyOnDefaultPrincipal = lp.PenaltyOnDefaultPrincipal,
-                Moratorium = lp.Moratorium,
-                NotifyApprovalsViaEmail = lp.NotifyApprovalsViaEmail,
-                TurnoverEligibilityPercent = lp.TurnoverEligibilityPercent,
-                InterestComputationBasis = lp.InterestComputationBasis,
-                InterestCostComputation = lp.InterestCostComputation,
-                PaymentScheduleBreakdown = lp.PaymentScheduleBreakdown,
-                PaymentScheduleType = lp.PaymentScheduleType,
-                IsActive = lp.IsActive,
-                CreatedAt = lp.CreatedAt,
-                UpdatedAt = lp.UpdatedAt,
-                CompanyId = lp.CompanyId,
-                CompanyName = lp.Company.Name,
-                CompanyShortName = lp.Company.ShortName,
-                CompanyIsActive = lp.Company.IsActive
-            }).ToList();
-
-            var totalPages = (int)Math.Ceiling((double)totalCount / filter.PageSize);
-
-            var result = new PagedLoanProductListDto
-            {
-                LoanProducts = loanProductDtos,
-                TotalCount = totalCount,
-                Page = filter.Page,
-                PageSize = filter.PageSize,
-                TotalPages = totalPages,
-                HasNextPage = filter.Page < totalPages,
-                HasPreviousPage = filter.Page > 1
-            };
-
-            return ApiResponse.Ok("Loan products retrieved successfully", result);
-        }
-        catch (Exception ex)
+        return new PagedLoanProductListDto
         {
-            return ApiResponse.Fail($"Error retrieving loan products: {ex.Message}");
-        }
-    }
+            LoanProducts = loanProductDtos,
+            TotalCount = totalCount,
+            Page = filter.Page,
+            PageSize = filter.PageSize,
+            TotalPages = totalPages,
+            HasNextPage = filter.Page < totalPages,
+            HasPreviousPage = filter.Page > 1
+        };
 
-    public async Task<ApiResponse> GetCompanyLoanProductsAsync(Guid companyId, LoanProductFilterDto filter)
-    {
-        try
-        {
-            var query = _loanProductRepository.GetCompanyLoanProductsQueryable(companyId);
-
-            // Apply filters (excluding company filter since it's already filtered)
-            query = ApplyFilters(query, filter, excludeCompanyFilter: true);
-
-            // Get total count before pagination
-            var totalCount = await query.CountAsync();
-
-            // Apply sorting
-            query = ApplySorting(query, filter);
-
-            // Apply pagination
-            var pagedLoanProducts = await query
-                .Skip((filter.Page - 1) * filter.PageSize)
-                .Take(filter.PageSize)
-                .ToListAsync();
-
-            // Map to DTOs
-            var loanProductDtos = pagedLoanProducts.Select(lp => new LoanProductListDto
-            {
-                Id = lp.Id,
-                Name = lp.Name,
-                Code = lp.Code,
-                Description = lp.Description,
-                ShortName = lp.ShortName,
-                MinAmount = lp.MinAmount,
-                MaxAmount = lp.MaxAmount,
-                MinTenor = lp.MinTenor,
-                MaxTenor = lp.MaxTenor,
-                InterestRate = lp.InterestRate,
-                PenaltyOnDefaultPrincipal = lp.PenaltyOnDefaultPrincipal,
-                Moratorium = lp.Moratorium,
-                NotifyApprovalsViaEmail = lp.NotifyApprovalsViaEmail,
-                TurnoverEligibilityPercent = lp.TurnoverEligibilityPercent,
-                InterestComputationBasis = lp.InterestComputationBasis,
-                InterestCostComputation = lp.InterestCostComputation,
-                PaymentScheduleBreakdown = lp.PaymentScheduleBreakdown,
-                PaymentScheduleType = lp.PaymentScheduleType,
-                IsActive = lp.IsActive,
-                CreatedAt = lp.CreatedAt,
-                UpdatedAt = lp.UpdatedAt,
-                CompanyId = lp.CompanyId,
-                CompanyName = lp.Company.Name,
-                CompanyShortName = lp.Company.ShortName,
-                CompanyIsActive = lp.Company.IsActive
-            }).ToList();
-
-            var totalPages = (int)Math.Ceiling((double)totalCount / filter.PageSize);
-
-            var result = new PagedLoanProductListDto
-            {
-                LoanProducts = loanProductDtos,
-                TotalCount = totalCount,
-                Page = filter.Page,
-                PageSize = filter.PageSize,
-                TotalPages = totalPages,
-                HasNextPage = filter.Page < totalPages,
-                HasPreviousPage = filter.Page > 1
-            };
-
-            return ApiResponse.Ok("Company loan products retrieved successfully", result);
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse.Fail($"Error retrieving company loan products: {ex.Message}");
-        }
     }
 
     private IQueryable<LoanProduct> ApplyFilters(IQueryable<LoanProduct> query, LoanProductFilterDto filter, bool excludeCompanyFilter = false)

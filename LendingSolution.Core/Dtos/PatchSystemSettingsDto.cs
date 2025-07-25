@@ -22,6 +22,9 @@ public class PatchSystemSettingsDto
     [Range(0, double.MaxValue, ErrorMessage = "Documentation fees must be a positive value")]
     public decimal? DocumentationFees { get; set; }
     
+    [Range(0, double.MaxValue, ErrorMessage = "OTP charges must be a positive value")]
+    public decimal? OtpCharges { get; set; }
+    
     [RegularExpression("^(PERCENTAGE|FIXED)$", ErrorMessage = "Legal fees type must be either PERCENTAGE or FIXED")]
     public string? LegalFeesType { get; set; }
     
@@ -30,4 +33,7 @@ public class PatchSystemSettingsDto
     
     [RegularExpression("^(PERCENTAGE|FIXED)$", ErrorMessage = "Processing fees type must be either PERCENTAGE or FIXED")]
     public string? ProcessingFeesType { get; set; }
+    
+    [RegularExpression("^(PERCENTAGE|FIXED)$", ErrorMessage = "OTP charges type must be either PERCENTAGE or FIXED")]
+    public string? OtpChargesType { get; set; }
 }

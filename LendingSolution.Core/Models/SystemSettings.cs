@@ -17,11 +17,13 @@ public class SystemSettings : ExtendedBase
     public decimal? PenaltyFees { get; set; }
     public decimal? LateFees { get; set; }
     public decimal? DocumentationFees { get; set; }
+    public decimal? OtpCharges { get; set; }
 
     // Fee calculation types
     public string LegalFeesType { get; set; } = "PERCENTAGE"; // PERCENTAGE or FIXED
     public string ManagementFeesType { get; set; } = "PERCENTAGE"; // PERCENTAGE or FIXED
     public string ProcessingFeesType { get; set; } = "PERCENTAGE"; // PERCENTAGE or FIXED
+    public string OtpChargesType { get; set; } = "FIXED"; // PERCENTAGE or FIXED
 
     public bool IsActive { get; set; } = true;
 }

@@ -5,6 +5,7 @@ using LendingSolution.Application.Exceptions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using LendingSolution.Core.Dtos.Response;
 
 namespace LendingSolution.API.Controllers;
 
@@ -77,10 +78,21 @@ public class WalletController : ControllerBase
             var wallet = await _walletService.GetWalletByCompanyIdAsync(companyId);
             if (wallet == null)
             {
-                return NotFound("Company wallet not found");
+                // Automatically create a wallet for the company if it doesn't exist
+                try
+                {
+                    _logger.LogInformation("Company wallet not found for {CompanyId}, creating new wallet", companyId);
+                    wallet = await _walletService.CreateCompanyWalletAsync(companyId);
+                    _logger.LogInformation("Successfully created wallet for company {CompanyId}", companyId);
+                }
+                catch (AppException ex)
+                {
+                    _logger.LogError(ex, "Failed to create wallet for company {CompanyId}: {Message}", companyId, ex.Message);
+                    return BadRequest($"Failed to create company wallet: {ex.Message}");
+                }
             }
 
-            return Ok(wallet);
+            return Ok(ApiResponse.Ok("Wllet fetched successfully", wallet));
         }
         catch (Exception ex)
         {

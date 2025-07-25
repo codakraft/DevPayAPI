@@ -63,6 +63,51 @@ public class LoanRespository(ApplicationDbContext db) : ILoanRepository
         return Task.FromResult(false);
     }
 
+    public async Task<Loan?> GetLoanByIdWithIncludes(Guid loanId)
+    {
+        return await _db.Loans
+            .Include(l => l.User)
+            .Include(l => l.Company)
+            .Include(l => l.Product)
+            .Include(l => l.BorrowerApplication)
+            .FirstOrDefaultAsync(l => l.Id == loanId);
+    }
+
+    public async Task<List<Loan>> GetPendingLoans()
+    {
+        return await _db.Loans
+            .Include(l => l.User)
+            .Include(l => l.Company)
+            .Include(l => l.Product)
+            .Include(l => l.BorrowerApplication)
+            .Where(l => l.Status == LoanStatus.Pending)
+            .OrderByDescending(l => l.CreatedAt)
+            .ToListAsync();
+    }
+
+    public async Task<List<Loan>> GetLoansByStatus(LoanStatus status)
+    {
+        return await _db.Loans
+            .Include(l => l.User)
+            .Include(l => l.Company)
+            .Include(l => l.Product)
+            .Include(l => l.BorrowerApplication)
+            .Where(l => l.Status == status)
+            .OrderByDescending(l => l.CreatedAt)
+            .ToListAsync();
+    }
+
+    public async Task<List<Loan>> GetAllLoansWithIncludes()
+    {
+        return await _db.Loans
+            .Include(l => l.User)
+            .Include(l => l.Company)
+            .Include(l => l.Product)
+            .Include(l => l.BorrowerApplication)
+            .OrderByDescending(l => l.CreatedAt)
+            .ToListAsync();
+    }
+
     public IQueryable<Loan> GetAllLoansQueryable()
     {
         return _db.Loans
