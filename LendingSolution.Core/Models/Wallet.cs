@@ -108,5 +108,6 @@ public enum WalletTransactionType
     LoanDisbursementFee = 6,
     ProcessingFee = 7,
     ManagementFee = 8,
-    LegalFee = 9
+    LegalFee = 9,
+    OtpFee = 10
 }

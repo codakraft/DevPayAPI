@@ -16,6 +16,8 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     private readonly ILoanRepository _loanRepository;
     private readonly IEmailService _emailService;
     private readonly ISmsService _smsService;
+    private readonly IWalletService _walletService;
+    private readonly ISettingsService _settingsService;
 
     public BorrowerOnboardingService(
         IBorrowerApplicationRepository borrowerRepository,
@@ -24,7 +26,9 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         IDocumentService documentService,
         ILoanRepository loanRepository,
         IEmailService emailService,
-        ISmsService smsService)
+        ISmsService smsService,
+        IWalletService walletService,
+        ISettingsService settingsService)
     {
         _borrowerRepository = borrowerRepository;
         _companyRepository = companyRepository;
@@ -33,6 +37,8 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         _loanRepository = loanRepository;
         _emailService = emailService;
         _smsService = smsService;
+        _walletService = walletService;
+        _settingsService = settingsService;
     }
 
     public async Task<BorrowerStep1ResponseDto> Step1_SaveBorrowerInfoAsync(BorrowerStep1RequestDto request)
@@ -284,32 +290,34 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
     public async Task<GenerateEmailOtpResponseDto> GenerateEmailOtpAsync(GenerateEmailOtpRequestDto request)
     {
+        // Find application by email to get company information
+        var application = await _borrowerRepository.GetByEmailAsync(request.EmailAddress);
+        if (application == null)
+        {
+            throw new AppException("No application found for this email", 404);
+        }
+
+        // Deduct OTP fee from company wallet before generating OTP
+        await DeductOtpFeeAsync(application.CompanyId, "Email OTP");
+
         // Generate OTP
         var otp = GenerateOtp();
 
-        // Find application by email and update OTP
-        var application = await _borrowerRepository.GetByEmailAsync(request.EmailAddress);
-        if (application != null)
-        {
-            application.LastEmailOtp = otp;
-            application.EmailOtpGeneratedAt = DateTime.UtcNow;
-            await _borrowerRepository.UpdateAsync(application);
+        // Update application with new OTP
+        application.LastEmailOtp = otp;
+        application.EmailOtpGeneratedAt = DateTime.UtcNow;
+        await _borrowerRepository.UpdateAsync(application);
 
-            // Send actual email OTP
-            var emailSent = await _emailService.SendOtpEmailAsync(
-                request.EmailAddress,
-                otp,
-                "Email Verification"
-            );
+        // Send actual email OTP
+        var emailSent = await _emailService.SendOtpEmailAsync(
+            request.EmailAddress,
+            otp,
+            "Email Verification"
+        );
 
-            if (!emailSent)
-            {
-                throw new AppException("Failed to send verification email. Please try again.", 500);
-            }
-        }
-        else
+        if (!emailSent)
         {
-            throw new AppException("No application found for this email", 404);
+            throw new AppException("Failed to send verification email. Please try again.", 500);
         }
 
         return new GenerateEmailOtpResponseDto();
@@ -333,40 +341,42 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
     public async Task<GenerateBvnOtpResponseDto> GenerateBvnOtpAsync(GenerateBvnOtpRequestDto request)
     {
+        // Find application by BVN to get company information
+        var application = await _borrowerRepository.GetByBvnAsync(request.BVN);
+        if (application == null)
+        {
+            throw new AppException("No application found for this BVN", 404);
+        }
+
+        // Deduct OTP fee from company wallet before generating OTP
+        await DeductOtpFeeAsync(application.CompanyId, "BVN OTP");
+
         // Generate BVN OTP
         var otp = GenerateOtp();
 
-        // Find application by BVN and update OTP
-        var application = await _borrowerRepository.GetByBvnAsync(request.BVN);
-        if (application != null)
+        // Update application with new OTP
+        application.LastBvnOtp = otp;
+        application.BvnOtpGeneratedAt = DateTime.UtcNow;
+        await _borrowerRepository.UpdateAsync(application);
+
+        // Note: In a real implementation, BVN OTP would be sent via the bank's SMS service
+        // or retrieved from a BVN verification service like Mono, Paystack, or Flutterwave
+        // For now, we simulate the OTP generation and logging
+
+        // In production, this would be:
+        // 1. Call BVN verification service to get phone number
+        // 2. Send OTP via that phone number
+        // 3. The OTP validation would also go through the BVN service
+
+        // Simulate SMS sending (replace with actual BVN service integration)
+        var phoneNumber = "0901234567"; // This would come from BVN service
+        var smsSent = await _smsService.SendOtpSmsAsync(phoneNumber, otp, "BVN Verification");
+
+        if (!smsSent)
         {
-            application.LastBvnOtp = otp;
-            application.BvnOtpGeneratedAt = DateTime.UtcNow;
-            await _borrowerRepository.UpdateAsync(application);
-
-            // Note: In a real implementation, BVN OTP would be sent via the bank's SMS service
-            // or retrieved from a BVN verification service like Mono, Paystack, or Flutterwave
-            // For now, we simulate the OTP generation and logging
-
-            // In production, this would be:
-            // 1. Call BVN verification service to get phone number
-            // 2. Send OTP via that phone number
-            // 3. The OTP validation would also go through the BVN service
-
-            // Simulate SMS sending (replace with actual BVN service integration)
-            var phoneNumber = "0901234567"; // This would come from BVN service
-            var smsSent = await _smsService.SendOtpSmsAsync(phoneNumber, otp, "BVN Verification");
-
-            if (!smsSent)
-            {
-                // In development, this might be expected if SMS is not configured
-                // In production, this should be a critical error
-                throw new AppException("Failed to send BVN verification SMS. Please try again.", 500);
-            }
-        }
-        else
-        {
-            throw new AppException("No application found for this BVN", 404);
+            // In development, this might be expected if SMS is not configured
+            // In production, this should be a critical error
+            throw new AppException("Failed to send BVN verification SMS. Please try again.", 500);
         }
 
         return new GenerateBvnOtpResponseDto();
@@ -391,6 +401,9 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             throw new AppException("Email OTP can only be resent for applications in Step 1 (Email Sent) status", 400);
         }
 
+        // Deduct OTP fee from company wallet before resending OTP
+        await DeductOtpFeeAsync(application.CompanyId, "Email OTP Resend");
+
         // Generate new OTP
         var otp = GenerateOtp();
 
@@ -414,6 +427,77 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         }
 
         return new ResendStep1EmailOtpResponseDto();
+    }
+
+    /// <summary>
+    /// Deducts OTP fee from company wallet and transfers to SuperAdmin wallet
+    /// </summary>
+    /// <param name="companyId">Company ID from the borrower application</param>
+    /// <param name="otpType">Type of OTP being generated (for transaction description)</param>
+    /// <returns>True if fee deduction was successful</returns>
+    private async Task<bool> DeductOtpFeeAsync(Guid companyId, string otpType = "OTP")
+    {
+        try
+        {
+            // Get settings to determine OTP fee
+            var settings = await _settingsService.GetSettingsAsync();
+            var otpFee = settings.OtpFee;
+            
+            // Skip if OTP fee is 0 or negative
+            if (otpFee <= 0)
+            {
+                return true; // No fee to deduct
+            }
+
+            // Get company wallet
+            var companyWallet = await _walletService.GetWalletByCompanyIdAsync(companyId);
+            if (companyWallet == null)
+            {
+                throw new AppException("Company wallet not found. Please contact support.", 404);
+            }
+
+            // Check if company has sufficient balance
+            var hasSufficientBalance = await _walletService.HasSufficientBalanceAsync(companyWallet.Id, otpFee);
+            if (!hasSufficientBalance)
+            {
+                throw new AppException($"Insufficient wallet balance to generate {otpType}. Please fund your wallet.", 400);
+            }
+
+            // Get or create SuperAdmin wallet
+            var superAdminWallet = await _walletService.GetSuperAdminWalletAsync();
+            if (superAdminWallet == null)
+            {
+                // Create SuperAdmin wallet if it doesn't exist
+                superAdminWallet = await _walletService.CreateSuperAdminWalletAsync();
+            }
+
+            // Transfer funds from company wallet to SuperAdmin wallet
+            var transferDescription = $"{otpType} generation fee - Company: {companyWallet.CompanyName ?? "Unknown"}";
+            var transferSuccess = await _walletService.TransferFundsAsync(
+                companyWallet.Id, 
+                superAdminWallet.Id, 
+                otpFee, 
+                transferDescription, 
+                "SYSTEM" // System-initiated transfer
+            );
+
+            if (!transferSuccess)
+            {
+                throw new AppException("Failed to process OTP fee. Please try again.", 500);
+            }
+
+            return true;
+        }
+        catch (AppException)
+        {
+            // Re-throw application exceptions (like insufficient balance)
+            throw;
+        }
+        catch (Exception)
+        {
+            // Log the exception and throw a generic error
+            throw new AppException("An error occurred while processing OTP fee. Please try again.", 500);
+        }
     }
 
     private string GenerateOtp()
