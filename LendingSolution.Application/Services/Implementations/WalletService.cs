@@ -165,7 +165,7 @@ public class WalletService : IWalletService
         return true;
     }
 
-    public async Task<bool> DebitWalletAsync(DebitWalletDto debitWalletDto, string userId)
+    public async Task<bool> DebitWalletAsync(DebitWalletDto debitWalletDto, string? userId)
     {
         var wallet = await _walletRepository.GetWalletByIdAsync(debitWalletDto.WalletId);
         if (wallet == null)
@@ -200,7 +200,7 @@ public class WalletService : IWalletService
         return true;
     }
 
-    public async Task<bool> CreditWalletAsync(Guid walletId, decimal amount, string description, string? referenceId, string userId)
+    public async Task<bool> CreditWalletAsync(Guid walletId, decimal amount, string description, string? referenceId, string? userId)
     {
         var wallet = await _walletRepository.GetWalletByIdAsync(walletId);
         if (wallet == null)
@@ -299,7 +299,7 @@ public class WalletService : IWalletService
         };
     }
 
-    public async Task<bool> TransferFundsAsync(Guid fromWalletId, Guid toWalletId, decimal amount, string description, string userId)
+    public async Task<bool> TransferFundsAsync(Guid fromWalletId, Guid toWalletId, decimal amount, string description, string? userId)
     {
         // Debit from source wallet
         var debitSuccess = await DebitWalletAsync(new DebitWalletDto

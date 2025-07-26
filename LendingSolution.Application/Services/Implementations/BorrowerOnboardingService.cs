@@ -449,11 +449,12 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
                 return true; // No fee to deduct
             }
 
-            // Get company wallet
+            // Get or create company wallet
             var companyWallet = await _walletService.GetWalletByCompanyIdAsync(companyId);
             if (companyWallet == null)
             {
-                throw new AppException("Company wallet not found. Please contact support.", 404);
+                // Automatically create a wallet for the company
+                companyWallet = await _walletService.CreateCompanyWalletAsync(companyId);
             }
 
             // Check if company has sufficient balance
@@ -478,7 +479,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
                 superAdminWallet.Id, 
                 otpFee, 
                 transferDescription, 
-                "SYSTEM" // System-initiated transfer
+                null // System-initiated transfer - null for system transactions
             );
 
             if (!transferSuccess)

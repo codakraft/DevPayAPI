@@ -71,12 +71,12 @@ public interface IWalletService
     /// <summary>
     /// Debit wallet for fees
     /// </summary>
-    Task<bool> DebitWalletAsync(DebitWalletDto debitWalletDto, string userId);
+    Task<bool> DebitWalletAsync(DebitWalletDto debitWalletDto, string? userId);
     
     /// <summary>
     /// Credit wallet
     /// </summary>
-    Task<bool> CreditWalletAsync(Guid walletId, decimal amount, string description, string? referenceId, string userId);
+    Task<bool> CreditWalletAsync(Guid walletId, decimal amount, string description, string? referenceId, string? userId);
     
     /// <summary>
     /// Check if wallet has sufficient balance
@@ -101,5 +101,5 @@ public interface IWalletService
     /// <summary>
     /// Transfer funds between wallets (e.g., company to SuperAdmin for fees)
     /// </summary>
-    Task<bool> TransferFundsAsync(Guid fromWalletId, Guid toWalletId, decimal amount, string description, string userId);
+    Task<bool> TransferFundsAsync(Guid fromWalletId, Guid toWalletId, decimal amount, string description, string? userId);
 }
