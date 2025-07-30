@@ -139,17 +139,17 @@ public class RemitaService(
             payerEmail = loan.User.Email,
             payerPhone = loan.User.PhoneNumber,
             payerBankCode = borrowerApplication.BankCode,
-            payeraccount = borrowerApplication.AccountNo,
+            payerAccount = borrowerApplication.AccountNo,
             requestId,
             amount = body.Amount,
+            startDate,
+            endDate,
             mandateType = "SO",
-            Frequency = "Month",
-            StartDate = startDate,
-            endDate
+            frequency = "Month"
         };
 
         var token = await GetAccessTokenAsync();
-        var request = new HttpRequestMessage(HttpMethod.Post, BuildUrl("/send/api/loansvc/data/api/v2/payday/mandate/create"))
+        var request = new HttpRequestMessage(HttpMethod.Post, BuildUrl("/send/api/echannelsvc/echannel/mandate/setup"))
         {
             Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
         };
@@ -180,13 +180,23 @@ public class RemitaService(
                    ?? throw new ArgumentException("Loan not found", nameof(loanId));
 
         var requestId = Guid.NewGuid().ToString();
+        var hash = HashUtils.ComputeSha512Hash($"{_settings.MerchantId}{_settings.ServiceTypeId}{requestId}{_settings.ApiKey}");
+        
         var payload = new { mandateId = loan.MandateId, requestId };
 
         var request = new HttpRequestMessage(HttpMethod.Post,
-            BuildUrl("/send/api/echannelsvc/echannel/mandate/requestAuthorization"))
+            BuildUrl("/requestAuthorization"))
         {
             Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
         };
+
+        // Add standard headers
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.Add("API_KEY", _settings.ApiKey);
+        request.Headers.Add("MERCHANT_ID", _settings.MerchantId);
+        request.Headers.Add("REQUEST_ID", requestId);
+        request.Headers.Add("REQUEST_TS", DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString());
+        request.Headers.Add("API_DETAILS_HASH", hash);
 
         var response = await _httpClient.SendAsync(request);
 
@@ -212,6 +222,9 @@ public class RemitaService(
         var loan = await _cRepo.GetAllLoanInfoByLoanId(loanId)
                    ?? throw new ArgumentException("Loan not found", nameof(loanId));
 
+        var requestId = Guid.NewGuid().ToString();
+        var hash = HashUtils.ComputeSha512Hash($"{_settings.MerchantId}{_settings.ServiceTypeId}{requestId}{_settings.ApiKey}");
+
         var payload = new
         {
             remitaTransRef = loan.RemitaTransRef,
@@ -222,10 +235,18 @@ public class RemitaService(
         };
 
         var request = new HttpRequestMessage(HttpMethod.Post,
-            BuildUrl("/send/api/echannelsvc/echannel/mandate/validateAuthorization"))
+            BuildUrl("/validateAuthorization"))
         {
             Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
         };
+
+        // Add specific headers as per API specification
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.Add("API_KEY", _settings.ApiKey);
+        request.Headers.Add("MERCHANT_ID", _settings.MerchantId);
+        request.Headers.Add("REQUEST_ID", requestId);
+        request.Headers.Add("REQUEST_TS", DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString());
+        request.Headers.Add("API_DETAILS_HASH", hash);
 
         var response = await _httpClient.SendAsync(request);
 
@@ -273,10 +294,13 @@ public class RemitaService(
         };
 
         var request = new HttpRequestMessage(HttpMethod.Post,
-            BuildUrl("/send/api/echannelsvc/echannel/mandate/payment/send"))
+            BuildUrl("/payment/send"))
         {
             Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
         };
+
+        // Add headers for debit instruction
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
         var response = await _httpClient.SendAsync(request);
 
@@ -308,20 +332,14 @@ public class RemitaService(
 
         var payload = new
         {
-            bvn = request.Bvn,
+            authorisationCode = request.AuthorisationCode ?? "",
             firstName = request.FirstName,
             lastName = request.LastName,
-            middleName = request.MiddleName,
+            middleName = request.MiddleName ?? "",
             accountNumber = request.AccountNumber,
             bankCode = request.BankCode,
-            phoneNumber = request.PhoneNumber,
-            email = request.Email,
-            dateOfBirth = request.DateOfBirth.ToString("yyyy-MM-dd"),
-            gender = request.Gender,
-            address = request.Address,
-            state = request.State,
-            lga = request.LocalGovernmentArea,
-            monthsOfHistory = request.MonthsOfHistory ?? 6
+            bvn = request.Bvn,
+            authorisationChannel = request.AuthorisationChannel ?? "USSD"
         };
 
         var httpRequest = new HttpRequestMessage(HttpMethod.Post,
@@ -425,18 +443,17 @@ public class RemitaService(
             payerEmail = request.PayerEmail,
             payerPhone = request.PayerPhone,
             payerBankCode = request.PayerBankCode,
-            payeraccount = request.PayerAccount,
+            payerAccount = request.PayerAccount,
             requestId,
             amount = request.Amount,
-            mandateType = request.MandateType,
-            frequency = request.Frequency,
             startDate = request.StartDate.ToString("yyyy-MM-dd"),
             endDate = request.EndDate.ToString("yyyy-MM-dd"),
-            description = request.Description
+            mandateType = request.MandateType,
+            frequency = request.Frequency
         };
 
         var httpRequest = new HttpRequestMessage(HttpMethod.Post,
-            BuildUrl("/send/api/loansvc/data/api/v2/payday/mandate/create"))
+            BuildUrl("/send/api/echannelsvc/echannel/mandate/setup"))
         {
             Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
         };
@@ -684,6 +701,74 @@ public class RemitaService(
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error parsing banks response");
+            return null;
+        }
+    }
+
+    public async Task<StopMandateResponseDto?> StopMandate(Guid loanId)
+    {
+        var loan = await _cRepo.GetAllLoanInfoByLoanId(loanId);
+        if (loan == null)
+        {
+            _logger.LogError("Loan not found: {LoanId}", loanId);
+            return null;
+        }
+
+        if (string.IsNullOrEmpty(loan.MandateId))
+        {
+            _logger.LogError("Mandate ID not found for loan: {LoanId}", loanId);
+            return null;
+        }
+
+        var requestId = Guid.NewGuid().ToString();
+        var hash = HashUtils.ComputeSha512Hash($"{_settings.MerchantId}{loan.MandateId}{requestId}{_settings.ApiKey}");
+
+        var payload = new
+        {
+            merchantId = _settings.MerchantId,
+            hash,
+            mandateId = loan.MandateId,
+            requestId
+        };
+
+        var httpRequest = new HttpRequestMessage(HttpMethod.Post,
+            BuildUrl("/send/api/echannelsvc/echannel/mandate/stop"))
+        {
+            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+        };
+
+        // Add headers for stop mandate
+        httpRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        var response = await _httpClient.SendAsync(httpRequest);
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("Stop mandate request failed: {Status} - {Reason}", 
+                response.StatusCode, response.ReasonPhrase);
+            return null;
+        }
+
+        try
+        {
+            var responseContent = await response.Content.ReadAsStringAsync();
+            var result = JsonSerializer.Deserialize<StopMandateResponseDto>(responseContent);
+            
+            // Update loan mandate status if successful
+            if (result != null && result.Status == "SUCCESS")
+            {
+                loan.MandateStatus = "STOPPED";
+                loan.MandateStoppedDate = DateTime.UtcNow;
+                await _cRepo.UpdateLoanAsync(loan);
+                
+                _logger.LogInformation("Mandate stopped for loan {LoanId}: {MandateId}", 
+                    loanId, loan.MandateId);
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error parsing stop mandate response");
             return null;
         }
     }

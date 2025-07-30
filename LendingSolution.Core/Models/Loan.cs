@@ -48,5 +48,6 @@ public class Loan : Base
     public string? DisbursementReference { get; set; }
     public string? MandateStatus { get; set; }
     public DateTime? MandateActivationDate { get; set; }
+    public DateTime? MandateStoppedDate { get; set; }
     public string? FailureReason { get; set; }
 }

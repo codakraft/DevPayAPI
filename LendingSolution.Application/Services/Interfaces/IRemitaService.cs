@@ -20,5 +20,6 @@ public interface IRemitaService
     Task<RepaymentCollectionResponseDto?> CollectRepaymentAsync(Guid loanId, RepaymentCollectionRequestDto request, string? userId);
     Task<TransactionStatusResponseDto?> GetTransactionStatusAsync(string transactionRef);
     Task<BanksResponseDto?> GetBanksAsync();
+    Task<StopMandateResponseDto?> StopMandate(Guid loanId);
     Task<bool> ProcessWebhookNotificationAsync(RemitaWebhookNotificationDto notification);
 }

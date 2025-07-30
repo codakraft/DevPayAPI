@@ -16,9 +16,8 @@ public class SalaryHistoryRequestDto
     [StringLength(50)]
     public string LastName { get; set; } = string.Empty;
 
-    [Required]
     [StringLength(50)]
-    public string MiddleName { get; set; } = string.Empty;
+    public string? MiddleName { get; set; }
 
     [Required]
     [StringLength(10)]
@@ -28,32 +27,7 @@ public class SalaryHistoryRequestDto
     [StringLength(3)]
     public string BankCode { get; set; } = string.Empty;
 
-    [Required]
-    [Phone]
-    public string PhoneNumber { get; set; } = string.Empty;
+    public string? AuthorisationCode { get; set; } = "";
 
-    [Required]
-    [EmailAddress]
-    public string Email { get; set; } = string.Empty;
-
-    [Required]
-    public DateTime DateOfBirth { get; set; }
-
-    [Required]
-    [StringLength(1)]
-    public string Gender { get; set; } = string.Empty;
-
-    [Required]
-    [StringLength(100)]
-    public string Address { get; set; } = string.Empty;
-
-    [Required]
-    [StringLength(50)]
-    public string State { get; set; } = string.Empty;
-
-    [Required]
-    [StringLength(50)]
-    public string LocalGovernmentArea { get; set; } = string.Empty;
-
-    public int? MonthsOfHistory { get; set; } = 6;
+    public string? AuthorisationChannel { get; set; } = "USSD";
 }
