@@ -12,16 +12,10 @@ namespace LendingSolution.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class WalletController : ControllerBase
+public class WalletController(IWalletService walletService, ILogger<WalletController> logger) : ControllerBase
 {
-    private readonly IWalletService _walletService;
-    private readonly ILogger<WalletController> _logger;
-
-    public WalletController(IWalletService walletService, ILogger<WalletController> logger)
-    {
-        _walletService = walletService;
-        _logger = logger;
-    }
+    private readonly IWalletService _walletService = walletService;
+    private readonly ILogger<WalletController> _logger = logger;
 
     /// <summary>
     /// Get wallet by ID
@@ -45,7 +39,7 @@ public class WalletController : ControllerBase
             {
                 if (wallet.CompanyId.ToString() != userCompanyId)
                 {
-                    return Forbid("You can only access your company's wallet");
+                    return StatusCode(403, "You can only access your company's wallet");
                 }
             }
 
@@ -59,40 +53,59 @@ public class WalletController : ControllerBase
     }
 
     /// <summary>
-    /// Get wallet by company ID
+    /// Get wallet by company ID or current user's company wallet
     /// </summary>
-    [HttpGet("company/{companyId}")]
-    public async Task<ActionResult<WalletDto>> GetCompanyWallet(Guid companyId)
+    [HttpGet("company/{companyId?}")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    public async Task<ActionResult<WalletDto>> GetCompanyWallet(Guid? companyId = null)
     {
         try
         {
-            // Check authorization
             var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
             var userCompanyId = User.FindFirst("CompanyId")?.Value;
-
-            if (userRole != "SuperAdmin" && companyId.ToString() != userCompanyId)
+            
+            Guid targetCompanyId;
+            
+            // If no companyId provided, use current user's company
+            if (!companyId.HasValue)
             {
-                return Forbid("You can only access your company's wallet");
+                if (string.IsNullOrEmpty(userCompanyId) || !Guid.TryParse(userCompanyId, out targetCompanyId))
+                {
+                    return StatusCode(403, "Company information not found for user");
+                }
+            }
+            else
+            {
+                targetCompanyId = companyId.Value;
+                
+                // SuperAdmin can access any company wallet, Admin can only access their own
+                if (userRole != "SuperAdmin")
+                {
+                    if (string.IsNullOrEmpty(userCompanyId) || !Guid.TryParse(userCompanyId, out var userCompanyGuid) || userCompanyGuid != targetCompanyId)
+                    {
+                        return StatusCode(403, "You can only access your company's wallet");
+                    }
+                }
             }
 
-            var wallet = await _walletService.GetWalletByCompanyIdAsync(companyId);
+            var wallet = await _walletService.GetWalletByCompanyIdAsync(targetCompanyId);
             if (wallet == null)
             {
                 // Automatically create a wallet for the company if it doesn't exist
                 try
                 {
-                    _logger.LogInformation("Company wallet not found for {CompanyId}, creating new wallet", companyId);
-                    wallet = await _walletService.CreateCompanyWalletAsync(companyId);
-                    _logger.LogInformation("Successfully created wallet for company {CompanyId}", companyId);
+                    _logger.LogInformation("Company wallet not found for {CompanyId}, creating new wallet", targetCompanyId);
+                    wallet = await _walletService.CreateCompanyWalletAsync(targetCompanyId);
+                    _logger.LogInformation("Successfully created wallet for company {CompanyId}", targetCompanyId);
                 }
                 catch (AppException ex)
                 {
-                    _logger.LogError(ex, "Failed to create wallet for company {CompanyId}: {Message}", companyId, ex.Message);
+                    _logger.LogError(ex, "Failed to create wallet for company {CompanyId}: {Message}", targetCompanyId, ex.Message);
                     return BadRequest($"Failed to create company wallet: {ex.Message}");
                 }
             }
 
-            return Ok(ApiResponse.Ok("Wllet fetched successfully", wallet));
+            return Ok(ApiResponse.Ok("Wallet fetched successfully", wallet));
         }
         catch (Exception ex)
         {
@@ -104,7 +117,7 @@ public class WalletController : ControllerBase
     /// <summary>
     /// Get SuperAdmin wallet (SuperAdmin only)
     /// </summary>
-    [HttpGet("superadmin")]
+    [HttpGet("superadmin/wallet")]
     [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult<WalletDto>> GetSuperAdminWallet()
     {
@@ -128,7 +141,7 @@ public class WalletController : ControllerBase
     /// <summary>
     /// Get all wallets (SuperAdmin only)
     /// </summary>
-    [HttpGet]
+    [HttpGet("superadmin")]
     [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult<List<WalletDto>>> GetAllWallets()
     {
@@ -141,6 +154,176 @@ public class WalletController : ControllerBase
         {
             _logger.LogError(ex, "Error getting all wallets");
             return StatusCode(500, "An error occurred while retrieving wallets");
+        }
+    }
+
+    /// <summary>
+    /// Get wallet transactions
+    /// </summary>
+    [HttpGet("{walletId}/transactions")]
+    public async Task<ActionResult<List<WalletTransactionDto>>> GetWalletTransactions(
+        Guid walletId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20)
+    {
+        try
+        {
+            // Check authorization
+            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
+            var userCompanyId = User.FindFirst("CompanyId")?.Value;
+
+            var wallet = await _walletService.GetWalletByIdAsync(walletId);
+            if (wallet == null)
+            {
+                return NotFound("Wallet not found");
+            }
+
+            if (userRole != "SuperAdmin")
+            {
+                if (wallet.IsSuperAdminWallet || wallet.CompanyId.ToString() != userCompanyId)
+                {
+                    return StatusCode(403, "You can only view your company's wallet transactions");
+                }
+            }
+
+            var transactions = await _walletService.GetWalletTransactionsAsync(walletId, page, pageSize);
+            return Ok(transactions);
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error getting wallet transactions");
+            return StatusCode(ex.StatusCode, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error getting wallet transactions");
+            return StatusCode(500, "Something went wrong");
+        }
+    }
+
+    /// <summary>
+    /// Get wallet report
+    /// </summary>
+    [HttpGet("{walletId}/report")]
+    public async Task<ActionResult<WalletReportDto>> GetWalletReport(
+        Guid walletId,
+        [FromQuery] DateTime? fromDate = null,
+        [FromQuery] DateTime? toDate = null)
+    {
+        try
+        {
+            // Check authorization
+            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
+            var userCompanyId = User.FindFirst("CompanyId")?.Value;
+
+            var wallet = await _walletService.GetWalletByIdAsync(walletId);
+            if (wallet == null)
+            {
+                return NotFound("Wallet not found");
+            }
+
+            if (userRole != "SuperAdmin")
+            {
+                if (wallet.IsSuperAdminWallet || wallet.CompanyId.ToString() != userCompanyId)
+                {
+                    return StatusCode(403, "You can only view your company's wallet report");
+                }
+            }
+
+            var report = await _walletService.GetWalletReportAsync(walletId, fromDate, toDate);
+            return Ok(report);
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error getting wallet report");
+            return StatusCode(ex.StatusCode, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error getting wallet report");
+            return StatusCode(500, "Something went wrong");
+        }
+    }
+
+    /// <summary>
+    /// Check if wallet has sufficient balance for loan disbursement
+    /// </summary>
+    [HttpGet("{walletId}/balance-check")]
+    public async Task<ActionResult<bool>> CheckSufficientBalance(Guid walletId, [FromQuery] decimal amount)
+    {
+        try
+        {
+            // Check authorization
+            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
+            var userCompanyId = User.FindFirst("CompanyId")?.Value;
+
+            var wallet = await _walletService.GetWalletByIdAsync(walletId);
+            if (wallet == null)
+            {
+                return NotFound("Wallet not found");
+            }
+
+            if (userRole != "SuperAdmin")
+            {
+                if (wallet.IsSuperAdminWallet || wallet.CompanyId.ToString() != userCompanyId)
+                {
+                    return StatusCode(403, "You can only check your company's wallet balance");
+                }
+            }
+
+            var hasSufficientBalance = await _walletService.HasSufficientBalanceAsync(walletId, amount);
+            return Ok(new { hasSufficientBalance, currentBalance = wallet.Balance, requiredAmount = amount });
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error checking wallet balance");
+            return StatusCode(ex.StatusCode, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error checking wallet balance");
+            return StatusCode(500, "Something went wrong");
+        }
+    }
+
+    /// <summary>
+    /// Get wallet transactions by query
+    /// </summary>
+    [HttpPost("transactions/query")]
+    public async Task<ActionResult<List<WalletTransactionDto>>> GetTransactionsByQuery([FromBody] WalletTransactionQueryDto query)
+    {
+        try
+        {
+            // Check authorization
+            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
+            var userCompanyId = User.FindFirst("CompanyId")?.Value;
+
+            if (query.WalletId.HasValue && userRole != "SuperAdmin")
+            {
+                var wallet = await _walletService.GetWalletByIdAsync(query.WalletId.Value);
+                if (wallet == null)
+                {
+                    return NotFound("Wallet not found");
+                }
+
+                if (wallet.IsSuperAdminWallet || wallet.CompanyId.ToString() != userCompanyId)
+                {
+                    return StatusCode(403, "You can only query your company's wallet transactions");
+                }
+            }
+
+            var transactions = await _walletService.GetTransactionsByQueryAsync(query);
+            return Ok(transactions);
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error querying wallet transactions");
+            return StatusCode(ex.StatusCode, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error querying wallet transactions");
+            return StatusCode(500, "Something went wrong");
         }
     }
 
@@ -159,7 +342,7 @@ public class WalletController : ControllerBase
 
             if (userRole != "SuperAdmin" && companyId.ToString() != userCompanyId)
             {
-                return Forbid("You can only create a wallet for your company");
+                return StatusCode(403, "You can only create a wallet for your company");
             }
 
             var wallet = await _walletService.CreateCompanyWalletAsync(companyId);
@@ -179,7 +362,7 @@ public class WalletController : ControllerBase
     /// <summary>
     /// Create SuperAdmin wallet (SuperAdmin only)
     /// </summary>
-    [HttpPost("superadmin")]
+    [HttpPost("superadmin/wallet")]
     [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult<WalletDto>> CreateSuperAdminWallet()
     {
@@ -223,7 +406,7 @@ public class WalletController : ControllerBase
             {
                 if (wallet.IsSuperAdminWallet || wallet.CompanyId.ToString() != userCompanyId)
                 {
-                    return Forbid("You can only fund your company's wallet");
+                    return StatusCode(403, "You can only fund your company's wallet");
                 }
             }
 
@@ -295,7 +478,7 @@ public class WalletController : ControllerBase
             {
                 if (wallet.IsSuperAdminWallet || wallet.CompanyId.ToString() != userCompanyId)
                 {
-                    return Forbid("You can only debit your company's wallet");
+                    return StatusCode(403, "You can only debit your company's wallet");
                 }
             }
 
@@ -320,138 +503,9 @@ public class WalletController : ControllerBase
     }
 
     /// <summary>
-    /// Get wallet transactions
-    /// </summary>
-    [HttpGet("{walletId}/transactions")]
-    public async Task<ActionResult<List<WalletTransactionDto>>> GetWalletTransactions(
-        Guid walletId,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 20)
-    {
-        try
-        {
-            // Check authorization
-            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
-            var userCompanyId = User.FindFirst("CompanyId")?.Value;
-
-            var wallet = await _walletService.GetWalletByIdAsync(walletId);
-            if (wallet == null)
-            {
-                return NotFound("Wallet not found");
-            }
-
-            if (userRole != "SuperAdmin")
-            {
-                if (wallet.IsSuperAdminWallet || wallet.CompanyId.ToString() != userCompanyId)
-                {
-                    return Forbid("You can only view your company's wallet transactions");
-                }
-            }
-
-            var transactions = await _walletService.GetWalletTransactionsAsync(walletId, page, pageSize);
-            return Ok(transactions);
-        }
-        catch (AppException ex)
-        {
-            _logger.LogError(ex, "Error getting wallet transactions");
-            return StatusCode(ex.StatusCode, ex.Message);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unhandled error getting wallet transactions");
-            return StatusCode(500, "Something went wrong");
-        }
-    }
-
-    /// <summary>
-    /// Get wallet transactions by query
-    /// </summary>
-    [HttpPost("transactions/query")]
-    public async Task<ActionResult<List<WalletTransactionDto>>> GetTransactionsByQuery([FromBody] WalletTransactionQueryDto query)
-    {
-        try
-        {
-            // Check authorization
-            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
-            var userCompanyId = User.FindFirst("CompanyId")?.Value;
-
-            if (query.WalletId.HasValue && userRole != "SuperAdmin")
-            {
-                var wallet = await _walletService.GetWalletByIdAsync(query.WalletId.Value);
-                if (wallet == null)
-                {
-                    return NotFound("Wallet not found");
-                }
-
-                if (wallet.IsSuperAdminWallet || wallet.CompanyId.ToString() != userCompanyId)
-                {
-                    return Forbid("You can only query your company's wallet transactions");
-                }
-            }
-
-            var transactions = await _walletService.GetTransactionsByQueryAsync(query);
-            return Ok(transactions);
-        }
-        catch (AppException ex)
-        {
-            _logger.LogError(ex, "Error querying wallet transactions");
-            return StatusCode(ex.StatusCode, ex.Message);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unhandled error querying wallet transactions");
-            return StatusCode(500, "Something went wrong");
-        }
-    }
-
-    /// <summary>
-    /// Get wallet report
-    /// </summary>
-    [HttpGet("{walletId}/report")]
-    public async Task<ActionResult<WalletReportDto>> GetWalletReport(
-        Guid walletId,
-        [FromQuery] DateTime? fromDate = null,
-        [FromQuery] DateTime? toDate = null)
-    {
-        try
-        {
-            // Check authorization
-            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
-            var userCompanyId = User.FindFirst("CompanyId")?.Value;
-
-            var wallet = await _walletService.GetWalletByIdAsync(walletId);
-            if (wallet == null)
-            {
-                return NotFound("Wallet not found");
-            }
-
-            if (userRole != "SuperAdmin")
-            {
-                if (wallet.IsSuperAdminWallet || wallet.CompanyId.ToString() != userCompanyId)
-                {
-                    return Forbid("You can only view your company's wallet report");
-                }
-            }
-
-            var report = await _walletService.GetWalletReportAsync(walletId, fromDate, toDate);
-            return Ok(report);
-        }
-        catch (AppException ex)
-        {
-            _logger.LogError(ex, "Error getting wallet report");
-            return StatusCode(ex.StatusCode, ex.Message);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unhandled error getting wallet report");
-            return StatusCode(500, "Something went wrong");
-        }
-    }
-
-    /// <summary>
     /// Transfer funds between wallets (SuperAdmin only)
     /// </summary>
-    [HttpPost("transfer")]
+    [HttpPost("superadmin/transfer")]
     [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult> TransferFunds([FromBody] TransferFundsDto transferDto)
     {
@@ -481,47 +535,6 @@ public class WalletController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled error transferring funds");
-            return StatusCode(500, "Something went wrong");
-        }
-    }
-
-    /// <summary>
-    /// Check if wallet has sufficient balance for loan disbursement
-    /// </summary>
-    [HttpGet("{walletId}/balance-check")]
-    public async Task<ActionResult<bool>> CheckSufficientBalance(Guid walletId, [FromQuery] decimal amount)
-    {
-        try
-        {
-            // Check authorization
-            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
-            var userCompanyId = User.FindFirst("CompanyId")?.Value;
-
-            var wallet = await _walletService.GetWalletByIdAsync(walletId);
-            if (wallet == null)
-            {
-                return NotFound("Wallet not found");
-            }
-
-            if (userRole != "SuperAdmin")
-            {
-                if (wallet.IsSuperAdminWallet || wallet.CompanyId.ToString() != userCompanyId)
-                {
-                    return Forbid("You can only check your company's wallet balance");
-                }
-            }
-
-            var hasSufficientBalance = await _walletService.HasSufficientBalanceAsync(walletId, amount);
-            return Ok(new { hasSufficientBalance, currentBalance = wallet.Balance, requiredAmount = amount });
-        }
-        catch (AppException ex)
-        {
-            _logger.LogError(ex, "Error checking wallet balance");
-            return StatusCode(ex.StatusCode, ex.Message);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unhandled error checking wallet balance");
             return StatusCode(500, "Something went wrong");
         }
     }
