@@ -37,7 +37,10 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
 
             if (userRole != "SuperAdmin")
             {
-                if (wallet.CompanyId.ToString() != userCompanyId)
+                // Parse both GUIDs for proper comparison (case-insensitive)
+                if (string.IsNullOrEmpty(userCompanyId) || 
+                    !Guid.TryParse(userCompanyId, out var userCompanyGuid) || 
+                    wallet.CompanyId != userCompanyGuid)
                 {
                     return StatusCode(403, "You can only access your company's wallet");
                 }
@@ -181,7 +184,15 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
 
             if (userRole != "SuperAdmin")
             {
-                if (wallet.IsSuperAdminWallet || wallet.CompanyId.ToString() != userCompanyId)
+                if (wallet.IsSuperAdminWallet)
+                {
+                    return StatusCode(403, "You can only view your company's wallet transactions");
+                }
+                
+                // Parse both GUIDs for proper comparison (case-insensitive)
+                if (string.IsNullOrEmpty(userCompanyId) || 
+                    !Guid.TryParse(userCompanyId, out var userCompanyGuid) || 
+                    wallet.CompanyId != userCompanyGuid)
                 {
                     return StatusCode(403, "You can only view your company's wallet transactions");
                 }
@@ -226,7 +237,15 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
 
             if (userRole != "SuperAdmin")
             {
-                if (wallet.IsSuperAdminWallet || wallet.CompanyId.ToString() != userCompanyId)
+                if (wallet.IsSuperAdminWallet)
+                {
+                    return StatusCode(403, "You can only view your company's wallet report");
+                }
+                
+                // Parse both GUIDs for proper comparison (case-insensitive)
+                if (string.IsNullOrEmpty(userCompanyId) || 
+                    !Guid.TryParse(userCompanyId, out var userCompanyGuid) || 
+                    wallet.CompanyId != userCompanyGuid)
                 {
                     return StatusCode(403, "You can only view your company's wallet report");
                 }
@@ -268,7 +287,15 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
 
             if (userRole != "SuperAdmin")
             {
-                if (wallet.IsSuperAdminWallet || wallet.CompanyId.ToString() != userCompanyId)
+                if (wallet.IsSuperAdminWallet)
+                {
+                    return StatusCode(403, "You can only check your company's wallet balance");
+                }
+                
+                // Parse both GUIDs for proper comparison (case-insensitive)
+                if (string.IsNullOrEmpty(userCompanyId) || 
+                    !Guid.TryParse(userCompanyId, out var userCompanyGuid) || 
+                    wallet.CompanyId != userCompanyGuid)
                 {
                     return StatusCode(403, "You can only check your company's wallet balance");
                 }
@@ -285,6 +312,52 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled error checking wallet balance");
+            return StatusCode(500, "Something went wrong");
+        }
+    }
+
+    /// <summary>
+    /// Get current user's company wallet
+    /// </summary>
+    [HttpGet("my-company")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    public async Task<ActionResult<WalletDto>> GetMyCompanyWallet()
+    {
+        try
+        {
+            var userCompanyId = User.FindFirst("CompanyId")?.Value;
+            if (string.IsNullOrEmpty(userCompanyId) || !Guid.TryParse(userCompanyId, out var companyId))
+            {
+                return StatusCode(403, "Company information not found for user");
+            }
+
+            var wallet = await _walletService.GetWalletByCompanyIdAsync(companyId);
+            if (wallet == null)
+            {
+                // Automatically create a wallet for the company if it doesn't exist
+                try
+                {
+                    _logger.LogInformation("Company wallet not found for {CompanyId}, creating new wallet", companyId);
+                    wallet = await _walletService.CreateCompanyWalletAsync(companyId);
+                    _logger.LogInformation("Successfully created wallet for company {CompanyId}", companyId);
+                }
+                catch (AppException ex)
+                {
+                    _logger.LogError(ex, "Failed to create wallet for company {CompanyId}: {Message}", companyId, ex.Message);
+                    return BadRequest($"Failed to create company wallet: {ex.Message}");
+                }
+            }
+
+            return Ok(ApiResponse.Ok("Wallet fetched successfully", wallet));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error getting company wallet");
+            return StatusCode(ex.StatusCode, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error getting company wallet");
             return StatusCode(500, "Something went wrong");
         }
     }
@@ -422,7 +495,15 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
                     return NotFound("Wallet not found");
                 }
 
-                if (wallet.IsSuperAdminWallet || wallet.CompanyId.ToString() != userCompanyId)
+                if (wallet.IsSuperAdminWallet)
+                {
+                    return StatusCode(403, "You can only query your company's wallet transactions");
+                }
+                
+                // Parse both GUIDs for proper comparison (case-insensitive)
+                if (string.IsNullOrEmpty(userCompanyId) || 
+                    !Guid.TryParse(userCompanyId, out var userCompanyGuid) || 
+                    wallet.CompanyId != userCompanyGuid)
                 {
                     return StatusCode(403, "You can only query your company's wallet transactions");
                 }
@@ -495,9 +576,15 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
             var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
             var userCompanyId = User.FindFirst("CompanyId")?.Value;
 
-            if (userRole != "SuperAdmin" && companyId.ToString() != userCompanyId)
+            if (userRole != "SuperAdmin")
             {
-                return StatusCode(403, "You can only create a wallet for your company");
+                // Parse both GUIDs for proper comparison (case-insensitive)
+                if (string.IsNullOrEmpty(userCompanyId) || 
+                    !Guid.TryParse(userCompanyId, out var userCompanyGuid) || 
+                    companyId != userCompanyGuid)
+                {
+                    return StatusCode(403, "You can only create a wallet for your company");
+                }
             }
 
             var wallet = await _walletService.CreateCompanyWalletAsync(companyId);
@@ -542,6 +629,7 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
     /// Initiate wallet funding via Paystack
     /// </summary>
     [HttpPost("fund")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
     public async Task<ActionResult<PaystackInitializationDto>> FundWallet([FromBody] FundWalletDto fundWalletDto)
     {
         try
@@ -559,7 +647,15 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
 
             if (userRole != "SuperAdmin")
             {
-                if (wallet.IsSuperAdminWallet || wallet.CompanyId.ToString() != userCompanyId)
+                if (wallet.IsSuperAdminWallet)
+                {
+                    return StatusCode(403, "You can only fund your company's wallet");
+                }
+                
+                // Parse both GUIDs for proper comparison (case-insensitive)
+                if (string.IsNullOrEmpty(userCompanyId) || 
+                    !Guid.TryParse(userCompanyId, out var userCompanyGuid) || 
+                    wallet.CompanyId != userCompanyGuid)
                 {
                     return StatusCode(403, "You can only fund your company's wallet");
                 }
@@ -584,11 +680,12 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
     /// Complete wallet funding after Paystack payment verification
     /// </summary>
     [HttpPost("fund/complete")]
-    public async Task<ActionResult> CompleteFunding([FromBody] string paystackReference)
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    public async Task<ActionResult> CompleteFunding([FromBody] CompleteFundingDto completeFundingDto)
     {
         try
         {
-            var result = await _walletService.CompleteWalletFundingAsync(paystackReference);
+            var result = await _walletService.CompleteWalletFundingAsync(completeFundingDto.PaystackReference);
             if (result)
             {
                 return Ok(new { message = "Wallet funding completed successfully" });
@@ -609,17 +706,20 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
     }
 
     /// <summary>
-    /// Debit wallet (for fees and charges)
+    /// Debit a wallet
     /// </summary>
-    [HttpPost("debit")]
+    [HttpPatch("{walletId}/debit")]
     [Authorize(Roles = "SuperAdmin,Admin")]
-    public async Task<ActionResult> DebitWallet([FromBody] DebitWalletDto debitWalletDto)
+    public async Task<ActionResult> DebitWallet(Guid walletId, [FromBody] DebitWalletDto debitWalletDto)
     {
         try
         {
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value!;
             var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
             var userCompanyId = User.FindFirst("CompanyId")?.Value;
+
+            // Override the WalletId from the route parameter
+            debitWalletDto.WalletId = walletId;
 
             // Get wallet to check ownership
             var wallet = await _walletService.GetWalletByIdAsync(debitWalletDto.WalletId);
@@ -631,7 +731,15 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
             // Authorization check
             if (userRole != "SuperAdmin")
             {
-                if (wallet.IsSuperAdminWallet || wallet.CompanyId.ToString() != userCompanyId)
+                if (wallet.IsSuperAdminWallet)
+                {
+                    return StatusCode(403, "You can only debit your company's wallet");
+                }
+                
+                // Parse both GUIDs for proper comparison (case-insensitive)
+                if (string.IsNullOrEmpty(userCompanyId) || 
+                    !Guid.TryParse(userCompanyId, out var userCompanyGuid) || 
+                    wallet.CompanyId != userCompanyGuid)
                 {
                     return StatusCode(403, "You can only debit your company's wallet");
                 }

@@ -115,3 +115,11 @@ public class WalletReportDto
     public DateTime ReportPeriodTo { get; set; }
     public List<WalletTransactionDto> RecentTransactions { get; set; } = new();
 }
+
+/// <summary>
+/// DTO for completing wallet funding
+/// </summary>
+public class CompleteFundingDto
+{
+    public string PaystackReference { get; set; } = string.Empty;
+}
