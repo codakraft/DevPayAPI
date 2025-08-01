@@ -161,6 +161,7 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
     /// Get wallet transactions
     /// </summary>
     [HttpGet("{walletId}/transactions")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
     public async Task<ActionResult<List<WalletTransactionDto>>> GetWalletTransactions(
         Guid walletId,
         [FromQuery] int page = 1,
@@ -205,6 +206,7 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
     /// Get wallet report
     /// </summary>
     [HttpGet("{walletId}/report")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
     public async Task<ActionResult<WalletReportDto>> GetWalletReport(
         Guid walletId,
         [FromQuery] DateTime? fromDate = null,
@@ -249,6 +251,7 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
     /// Check if wallet has sufficient balance for loan disbursement
     /// </summary>
     [HttpGet("{walletId}/balance-check")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
     public async Task<ActionResult<bool>> CheckSufficientBalance(Guid walletId, [FromQuery] decimal amount)
     {
         try
@@ -287,9 +290,122 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
     }
 
     /// <summary>
+    /// Get current user's company wallet transactions
+    /// </summary>
+    [HttpGet("my-company/transactions")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    public async Task<ActionResult<List<WalletTransactionDto>>> GetMyCompanyWalletTransactions(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20)
+    {
+        try
+        {
+            var userCompanyId = User.FindFirst("CompanyId")?.Value;
+            if (string.IsNullOrEmpty(userCompanyId) || !Guid.TryParse(userCompanyId, out var companyId))
+            {
+                return StatusCode(403, "Company information not found for user");
+            }
+
+            var wallet = await _walletService.GetWalletByCompanyIdAsync(companyId);
+            if (wallet == null)
+            {
+                return NotFound("Company wallet not found");
+            }
+
+            var transactions = await _walletService.GetWalletTransactionsAsync(wallet.Id, page, pageSize);
+            return Ok(transactions);
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error getting company wallet transactions");
+            return StatusCode(ex.StatusCode, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error getting company wallet transactions");
+            return StatusCode(500, "Something went wrong");
+        }
+    }
+
+    /// <summary>
+    /// Get current user's company wallet report
+    /// </summary>
+    [HttpGet("my-company/report")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    public async Task<ActionResult<WalletReportDto>> GetMyCompanyWalletReport(
+        [FromQuery] DateTime? fromDate = null,
+        [FromQuery] DateTime? toDate = null)
+    {
+        try
+        {
+            var userCompanyId = User.FindFirst("CompanyId")?.Value;
+            if (string.IsNullOrEmpty(userCompanyId) || !Guid.TryParse(userCompanyId, out var companyId))
+            {
+                return StatusCode(403, "Company information not found for user");
+            }
+
+            var wallet = await _walletService.GetWalletByCompanyIdAsync(companyId);
+            if (wallet == null)
+            {
+                return NotFound("Company wallet not found");
+            }
+
+            var report = await _walletService.GetWalletReportAsync(wallet.Id, fromDate, toDate);
+            return Ok(report);
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error getting company wallet report");
+            return StatusCode(ex.StatusCode, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error getting company wallet report");
+            return StatusCode(500, "Something went wrong");
+        }
+    }
+
+    /// <summary>
+    /// Check current user's company wallet balance
+    /// </summary>
+    [HttpGet("my-company/balance-check")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    public async Task<ActionResult<bool>> CheckMyCompanyWalletBalance([FromQuery] decimal amount)
+    {
+        try
+        {
+            var userCompanyId = User.FindFirst("CompanyId")?.Value;
+            if (string.IsNullOrEmpty(userCompanyId) || !Guid.TryParse(userCompanyId, out var companyId))
+            {
+                return StatusCode(403, "Company information not found for user");
+            }
+
+            var wallet = await _walletService.GetWalletByCompanyIdAsync(companyId);
+            if (wallet == null)
+            {
+                return NotFound("Company wallet not found");
+            }
+
+            var hasSufficientBalance = await _walletService.HasSufficientBalanceAsync(wallet.Id, amount);
+            return Ok(new { hasSufficientBalance, currentBalance = wallet.Balance, requiredAmount = amount });
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error checking company wallet balance");
+            return StatusCode(ex.StatusCode, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error checking company wallet balance");
+            return StatusCode(500, "Something went wrong");
+        }
+    }
+
+    /// <summary>
     /// Get wallet transactions by query
     /// </summary>
     [HttpPost("transactions/query")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
     public async Task<ActionResult<List<WalletTransactionDto>>> GetTransactionsByQuery([FromBody] WalletTransactionQueryDto query)
     {
         try
@@ -323,6 +439,45 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled error querying wallet transactions");
+            return StatusCode(500, "Something went wrong");
+        }
+    }
+
+    /// <summary>
+    /// Query current user's company wallet transactions
+    /// </summary>
+    [HttpPost("my-company/transactions/query")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    public async Task<ActionResult<List<WalletTransactionDto>>> QueryMyCompanyWalletTransactions([FromBody] WalletTransactionQueryDto query)
+    {
+        try
+        {
+            var userCompanyId = User.FindFirst("CompanyId")?.Value;
+            if (string.IsNullOrEmpty(userCompanyId) || !Guid.TryParse(userCompanyId, out var companyId))
+            {
+                return StatusCode(403, "Company information not found for user");
+            }
+
+            var wallet = await _walletService.GetWalletByCompanyIdAsync(companyId);
+            if (wallet == null)
+            {
+                return NotFound("Company wallet not found");
+            }
+
+            // Override the WalletId in the query with the user's company wallet
+            query.WalletId = wallet.Id;
+
+            var transactions = await _walletService.GetTransactionsByQueryAsync(query);
+            return Ok(transactions);
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error querying company wallet transactions");
+            return StatusCode(ex.StatusCode, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error querying company wallet transactions");
             return StatusCode(500, "Something went wrong");
         }
     }
