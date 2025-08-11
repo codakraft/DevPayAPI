@@ -119,7 +119,6 @@ public class DocumentController : ControllerBase
     /// Get all documents
     /// </summary>
     [HttpGet]
-    [Authorize(Roles = "SuperAdmin,Admin")]
     public async Task<ActionResult<List<DocumentDto>>> GetAllDocuments()
     {
         try
@@ -147,7 +146,6 @@ public class DocumentController : ControllerBase
     /// Delete document by ID
     /// </summary>
     [HttpDelete("{id}")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
     public async Task<ActionResult> DeleteDocument(string id)
     {
         try

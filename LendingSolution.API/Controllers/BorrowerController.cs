@@ -1,3 +1,4 @@
+using LendingSolution.Application.Repositories.Interfaces;
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Dtos.Response;
@@ -10,10 +11,12 @@ namespace LendingSolution.API.Controllers;
 [Route("api/[controller]")]
 public class BorrowerController(
     IBorrowerOnboardingService borrowerOnboardingService,
+    IBorrowerApplicationRepository borrowerApplicationRepository,
     ILogger<BorrowerController> logger
 ) : Controller
 {
     private readonly IBorrowerOnboardingService _borrowerOnboardingService = borrowerOnboardingService;
+    private readonly IBorrowerApplicationRepository _borrowerApplicationRepository = borrowerApplicationRepository;
     private readonly ILogger<BorrowerController> _logger = logger;
 
     // Step 1: Initial borrower registration with basic info
@@ -273,12 +276,42 @@ public class BorrowerController(
         }
         catch (AppException ex)
         {
-            _logger.LogError(ex, "Error retrieving current step for loan ID {LoanId}", request.LoanId);
+            _logger.LogError(ex, "Error retrieving current step for email {Email}", request.Email);
             return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unhandled error retrieving current step for loan ID {LoanId}", request.LoanId);
+            _logger.LogError(ex, "Unhandled error retrieving current step for email {Email}", request.Email);
+            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
+        }
+    }
+
+    /// <summary>
+    /// Get current step status for borrower application (RESTful GET endpoint)
+    /// </summary>
+    /// <param name="emailOrId">The borrower's email address or application ID</param>
+    /// <returns>Current step information including progress, eligibility, and required actions</returns>
+    [HttpGet("{emailOrId}")]
+    public async Task<IActionResult> GetCurrentStepByEmail(string emailOrId)
+    {
+        try
+        {
+            var request = new BorrowerCurrentStepRequestDto { Email = emailOrId };
+            var result = await _borrowerOnboardingService.GetCurrentStepAsync(request);
+            
+            _logger.LogInformation("Current step retrieved successfully for {EmailOrId}. Current step: {CurrentStep}", 
+                emailOrId, result.CurrentStep);
+            
+            return Ok(ApiResponse.Ok("Current step retrieved successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error retrieving current step for {EmailOrId}", emailOrId);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error retrieving current step for {EmailOrId}", emailOrId);
             return StatusCode(500, ApiResponse.Fail("Something went wrong"));
         }
     }

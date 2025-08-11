@@ -27,6 +27,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Wallet> Wallets { get; set; }
     public DbSet<WalletTransaction> WalletTransactions { get; set; }
     public DbSet<BorrowerApplication> BorrowerApplications { get; set; }
+    public DbSet<RemitaSalaryHistory> RemitaSalaryHistories { get; set; }
+    public DbSet<RemitaSalaryPayment> RemitaSalaryPayments { get; set; }
+    public DbSet<RemitaLoanHistory> RemitaLoanHistories { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -316,6 +319,44 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 
         modelBuilder.Entity<WalletTransaction>()
             .HasIndex(wt => wt.PaystackReference);
+
+        // Configure RemitaSalaryHistory relationships
+        modelBuilder.Entity<RemitaSalaryHistory>()
+            .HasOne(rsh => rsh.BorrowerApplication)
+            .WithMany()
+            .HasForeignKey(rsh => rsh.BorrowerApplicationId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<RemitaSalaryPayment>()
+            .HasOne(rsp => rsp.RemitaSalaryHistory)
+            .WithMany(rsh => rsh.SalaryPayments)
+            .HasForeignKey(rsp => rsp.RemitaSalaryHistoryId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<RemitaLoanHistory>()
+            .HasOne(rlh => rlh.RemitaSalaryHistory)
+            .WithMany(rsh => rsh.LoanHistories)
+            .HasForeignKey(rlh => rlh.RemitaSalaryHistoryId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Add indexes for RemitaSalaryHistory
+        modelBuilder.Entity<RemitaSalaryHistory>()
+            .HasIndex(rsh => rsh.BorrowerApplicationId);
+
+        modelBuilder.Entity<RemitaSalaryHistory>()
+            .HasIndex(rsh => rsh.CustomerId);
+
+        modelBuilder.Entity<RemitaSalaryHistory>()
+            .HasIndex(rsh => new { rsh.AccountNumber, rsh.BankCode });
+
+        modelBuilder.Entity<RemitaSalaryPayment>()
+            .HasIndex(rsp => rsp.RemitaSalaryHistoryId);
+
+        modelBuilder.Entity<RemitaSalaryPayment>()
+            .HasIndex(rsp => rsp.PaymentDate);
+
+        modelBuilder.Entity<RemitaLoanHistory>()
+            .HasIndex(rlh => rlh.RemitaSalaryHistoryId);
     }
 
     // protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)

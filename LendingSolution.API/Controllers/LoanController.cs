@@ -13,10 +13,12 @@ namespace LendingSolution.API.Controllers;
 [Route("api/loan")]
 public class LoanController(
     ILoanService loanService,
+    ISalaryHistoryViewService salaryHistoryViewService,
     ILogger<LoanController> logger
 ) : Controller
 {
     private readonly ILoanService _loanService = loanService;
+    private readonly ISalaryHistoryViewService _salaryHistoryViewService = salaryHistoryViewService;
     private readonly ILogger<LoanController> _logger = logger;
 
     [HttpGet]
@@ -135,4 +137,134 @@ public class LoanController(
             _logger.LogError(ex, "Error occurred while processing loan {LoanId}.", id);
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
-    }}
+    }
+
+    /// <summary>
+    /// Get salary history for borrower applications in the company (Admin access)
+    /// </summary>
+    [HttpGet("salary-history")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetCompanySalaryHistory([FromQuery] SalaryHistoryFilterRequestDto filters)
+    {
+        try
+        {
+            var companyIdClaim = User.FindFirst("CompanyId")?.Value;
+            if (string.IsNullOrEmpty(companyIdClaim) || !Guid.TryParse(companyIdClaim, out var companyId))
+            {
+                return BadRequest(ApiResponse.Fail("Company information not found"));
+            }
+
+            var result = await _salaryHistoryViewService.GetCompanySalaryHistoryAsync(companyId, filters);
+            
+            _logger.LogInformation("Successfully fetched {Count} salary history records for company {CompanyId}", 
+                result.Data.Count, companyId);
+            
+            return Ok(ApiResponse.Ok("Salary history fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while fetching company salary history");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    /// <summary>
+    /// Get detailed salary history by ID (Admin access - only for their company's records)
+    /// </summary>
+    [HttpGet("salary-history/{salaryHistoryId}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetSalaryHistoryDetails(Guid salaryHistoryId)
+    {
+        try
+        {
+            var companyIdClaim = User.FindFirst("CompanyId")?.Value;
+            if (string.IsNullOrEmpty(companyIdClaim) || !Guid.TryParse(companyIdClaim, out var companyId))
+            {
+                return BadRequest(ApiResponse.Fail("Company information not found"));
+            }
+
+            // Validate company access to this salary history record
+            var hasAccess = await _salaryHistoryViewService.ValidateCompanyAccessAsync(companyId, salaryHistoryId);
+            if (!hasAccess)
+            {
+                return Forbid("You don't have access to this salary history record");
+            }
+
+            var result = await _salaryHistoryViewService.GetSalaryHistoryDetailsAsync(salaryHistoryId);
+            
+            _logger.LogInformation("Successfully fetched salary history details for ID {SalaryHistoryId}", salaryHistoryId);
+            
+            return Ok(ApiResponse.Ok("Salary history details fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while fetching salary history details for ID {SalaryHistoryId}", salaryHistoryId);
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    /// <summary>
+    /// Get all salary history records across all companies (SuperAdmin access)
+    /// </summary>
+    [HttpGet("salary-history/all")]
+    [Authorize(Roles = "SuperAdmin")]
+    public async Task<IActionResult> GetAllSalaryHistory([FromQuery] SalaryHistoryFilterRequestDto filters)
+    {
+        try
+        {
+            var result = await _salaryHistoryViewService.GetAllSalaryHistoryAsync(filters);
+            
+            _logger.LogInformation("Successfully fetched {Count} salary history records across all companies", 
+                result.Data.Count);
+            
+            return Ok(ApiResponse.Ok("All salary history fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while fetching all salary history records");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    /// <summary>
+    /// Get detailed salary history by ID (SuperAdmin access - can access any record)
+    /// </summary>
+    [HttpGet("salary-history/details/{salaryHistoryId}")]
+    [Authorize(Roles = "SuperAdmin")]
+    public async Task<IActionResult> GetAnySalaryHistoryDetails(Guid salaryHistoryId)
+    {
+        try
+        {
+            var result = await _salaryHistoryViewService.GetSalaryHistoryDetailsAsync(salaryHistoryId);
+            
+            _logger.LogInformation("SuperAdmin successfully fetched salary history details for ID {SalaryHistoryId}", salaryHistoryId);
+            
+            return Ok(ApiResponse.Ok("Salary history details fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while fetching salary history details for ID {SalaryHistoryId}", salaryHistoryId);
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+}

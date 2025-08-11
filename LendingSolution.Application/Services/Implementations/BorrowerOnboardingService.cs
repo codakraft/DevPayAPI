@@ -4,6 +4,7 @@ using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Models;
 using LendingSolution.Core.Enum;
+using Microsoft.Extensions.Logging;
 
 namespace LendingSolution.Application.Services.Implementations;
 
@@ -18,6 +19,9 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     private readonly ISmsService _smsService;
     private readonly IWalletService _walletService;
     private readonly ISettingsService _settingsService;
+    private readonly IRemitaService _remitaService;
+    private readonly ISalaryEligibilityService _salaryEligibilityService;
+    private readonly ILogger<BorrowerOnboardingService> _logger;
 
     public BorrowerOnboardingService(
         IBorrowerApplicationRepository borrowerRepository,
@@ -28,7 +32,10 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         IEmailService emailService,
         ISmsService smsService,
         IWalletService walletService,
-        ISettingsService settingsService)
+        ISettingsService settingsService,
+        IRemitaService remitaService,
+        ISalaryEligibilityService salaryEligibilityService,
+        ILogger<BorrowerOnboardingService> logger)
     {
         _borrowerRepository = borrowerRepository;
         _companyRepository = companyRepository;
@@ -39,6 +46,9 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         _smsService = smsService;
         _walletService = walletService;
         _settingsService = settingsService;
+        _remitaService = remitaService;
+        _salaryEligibilityService = salaryEligibilityService;
+        _logger = logger;
     }
 
     public async Task<BorrowerStep1ResponseDto> Step1_SaveBorrowerInfoAsync(BorrowerStep1RequestDto request)
@@ -51,11 +61,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         }
 
         // Validate loan product exists and get company from product
-        var product = await _loanProductRepository.GetLoanProductById(request.ProductId);
-        if (product == null)
-        {
-            throw new AppException("Loan product not found", 404);
-        }
+        var product = await _loanProductRepository.GetLoanProductById(request.ProductId) ?? throw new AppException("Loan product not found", 404);
 
         // Get company from the product
         var company = await _companyRepository.GetCompanyById(product.CompanyId);
@@ -138,12 +144,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
     public async Task<BorrowerStep2BResponseDto> Step2B_ValidateBvnOtpAsync(BorrowerStep2BRequestDto request)
     {
-        var application = await _borrowerRepository.GetByIdAsync(request.LoanId);
-        if (application == null)
-        {
-            throw new AppException("Application not found", 404);
-        }
-
+        var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
         if (application.CurrentStep != BorrowerOnboardingStep.Step2_BvnSubmitted)
         {
             throw new AppException("Invalid step for this operation", 400);
@@ -190,13 +191,57 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             FileExtension = request.BackImageExtension
         }, application.Id.ToString());
 
-        // Calculate loan eligibility (mock calculation based on product)
+        // Calculate loan eligibility (enhanced with salary history)
         var product = application.Product ?? await _loanProductRepository.GetLoanProductById(application.ProductId) ?? throw new AppException("Loan product not found", 404);
 
-        var minLoanEligible = product.MinAmount;
-        var maxLoanEligible = product.MaxAmount; // 80% of max as example
+        decimal minLoanEligible;
+        decimal maxLoanEligible;
         var minTenor = product.MinTenor;
         var maxTenor = product.MaxTenor;
+
+        // Require salary history check - borrower cannot proceed without it
+        if (string.IsNullOrEmpty(application.BVN) || string.IsNullOrEmpty(application.AccountNo) || string.IsNullOrEmpty(application.BankCode))
+        {
+            throw new AppException("BVN and complete bank details are required to proceed. Please complete Step 2 properly.", 400);
+        }
+
+        // Fetch salary history from Remita - this is mandatory
+        try
+        {
+            var salaryHistoryResponse = await _remitaService.GetBorrowerSalaryHistoryAsync(
+                application.AccountNo, 
+                application.BankCode, 
+                application.BVN);
+
+            if (salaryHistoryResponse == null || salaryHistoryResponse.Status != "success" || !salaryHistoryResponse.HasData)
+            {
+                throw new AppException("Unable to retrieve salary history from Remita. Please ensure your bank details are correct and you have salary payment history.", 400);
+            }
+
+            // Save salary history to database
+            await _salaryEligibilityService.SaveSalaryHistoryAsync(application.Id, salaryHistoryResponse);
+
+            // Calculate eligibility based on salary history
+            var eligibilityResult = await _salaryEligibilityService.CalculateLoanEligibilityAsync(salaryHistoryResponse, product);
+
+            // Use calculated eligibility amounts
+            minLoanEligible = eligibilityResult.FinalMinEligible;
+            maxLoanEligible = eligibilityResult.FinalMaxEligible;
+
+            // Log the eligibility calculation for debugging
+            _logger.LogInformation("Salary-based eligibility calculated for application {ApplicationId}: Min={MinEligible}, Max={MaxEligible}, Reason={Reason}", 
+                application.Id, minLoanEligible, maxLoanEligible, eligibilityResult.EligibilityReason);
+        }
+        catch (AppException)
+        {
+            // Re-throw application exceptions (user-facing errors)
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching salary history for application {ApplicationId}", application.Id);
+            throw new AppException("Unable to retrieve salary history. Please try again or contact support if the problem persists.", 500);
+        }
 
         // Update application
         application.Address = request.Address;
@@ -508,7 +553,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         return "564312";
     }
 
-    private bool ValidateOtp(string identifier, string providedOtp, string? storedOtp, DateTime? generatedAt)
+    private static bool ValidateOtp(string identifier, string providedOtp, string? storedOtp, DateTime? generatedAt)
     {
         if (string.IsNullOrEmpty(storedOtp) || !generatedAt.HasValue)
         {
@@ -526,15 +571,23 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
     public async Task<BorrowerCurrentStepResponseDto> GetCurrentStepAsync(BorrowerCurrentStepRequestDto request)
     {
-        var borrowerApplication = await _borrowerRepository.GetByLoanIdAsync(request.LoanId);
+        var borrowerApplication = await _borrowerRepository.GetByEmailAsync(request.Email);
         if (borrowerApplication == null)
         {
-            throw new AppException("Borrower application not found", 404);
+            // Check if it's a GUID to provide more specific error message
+            if (Guid.TryParse(request.Email, out _))
+            {
+                throw new AppException($"No borrower application found for ID: {request.Email}", 404);
+            }
+            else
+            {
+                throw new AppException($"No borrower application found for email: {request.Email}", 404);
+            }
         }
 
         var response = new BorrowerCurrentStepResponseDto
         {
-            LoanId = borrowerApplication.LoanId ?? Guid.Empty,
+            LoanId = borrowerApplication.Id,
             Email = borrowerApplication.Email,
             FirstName = borrowerApplication.FirstName,
             LastName = borrowerApplication.LastName,

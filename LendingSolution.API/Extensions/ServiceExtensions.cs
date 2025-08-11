@@ -243,6 +243,8 @@ public static class ServiceExtensions
         services.AddScoped<IBorrowerOnboardingService, BorrowerOnboardingService>();
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<ISmsService, SmsService>();
+        services.AddScoped<ISalaryEligibilityService, SalaryEligibilityService>();
+        services.AddScoped<ISalaryHistoryViewService, SalaryHistoryViewService>();
     }
 
     public static void RegisterRepositories(this IServiceCollection services)
@@ -265,6 +267,8 @@ public static class ServiceExtensions
         services.AddScoped<IWalletRepository, WalletRepository>();
         services.AddScoped<IWalletTransactionRepository, WalletTransactionRepository>();
         services.AddScoped<IBorrowerApplicationRepository, BorrowerApplicationRepository>();
+        services.AddScoped<IRemitaSalaryHistoryRepository, RemitaSalaryHistoryRepository>();
+        services.AddScoped<IRemitaSalaryHistoryRepository, RemitaSalaryHistoryRepository>();
     }
 
     public static void ConfigureServices(this IServiceCollection services, IConfiguration configuration)

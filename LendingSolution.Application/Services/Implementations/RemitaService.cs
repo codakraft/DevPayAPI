@@ -136,8 +136,8 @@ public class RemitaService(
             serviceTypeId = _settings.ServiceTypeId,
             hash,
             payerName = $"{borrowerApplication.FirstName} {borrowerApplication.LastName}",
-            payerEmail = loan.User.Email,
-            payerPhone = loan.User.PhoneNumber,
+            payerEmail = loan.User?.Email ?? string.Empty,
+            payerPhone = loan.User?.PhoneNumber ?? string.Empty,
             payerBankCode = borrowerApplication.BankCode,
             payerAccount = borrowerApplication.AccountNo,
             requestId,
@@ -906,6 +906,66 @@ public class RemitaService(
             
         // Additional processing can be added here based on business requirements
         return Task.CompletedTask;
+    }
+
+    public async Task<RemitaSalaryHistoryResponseDto?> GetBorrowerSalaryHistoryAsync(string accountNumber, string bankCode, string bvn)
+    {
+        try
+        {
+            var accessToken = await GetAccessTokenAsync();
+            if (accessToken == null)
+            {
+                _logger.LogError("Failed to get access token for salary history");
+                return null;
+            }
+
+            var requestId = Guid.NewGuid().ToString();
+            var hash = HashUtils.ComputeSha512Hash($"{_settings.MerchantId}{accountNumber}{bankCode}{_settings.ApiKey}");
+
+            var payload = new
+            {
+                merchantId = _settings.MerchantId,
+                accountNumber,
+                bankCode,
+                bvn,
+                hash,
+                requestId
+            };
+
+            using var httpClient = new HttpClient();
+            httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+            httpClient.DefaultRequestHeaders.Add("Content-Type", "application/json");
+
+            var jsonPayload = JsonSerializer.Serialize(payload);
+            var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+
+            var apiUrl = $"{_settings.BaseUrl}/v1/salary/history/direct";
+            var response = await httpClient.PostAsync(apiUrl, content);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var result = JsonSerializer.Deserialize<RemitaSalaryHistoryResponseDto>(responseContent, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+                _logger.LogInformation("Successfully retrieved salary history for account: {AccountNumber}", accountNumber);
+                return result;
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                _logger.LogError("Failed to get salary history. Status: {StatusCode}, Response: {Response}", 
+                    response.StatusCode, errorContent);
+                return null;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting salary history for account: {AccountNumber}", accountNumber);
+            return null;
+        }
     }
 }
 

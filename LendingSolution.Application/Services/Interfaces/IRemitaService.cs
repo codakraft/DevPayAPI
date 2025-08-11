@@ -22,4 +22,7 @@ public interface IRemitaService
     Task<BanksResponseDto?> GetBanksAsync();
     Task<StopMandateResponseDto?> StopMandate(Guid loanId);
     Task<bool> ProcessWebhookNotificationAsync(RemitaWebhookNotificationDto notification);
+
+    // New method for borrower onboarding salary history
+    Task<RemitaSalaryHistoryResponseDto?> GetBorrowerSalaryHistoryAsync(string accountNumber, string bankCode, string bvn);
 }

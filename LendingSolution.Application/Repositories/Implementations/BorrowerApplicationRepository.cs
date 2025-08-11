@@ -32,11 +32,24 @@ public class BorrowerApplicationRepository : IBorrowerApplicationRepository
 
     public async Task<BorrowerApplication?> GetByEmailAsync(string email)
     {
+        // Check if the input is a GUID - if so, search by ID instead
+        if (Guid.TryParse(email, out var applicationId))
+        {
+            return await _context.BorrowerApplications
+                .Include(ba => ba.Company)
+                .Include(ba => ba.Product)
+                .Include(ba => ba.Loan)
+                .FirstOrDefaultAsync(ba => ba.Id == applicationId && ba.IsActive);
+        }
+
+        // Otherwise, search by email
         return await _context.BorrowerApplications
             .Include(ba => ba.Company)
             .Include(ba => ba.Product)
             .Include(ba => ba.Loan)
-            .FirstOrDefaultAsync(ba => ba.Email == email && ba.IsActive);
+            .Where(ba => ba.Email == email && ba.IsActive)
+            .OrderByDescending(ba => ba.CreatedAt)
+            .FirstOrDefaultAsync();
     }
 
     public async Task<BorrowerApplication?> GetByBvnAsync(string bvn)

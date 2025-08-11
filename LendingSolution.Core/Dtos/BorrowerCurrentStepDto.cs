@@ -4,11 +4,15 @@ namespace LendingSolution.Core.Dtos;
 
 public class BorrowerCurrentStepRequestDto
 {
-    public Guid LoanId { get; set; }
+    public string Email { get; set; } = string.Empty;
 }
 
 public class BorrowerCurrentStepResponseDto
 {
+    /// <summary>
+    /// Contains the BorrowerApplication ID (not the actual Loan ID)
+    /// This is used for tracking and referencing the borrower application
+    /// </summary>
     public Guid LoanId { get; set; }
     public string Email { get; set; } = string.Empty;
     public string FirstName { get; set; } = string.Empty;

@@ -309,7 +309,7 @@ public class SupportService : ISupportService
             loanSupportDtos.Add(new LoanSupportDto
             {
                 LoanId = loan.Id.ToString(),
-                UserId = loan.UserId,
+                UserId = loan.UserId ?? string.Empty,
                 Amount = loan.Amount,
                 DurationInMonths = loan.DurationInMonths,
                 Purpose = loan.Purpose,
@@ -343,7 +343,7 @@ public class SupportService : ISupportService
         return new LoanSupportDto
         {
             LoanId = loan.Id.ToString(),
-            UserId = loan.UserId,
+            UserId = loan.UserId ?? string.Empty,
             Amount = loan.Amount,
             DurationInMonths = loan.DurationInMonths,
             Purpose = loan.Purpose,
@@ -362,7 +362,7 @@ public class SupportService : ISupportService
         var allLoans = await _loanRepository.GetAllLoans();
         var filteredLoans = allLoans
             .Where(l => l.Id.ToString().Contains(searchTerm) || 
-                       l.UserId.Contains(searchTerm) ||
+                       (l.UserId != null && l.UserId.Contains(searchTerm)) ||
                        l.Purpose.Contains(searchTerm))
             .Take(20)
             .Select(l => new
