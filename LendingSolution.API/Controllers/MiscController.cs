@@ -1,5 +1,6 @@
 using LendingSolution.Application.Exceptions;
 using LendingSolution.Application.Services.Interfaces;
+using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Dtos.Response;
 using Microsoft.AspNetCore.Authorization.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
@@ -8,9 +9,10 @@ namespace LendingSolution.API.Controllers;
 
 [ApiController]
 [Route("api/misc")]
-public class MiscController(IAuthService authService, ILogger<MiscController> logger) : Controller
+public class MiscController(IAuthService authService, IRemitaService remitaService, ILogger<MiscController> logger) : Controller
 {
     private readonly IAuthService _authService = authService;
+    private readonly IRemitaService _remitaService = remitaService;
     private readonly ILogger<MiscController> _logger = logger;
 
     // Static bank list
@@ -160,8 +162,8 @@ public class MiscController(IAuthService authService, ILogger<MiscController> lo
 
     public record BankInfo(string BankCode, string BankName);
 
-    [HttpGet("banks")]
-    public IActionResult GetBanks([FromQuery] string? bankCode = null, [FromQuery] string? bankName = null)
+    [HttpGet("static-banks")]
+    public IActionResult GetStaticBanks([FromQuery] string? bankCode = null, [FromQuery] string? bankName = null)
     {
         var query = Banks.AsEnumerable();
         if (!string.IsNullOrWhiteSpace(bankCode))
@@ -169,6 +171,41 @@ public class MiscController(IAuthService authService, ILogger<MiscController> lo
         if (!string.IsNullOrWhiteSpace(bankName))
             query = query.Where(b => b.BankName.Contains(bankName, StringComparison.OrdinalIgnoreCase));
         return Ok(ApiResponse.Ok("banks fetched successfully", query.ToList()));
+    }
+
+    [HttpGet("banks")]
+    public async Task<IActionResult> GetBanks()
+    {
+        try
+        {
+            _logger.LogInformation("Fetching banks from Remita API");
+            
+            var result = await _remitaService.GetBanksAsync();
+
+            if (result == null)
+            {
+                _logger.LogError("Failed to fetch banks from Remita API");
+                return BadRequest(ApiResponse.Fail("Failed to fetch banks from Remita"));
+            }
+
+            if (result.Status?.ToLower() == "success")
+            {
+                _logger.LogInformation("Successfully fetched {Count} banks from Remita", 
+                    result.Banks?.Count ?? 0);
+                return Ok(ApiResponse.Ok("Banks fetched successfully", result.Banks ?? new()));
+            }
+            else
+            {
+                _logger.LogWarning("Remita banks fetch failed: Status: {Status}", 
+                    result.Status);
+                return BadRequest(ApiResponse.Fail(result.Message ?? "Failed to fetch banks from Remita"));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching banks from Remita API");
+            return StatusCode(500, ApiResponse.Fail("An error occurred while fetching banks"));
+        }
     }
 
     [HttpGet("roles")]

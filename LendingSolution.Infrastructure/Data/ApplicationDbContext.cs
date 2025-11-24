@@ -30,6 +30,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<RemitaSalaryHistory> RemitaSalaryHistories { get; set; }
     public DbSet<RemitaSalaryPayment> RemitaSalaryPayments { get; set; }
     public DbSet<RemitaLoanHistory> RemitaLoanHistories { get; set; }
+    public DbSet<MonoMandateReference> MonoMandateReferences { get; set; }
+    public DbSet<MonoBvnVerificationRecord> MonoBvnVerificationRecords { get; set; }
+    public DbSet<MonoCreditAnalysisRecord> MonoCreditAnalysisRecords { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -357,6 +360,39 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 
         modelBuilder.Entity<RemitaLoanHistory>()
             .HasIndex(rlh => rlh.RemitaSalaryHistoryId);
+
+        // Configure MonoMandateReference foreign key relationships with NO ACTION to avoid cascade cycles
+        modelBuilder.Entity<MonoMandateReference>()
+            .HasOne(m => m.Company)
+            .WithMany()
+            .HasForeignKey(m => m.CompanyId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        modelBuilder.Entity<MonoMandateReference>()
+            .HasOne(m => m.Loan)
+            .WithMany()
+            .HasForeignKey(m => m.LoanId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        // Configure MonoBvnVerificationRecord indexes for performance
+        modelBuilder.Entity<MonoBvnVerificationRecord>()
+            .HasIndex(b => b.BvnHash);
+
+        modelBuilder.Entity<MonoBvnVerificationRecord>()
+            .HasIndex(b => b.CreatedAt);
+
+        modelBuilder.Entity<MonoBvnVerificationRecord>()
+            .HasIndex(b => b.ExpiresAt);
+
+        // Configure MonoCreditAnalysisRecord indexes for performance
+        modelBuilder.Entity<MonoCreditAnalysisRecord>()
+            .HasIndex(c => c.BvnHash);
+
+        modelBuilder.Entity<MonoCreditAnalysisRecord>()
+            .HasIndex(c => c.CreatedAt);
+
+        modelBuilder.Entity<MonoCreditAnalysisRecord>()
+            .HasIndex(c => c.ExpiresAt);
     }
 
     // protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)

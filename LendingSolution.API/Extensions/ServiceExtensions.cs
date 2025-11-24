@@ -230,6 +230,7 @@ public static class ServiceExtensions
         services.AddScoped<ILoanProductService, LoanProductService>();
         services.AddScoped<ILoanService, LoanService>();
         services.AddScoped<IRemitaService, RemitaService>();
+        services.AddScoped<IMonoService, MonoService>();
         services.AddScoped<ISupportToolsService, SupportToolsService>();
         services.AddScoped<IAdminSettingsService, AdminSettingsService>();
         services.AddScoped<ISettingsService, SettingsService>();
@@ -327,6 +328,11 @@ public static class ServiceExtensions
     public static void ConfigurePaystack(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<PaystackSettings>(configuration.GetSection("Paystack"));
+    }
+
+    public static void ConfigureMono(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<MonoSettings>(configuration.GetSection("Mono"));
     }
 
     public static void ConfigureEmailSettings(this IServiceCollection services, IConfiguration configuration)
