@@ -16,21 +16,35 @@ using Microsoft.Extensions.Options;
 
 namespace LendingSolution.Application.Services.Implementations;
 
-public class RemitaService(
-    IOptions<RemitaSettings> options,
-    IHttpClientFactory httpClientFactory,
-    ILogger<RemitaService> logger,
-    ICombinedRepository cRepo,
-    ApplicationDbContext db
-) : IRemitaService
+public class RemitaService : IRemitaService
 {
-    private readonly RemitaSettings _settings = options.Value;
-    private readonly HttpClient _httpClient = httpClientFactory.CreateClient();
-    private readonly ILogger<RemitaService> _logger = logger;
-    private readonly ICombinedRepository _cRepo = cRepo;
-    private readonly ApplicationDbContext _db = db;
+    private readonly RemitaSettings _settings;
+    private readonly HttpClient _httpClient;
+    private readonly ILogger<RemitaService> _logger;
+    private readonly ICombinedRepository _cRepo;
+    private readonly ApplicationDbContext _db;
     private string? _cachedToken;
     private DateTime? _tokenExpiry;
+
+    public RemitaService(
+        IOptions<RemitaSettings> options,
+        IHttpClientFactory httpClientFactory,
+        ILogger<RemitaService> logger,
+        ICombinedRepository cRepo,
+        ApplicationDbContext db)
+    {
+        _settings = options.Value;
+        _httpClient = httpClientFactory.CreateClient();
+        _logger = logger;
+        _cRepo = cRepo;
+        _db = db;
+        
+        // Log all settings on initialization for debugging
+        _logger.LogInformation("RemitaService initialized - BaseUrl={BaseUrl}, UseMockData={UseMockData}, ApiKey={ApiKey}, MerchantId={MerchantId}", 
+            _settings.BaseUrl, _settings.UseMockData, 
+            string.IsNullOrEmpty(_settings.ApiKey) ? "[EMPTY]" : "[SET]",
+            string.IsNullOrEmpty(_settings.MerchantId) ? "[EMPTY]" : "[SET]");
+    }
     private void AddStandardHeaders(HttpRequestMessage request, string? token)
     {
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
@@ -334,6 +348,13 @@ public class RemitaService(
 
     public async Task<SalaryHistoryResponse?> GetSalaryHistoryByBvnAsync(SalaryHistoryRequestDto request)
     {
+        // Return mock data if enabled
+        if (_settings.UseMockData)
+        {
+            _logger.LogInformation("UseMockData is enabled, returning mock salary history");
+            return await Task.FromResult(GetMockSalaryHistory(request));
+        }
+
         var token = await GetAccessTokenAsync();
         if (token == null)
         {
@@ -392,6 +413,13 @@ public class RemitaService(
 
     public async Task<AccountVerificationResponseDto?> VerifyAccountAsync(AccountVerificationRequestDto request)
     {
+        // Return mock data if enabled
+        if (_settings.UseMockData)
+        {
+            _logger.LogInformation("UseMockData is enabled, returning mock account verification");
+            return await Task.FromResult(GetMockAccountVerification(request));
+        }
+
         var token = await GetAccessTokenAsync();
         if (token == null)
         {
@@ -512,6 +540,13 @@ public class RemitaService(
 
     public async Task<DisbursementResponseDto?> ProcessLoanDisbursementAsync(Guid loanId, RemitaDisbursementRequestDto request, string? userId)
     {
+        // Return mock data if enabled
+        if (_settings.UseMockData)
+        {
+            _logger.LogInformation("UseMockData is enabled, returning mock disbursement");
+            return await Task.FromResult(GetMockDisbursement(request));
+        }
+
         var loan = await _cRepo.GetAllLoanInfoByLoanId(loanId);
         if (loan == null)
         {
@@ -587,6 +622,13 @@ public class RemitaService(
 
     public async Task<RepaymentCollectionResponseDto?> CollectRepaymentAsync(Guid loanId, RepaymentCollectionRequestDto request, string? userId)
     {
+        // Return mock data if enabled
+        if (_settings.UseMockData)
+        {
+            _logger.LogInformation("UseMockData is enabled, returning mock repayment collection");
+            return await Task.FromResult(GetMockRepaymentCollection(request));
+        }
+
         var loan = await _cRepo.GetAllLoanInfoByLoanId(loanId);
         if (loan == null)
         {
@@ -659,6 +701,13 @@ public class RemitaService(
 
     public async Task<TransactionStatusResponseDto?> GetTransactionStatusAsync(string transactionRef)
     {
+        // Return mock data if enabled
+        if (_settings.UseMockData)
+        {
+            _logger.LogInformation("UseMockData is enabled, returning mock transaction status");
+            return await Task.FromResult(GetMockTransactionStatus(transactionRef));
+        }
+
         var token = await GetAccessTokenAsync();
         if (token == null)
         {
@@ -693,6 +742,13 @@ public class RemitaService(
 
     public async Task<BanksResponseDto?> GetBanksAsync()
     {
+        // Return mock data if enabled
+        if (_settings.UseMockData)
+        {
+            _logger.LogInformation("UseMockData is enabled, returning mock banks data");
+            return await Task.FromResult(GetMockBanks());
+        }
+
         var token = await GetAccessTokenAsync();
         if (token == null)
         {
@@ -930,6 +986,13 @@ public class RemitaService(
 
     public async Task<RemitaSalaryHistoryResponseDto?> GetBorrowerSalaryHistoryAsync(string accountNumber, string bankCode, string bvn)
     {
+        // Return mock data if enabled
+        if (_settings.UseMockData)
+        {
+            _logger.LogInformation("UseMockData is enabled, returning mock borrower salary history");
+            return await Task.FromResult(GetMockBorrowerSalaryHistory(accountNumber, bankCode, bvn));
+        }
+
         try
         {
             var accessToken = await GetAccessTokenAsync();
@@ -987,6 +1050,275 @@ public class RemitaService(
             return null;
         }
     }
+
+    #region Mock Data Methods
+
+    private BanksResponseDto GetMockBanks()
+    {
+        _logger.LogInformation("Returning mock banks data");
+        
+        return new BanksResponseDto
+        {
+            Status = "success",
+            Message = "Banks retrieved successfully (Mock Data)",
+            Banks = new List<BankDto>
+            {
+                new BankDto { BankCode = "058", BankName = "GUARANTY TRUST BANK", Type = "Commercial", IsActive = true },
+                new BankDto { BankCode = "057", BankName = "ZENITH BANK PLC", Type = "Commercial", IsActive = true },
+                new BankDto { BankCode = "044", BankName = "ACCESS BANK PLC", Type = "Commercial", IsActive = true },
+                new BankDto { BankCode = "033", BankName = "UNITED BANK FOR AFRICA PLC", Type = "Commercial", IsActive = true },
+                new BankDto { BankCode = "011", BankName = "FIRST BANK OF NIGERIA PLC", Type = "Commercial", IsActive = true },
+                new BankDto { BankCode = "214", BankName = "FIRST CITY MONUMENT BANK PLC", Type = "Commercial", IsActive = true },
+                new BankDto { BankCode = "232", BankName = "STERLING BANK PLC", Type = "Commercial", IsActive = true },
+                new BankDto { BankCode = "035", BankName = "WEMA BANK PLC", Type = "Commercial", IsActive = true },
+                new BankDto { BankCode = "070", BankName = "FIDELITY BANK PLC", Type = "Commercial", IsActive = true },
+                new BankDto { BankCode = "050", BankName = "ECOBANK NIGERIA PLC", Type = "Commercial", IsActive = true }
+            },
+            TotalCount = 10,
+            LastUpdated = DateTime.UtcNow
+        };
+    }
+
+    private SalaryHistoryResponse GetMockSalaryHistory(SalaryHistoryRequestDto request)
+    {
+        _logger.LogInformation("Returning mock salary history for BVN: {BVN}", request.Bvn);
+        
+        return new SalaryHistoryResponse
+        {
+            Status = "success",
+            Message = "Salary history retrieved successfully (Mock Data)",
+            Data = new SalaryHistoryReviewData
+            {
+                CompanyName = "Test Company Ltd",
+                CustomerName = "John Doe"
+            }
+        };
+    }
+
+    private AccountVerificationResponseDto GetMockAccountVerification(AccountVerificationRequestDto request)
+    {
+        _logger.LogInformation("Returning mock account verification for Account: {Account}", request.AccountNumber);
+        
+        return new AccountVerificationResponseDto
+        {
+            Status = "success",
+            Message = "Account verified successfully (Mock Data)",
+            AccountNumber = request.AccountNumber,
+            AccountName = "John Doe",
+            BankCode = request.BankCode,
+            BankName = "GUARANTY TRUST BANK",
+            IsActive = true,
+            AccountType = "Savings",
+            Bvn = "22222222222",
+            DateOfBirth = DateTime.UtcNow.AddYears(-30),
+            PhoneNumber = "08012345678",
+            Email = "john.doe@example.com",
+            Address = "123 Test Street, Lagos",
+            Gender = "Male"
+        };
+    }
+
+    private CreateMandateResponseDto GetMockMandateCreation(CreateMandateRequestDto request)
+    {
+        _logger.LogInformation("Returning mock mandate creation for Payer: {Payer}", request.PayerName);
+        
+        return new CreateMandateResponseDto
+        {
+            Status = "success",
+            Message = "Mandate created successfully (Mock Data)",
+            MandateId = $"MOCK_MANDATE_{Guid.NewGuid().ToString()[..8].ToUpper()}",
+            RemitaTransRef = $"REM{DateTime.UtcNow.Ticks}",
+            RequestId = $"REQ{DateTime.UtcNow.Ticks}",
+            Amount = request.Amount,
+            PayerAccount = request.PayerAccount,
+            PayerBankCode = request.PayerBankCode,
+            PayerName = request.PayerName,
+            MandateType = request.MandateType,
+            Frequency = request.Frequency,
+            StartDate = request.StartDate,
+            EndDate = request.EndDate,
+            MandateStatus = "Active",
+            Description = request.Description ?? "Loan Repayment Mandate",
+            ResponseCode = "00",
+            ResponseMessage = "Successful",
+            CreatedDate = DateTime.UtcNow,
+            RequiresOtp = false
+        };
+    }
+
+    private DisbursementResponseDto GetMockDisbursement(RemitaDisbursementRequestDto request)
+    {
+        _logger.LogInformation("Returning mock disbursement for Account: {Account}", request.BeneficiaryAccount);
+        
+        return new DisbursementResponseDto
+        {
+            Status = "success",
+            Message = "Disbursement processed successfully (Mock Data)",
+            TransactionRef = $"TXN{DateTime.UtcNow.Ticks}",
+            RemitaTransRef = $"MOCK_DISB_{Guid.NewGuid().ToString()[..8].ToUpper()}",
+            Amount = request.Amount,
+            BeneficiaryAccount = request.BeneficiaryAccount,
+            BeneficiaryName = request.BeneficiaryName,
+            BeneficiaryBankCode = request.BeneficiaryBankCode,
+            BeneficiaryBankName = "GUARANTY TRUST BANK",
+            DebitAccount = request.DebitAccount,
+            DebitBankCode = request.DebitBankCode,
+            TransactionStatus = "Successful",
+            TransactionDate = DateTime.UtcNow,
+            Narration = request.Narration,
+            Reference = request.Reference,
+            Fees = 50.00m,
+            ResponseCode = "00",
+            ResponseMessage = "Successful"
+        };
+    }
+
+    private RepaymentCollectionResponseDto GetMockRepaymentCollection(RepaymentCollectionRequestDto request)
+    {
+        _logger.LogInformation("Returning mock repayment collection");
+        
+        return new RepaymentCollectionResponseDto
+        {
+            Status = "success",
+            Message = "Repayment collected successfully (Mock Data)",
+            TransactionRef = $"REP{DateTime.UtcNow.Ticks}",
+            RemitaTransRef = $"MOCK_REP_{Guid.NewGuid().ToString()[..8].ToUpper()}",
+            MandateId = request.MandateId,
+            Amount = request.Amount,
+            PayerAccount = "0123456789",
+            PayerBankCode = "058",
+            PayerName = "John Doe",
+            CollectionStatus = "Successful",
+            CollectionDate = DateTime.UtcNow,
+            Description = "Loan repayment collection",
+            Reference = $"REF{DateTime.UtcNow.Ticks}",
+            CollectionType = "Mandate",
+            Fees = 25.00m,
+            ResponseCode = "00",
+            ResponseMessage = "Successful"
+        };
+    }
+
+    private TransactionStatusResponseDto GetMockTransactionStatus(string transactionRef)
+    {
+        _logger.LogInformation("Returning mock transaction status for: {Ref}", transactionRef);
+        
+        return new TransactionStatusResponseDto
+        {
+            Status = "success",
+            Message = "Transaction status retrieved successfully (Mock Data)",
+            TransactionRef = transactionRef,
+            RemitaTransRef = $"REM{DateTime.UtcNow.Ticks}",
+            TransactionStatus = "Successful",
+            Amount = 100000,
+            TransactionDate = DateTime.UtcNow.AddHours(-2),
+            MandateId = "MOCK_MANDATE_12345",
+            PayerAccount = "0123456789",
+            PayerBankCode = "058",
+            PayerName = "John Doe",
+            BeneficiaryAccount = "9876543210",
+            BeneficiaryBankCode = "057",
+            BeneficiaryName = "Test Company",
+            TransactionType = "Mandate Collection",
+            Description = "Mock transaction completed successfully",
+            Reference = $"REF{DateTime.UtcNow.Ticks}",
+            Fees = 25.00m,
+            ResponseCode = "00",
+            ResponseMessage = "Successful",
+            CompletedDate = DateTime.UtcNow.AddHours(-1),
+            FailureReason = null
+        };
+    }
+
+    private RemitaSalaryHistoryResponseDto GetMockBorrowerSalaryHistory(string accountNumber, string bankCode, string bvn)
+    {
+        _logger.LogInformation("Returning mock borrower salary history for Account: {Account}", accountNumber);
+        
+        return new RemitaSalaryHistoryResponseDto
+        {
+            Status = "success",
+            HasData = true,
+            ResponseId = $"RESP{DateTime.UtcNow.Ticks}",
+            ResponseDate = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"),
+            RequestDate = DateTime.UtcNow.AddSeconds(-5).ToString("yyyy-MM-dd HH:mm:ss"),
+            ResponseCode = "00",
+            ResponseMsg = "Successful",
+            Data = new RemitaSalaryDataDto
+            {
+                CustomerId = $"CUST{DateTime.UtcNow.Ticks}",
+                AccountNumber = accountNumber,
+                BankCode = bankCode,
+                BVN = bvn,
+                CompanyName = "Test Company Ltd",
+                CustomerName = "John Doe",
+                Category = "Salary Earner",
+                FirstPaymentDate = DateTime.UtcNow.AddMonths(-6).ToString("yyyy-MM-dd"),
+                SalaryCount = "6",
+                SalaryPaymentDetails = new List<RemitaSalaryPaymentDto>
+                {
+                    new RemitaSalaryPaymentDto 
+                    { 
+                        PaymentDate = DateTime.UtcNow.AddDays(-15).ToString("yyyy-MM-dd"), 
+                        Amount = "350000", 
+                        AccountNumber = accountNumber, 
+                        BankCode = bankCode 
+                    },
+                    new RemitaSalaryPaymentDto 
+                    { 
+                        PaymentDate = DateTime.UtcNow.AddMonths(-1).AddDays(-15).ToString("yyyy-MM-dd"), 
+                        Amount = "350000", 
+                        AccountNumber = accountNumber, 
+                        BankCode = bankCode 
+                    },
+                    new RemitaSalaryPaymentDto 
+                    { 
+                        PaymentDate = DateTime.UtcNow.AddMonths(-2).AddDays(-15).ToString("yyyy-MM-dd"), 
+                        Amount = "350000", 
+                        AccountNumber = accountNumber, 
+                        BankCode = bankCode 
+                    },
+                    new RemitaSalaryPaymentDto 
+                    { 
+                        PaymentDate = DateTime.UtcNow.AddMonths(-3).AddDays(-15).ToString("yyyy-MM-dd"), 
+                        Amount = "350000", 
+                        AccountNumber = accountNumber, 
+                        BankCode = bankCode 
+                    },
+                    new RemitaSalaryPaymentDto 
+                    { 
+                        PaymentDate = DateTime.UtcNow.AddMonths(-4).AddDays(-15).ToString("yyyy-MM-dd"), 
+                        Amount = "350000", 
+                        AccountNumber = accountNumber, 
+                        BankCode = bankCode 
+                    },
+                    new RemitaSalaryPaymentDto 
+                    { 
+                        PaymentDate = DateTime.UtcNow.AddMonths(-5).AddDays(-15).ToString("yyyy-MM-dd"), 
+                        Amount = "350000", 
+                        AccountNumber = accountNumber, 
+                        BankCode = bankCode 
+                    }
+                },
+                LoanHistoryDetails = new List<RemitaLoanHistoryDto>
+                {
+                    new RemitaLoanHistoryDto 
+                    { 
+                        LoanProvider = "Mock Bank", 
+                        LoanAmount = 500000, 
+                        OutstandingAmount = 0, 
+                        Status = "Paid", 
+                        LoanDisbursementDate = DateTime.UtcNow.AddYears(-1).ToString("yyyy-MM-dd"),
+                        RepaymentAmount = 50000,
+                        RepaymentFreq = "Monthly"
+                    }
+                }
+            }
+        };
+    }
+
+    #endregion
 }
+
+
 
 

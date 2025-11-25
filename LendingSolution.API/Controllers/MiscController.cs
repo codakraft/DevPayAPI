@@ -2,18 +2,29 @@ using LendingSolution.Application.Exceptions;
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Dtos.Response;
+using LendingSolution.Core.Settings;
 using Microsoft.AspNetCore.Authorization.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace LendingSolution.API.Controllers;
 
 [ApiController]
 [Route("api/misc")]
-public class MiscController(IAuthService authService, IRemitaService remitaService, ILogger<MiscController> logger) : Controller
+public class MiscController : Controller
 {
-    private readonly IAuthService _authService = authService;
-    private readonly IRemitaService _remitaService = remitaService;
-    private readonly ILogger<MiscController> _logger = logger;
+    private readonly IAuthService _authService;
+    private readonly IRemitaService _remitaService;
+    private readonly ILogger<MiscController> _logger;
+    private readonly RemitaSettings _remitaSettings;
+
+    public MiscController(IAuthService authService, IRemitaService remitaService, ILogger<MiscController> logger, IOptions<RemitaSettings> remitaSettings)
+    {
+        _authService = authService;
+        _remitaService = remitaService;
+        _logger = logger;
+        _remitaSettings = remitaSettings.Value;
+    }
 
     // Static bank list
     private static readonly List<BankInfo> Banks = new()
@@ -171,6 +182,20 @@ public class MiscController(IAuthService authService, IRemitaService remitaServi
         if (!string.IsNullOrWhiteSpace(bankName))
             query = query.Where(b => b.BankName.Contains(bankName, StringComparison.OrdinalIgnoreCase));
         return Ok(ApiResponse.Ok("banks fetched successfully", query.ToList()));
+    }
+
+    [HttpGet("remita-settings")]
+    public IActionResult GetRemitaSettings()
+    {
+        var settings = new
+        {
+            UseMockData = _remitaSettings.UseMockData,
+            BaseUrl = _remitaSettings.BaseUrl,
+            Username = _remitaSettings.Username,
+            HasApiKey = !string.IsNullOrEmpty(_remitaSettings.ApiKey),
+            HasMerchantId = !string.IsNullOrEmpty(_remitaSettings.MerchantId)
+        };
+        return Ok(ApiResponse.Ok("Remita settings retrieved", settings));
     }
 
     [HttpGet("banks")]

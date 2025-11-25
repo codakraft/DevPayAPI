@@ -11,4 +11,5 @@ public class RemitaSettings
     public string Hash { get; set; } = string.Empty;
     public string ServiceTypeId { get; set; } = string.Empty;
     public string MandateUrl { get; set; } = string.Empty;
+      public bool UseMockData { get; set; } = false;
 }

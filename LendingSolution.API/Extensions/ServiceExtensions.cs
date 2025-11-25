@@ -274,7 +274,7 @@ public static class ServiceExtensions
 
     public static void ConfigureServices(this IServiceCollection services, IConfiguration configuration)
     {
-        // services.Configure<RemitaSettings>(configuration.GetSection("Remita"));
+        services.Configure<RemitaSettings>(configuration.GetSection("Remita"));
         // services.AddScoped<IRemitaService, RemitaService>();
         // services.AddScoped<IAuthService, AuthService>();
         // services.AddScoped<IProfileService, ProfileService>();
