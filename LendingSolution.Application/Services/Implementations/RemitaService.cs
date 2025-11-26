@@ -40,8 +40,8 @@ public class RemitaService : IRemitaService
         _db = db;
         
         // Log all settings on initialization for debugging
-        _logger.LogInformation("RemitaService initialized - BaseUrl={BaseUrl}, UseMockData={UseMockData}, ApiKey={ApiKey}, MerchantId={MerchantId}", 
-            _settings.BaseUrl, _settings.UseMockData, 
+        _logger.LogInformation("RemitaService initialized - BaseUrl={BaseUrl}, UseLiveData={UseLiveData}, ApiKey={ApiKey}, MerchantId={MerchantId}", 
+            _settings.BaseUrl, _settings.UseLiveData, 
             string.IsNullOrEmpty(_settings.ApiKey) ? "[EMPTY]" : "[SET]",
             string.IsNullOrEmpty(_settings.MerchantId) ? "[EMPTY]" : "[SET]");
     }
@@ -348,10 +348,10 @@ public class RemitaService : IRemitaService
 
     public async Task<SalaryHistoryResponse?> GetSalaryHistoryByBvnAsync(SalaryHistoryRequestDto request)
     {
-        // Return mock data if enabled
-        if (_settings.UseMockData)
+        // Return mock data when UseLiveData is false
+        if (!_settings.UseLiveData)
         {
-            _logger.LogInformation("UseMockData is enabled, returning mock salary history");
+            _logger.LogInformation("UseLiveData=false, returning mock salary history");
             return await Task.FromResult(GetMockSalaryHistory(request));
         }
 
@@ -413,10 +413,10 @@ public class RemitaService : IRemitaService
 
     public async Task<AccountVerificationResponseDto?> VerifyAccountAsync(AccountVerificationRequestDto request)
     {
-        // Return mock data if enabled
-        if (_settings.UseMockData)
+        // Return mock data when UseLiveData is false
+        if (!_settings.UseLiveData)
         {
-            _logger.LogInformation("UseMockData is enabled, returning mock account verification");
+            _logger.LogInformation("UseLiveData=false, returning mock account verification");
             return await Task.FromResult(GetMockAccountVerification(request));
         }
 
@@ -540,10 +540,10 @@ public class RemitaService : IRemitaService
 
     public async Task<DisbursementResponseDto?> ProcessLoanDisbursementAsync(Guid loanId, RemitaDisbursementRequestDto request, string? userId)
     {
-        // Return mock data if enabled
-        if (_settings.UseMockData)
+        // Return mock data when UseLiveData is false
+        if (!_settings.UseLiveData)
         {
-            _logger.LogInformation("UseMockData is enabled, returning mock disbursement");
+            _logger.LogInformation("UseLiveData=false, returning mock disbursement");
             return await Task.FromResult(GetMockDisbursement(request));
         }
 
@@ -622,10 +622,10 @@ public class RemitaService : IRemitaService
 
     public async Task<RepaymentCollectionResponseDto?> CollectRepaymentAsync(Guid loanId, RepaymentCollectionRequestDto request, string? userId)
     {
-        // Return mock data if enabled
-        if (_settings.UseMockData)
+        // Return mock data when UseLiveData is false
+        if (!_settings.UseLiveData)
         {
-            _logger.LogInformation("UseMockData is enabled, returning mock repayment collection");
+            _logger.LogInformation("UseLiveData=false, returning mock repayment collection");
             return await Task.FromResult(GetMockRepaymentCollection(request));
         }
 
@@ -701,10 +701,10 @@ public class RemitaService : IRemitaService
 
     public async Task<TransactionStatusResponseDto?> GetTransactionStatusAsync(string transactionRef)
     {
-        // Return mock data if enabled
-        if (_settings.UseMockData)
+        // Return mock data when UseLiveData is false
+        if (!_settings.UseLiveData)
         {
-            _logger.LogInformation("UseMockData is enabled, returning mock transaction status");
+            _logger.LogInformation("UseLiveData=false, returning mock transaction status");
             return await Task.FromResult(GetMockTransactionStatus(transactionRef));
         }
 
@@ -742,10 +742,10 @@ public class RemitaService : IRemitaService
 
     public async Task<BanksResponseDto?> GetBanksAsync()
     {
-        // Return mock data if enabled
-        if (_settings.UseMockData)
+        // Return mock data when UseLiveData is false
+        if (!_settings.UseLiveData)
         {
-            _logger.LogInformation("UseMockData is enabled, returning mock banks data");
+            _logger.LogInformation("UseLiveData=false, returning mock banks data");
             return await Task.FromResult(GetMockBanks());
         }
 
@@ -986,10 +986,10 @@ public class RemitaService : IRemitaService
 
     public async Task<RemitaSalaryHistoryResponseDto?> GetBorrowerSalaryHistoryAsync(string accountNumber, string bankCode, string bvn)
     {
-        // Return mock data if enabled
-        if (_settings.UseMockData)
+        // Return mock data when UseLiveData is false
+        if (!_settings.UseLiveData)
         {
-            _logger.LogInformation("UseMockData is enabled, returning mock borrower salary history");
+            _logger.LogInformation("UseLiveData=false, returning mock borrower salary history");
             return await Task.FromResult(GetMockBorrowerSalaryHistory(accountNumber, bankCode, bvn));
         }
 

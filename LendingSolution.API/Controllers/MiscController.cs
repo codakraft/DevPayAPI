@@ -189,7 +189,7 @@ public class MiscController : Controller
     {
         var settings = new
         {
-            UseMockData = _remitaSettings.UseMockData,
+            UseLiveData = _remitaSettings.UseLiveData,
             BaseUrl = _remitaSettings.BaseUrl,
             Username = _remitaSettings.Username,
             HasApiKey = !string.IsNullOrEmpty(_remitaSettings.ApiKey),
