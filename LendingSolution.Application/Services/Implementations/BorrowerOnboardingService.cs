@@ -207,72 +207,45 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         }
 
         // Fetch salary history from Remita - this is mandatory
-        try
+        _logger.LogInformation("Starting salary history retrieval for application {ApplicationId} - Account:{Account}, Bank:{Bank}, BVN:{BVN}",
+            application.Id, application.AccountNo, application.BankCode, application.BVN);
+
+        var salaryHistoryResponse = await _remitaService.GetBorrowerSalaryHistoryAsync(
+            application.AccountNo,
+            application.BankCode,
+            application.BVN);
+
+        if (salaryHistoryResponse == null)
         {
-            _logger.LogInformation("Starting salary history retrieval for application {ApplicationId} - Account:{Account}, Bank:{Bank}, BVN:{BVN}",
-                application.Id, application.AccountNo, application.BankCode, application.BVN);
-
-            var salaryHistoryResponse = await _remitaService.GetBorrowerSalaryHistoryAsync(
-                application.AccountNo,
-                application.BankCode,
-                application.BVN);
-
-            if (salaryHistoryResponse == null)
-            {
-                _logger.LogWarning("Salary history response was null for application {ApplicationId}", application.Id);
-                throw new AppException("Unable to retrieve salary history from Remita. Please ensure your bank details are correct and you have salary payment history.", 400);
-            }
-
-            _logger.LogDebug("Salary history raw response for application {ApplicationId}: {Response}", application.Id, JsonSerializer.Serialize(salaryHistoryResponse));
-
-            if (salaryHistoryResponse.Status != "success" || !salaryHistoryResponse.HasData)
-            {
-                _logger.LogWarning("Salary history returned no data/failed for application {ApplicationId} - Status:{Status} HasData:{HasData}",
-                    application.Id, salaryHistoryResponse.Status, salaryHistoryResponse.HasData);
-                throw new AppException("Unable to retrieve salary history from Remita. Please ensure your bank details are correct and you have salary payment history.", 400);
-            }
-
-            // Save salary history to database
-            try
-            {
-                await _salaryEligibilityService.SaveSalaryHistoryAsync(application.Id, salaryHistoryResponse);
-            }
-            catch (Exception exSave)
-            {
-                _logger.LogError(exSave, "Failed saving salary history for application {ApplicationId}", application.Id);
-                throw; // will be caught by outer catch and rethrown as AppException(500)
-            }
-
-            // Calculate eligibility based on salary history
-            SalaryEligibilityDto eligibilityResult;
-            try
-            {
-                eligibilityResult = await _salaryEligibilityService.CalculateLoanEligibilityAsync(salaryHistoryResponse, product);
-            }
-            catch (Exception exCalc)
-            {
-                _logger.LogError(exCalc, "Failed calculating eligibility for application {ApplicationId}", application.Id);
-                throw; // bubble up to outer catch
-            }
-
-            // Use calculated eligibility amounts
-            minLoanEligible = eligibilityResult.FinalMinEligible;
-            maxLoanEligible = eligibilityResult.FinalMaxEligible;
-
-            // Log the eligibility calculation for debugging
-            _logger.LogInformation("Salary-based eligibility calculated for application {ApplicationId}: Min={MinEligible}, Max={MaxEligible}, Reason={Reason}",
-                application.Id, minLoanEligible, maxLoanEligible, eligibilityResult.EligibilityReason);
+            _logger.LogWarning("Salary history response was null for application {ApplicationId}", application.Id);
+            throw new AppException("Unable to retrieve salary history from Remita. Please ensure your bank details are correct and you have salary payment history.", 400);
         }
-        catch (AppException)
+
+        _logger.LogDebug("Salary history raw response for application {ApplicationId}: {Response}", application.Id, JsonSerializer.Serialize(salaryHistoryResponse));
+
+        if (salaryHistoryResponse.Status != "success" || !salaryHistoryResponse.HasData)
         {
-            // Re-throw application exceptions (user-facing errors)
-            throw;
+            _logger.LogWarning("Salary history returned no data/failed for application {ApplicationId} - Status:{Status} HasData:{HasData}",
+                application.Id, salaryHistoryResponse.Status, salaryHistoryResponse.HasData);
+            throw new AppException("Unable to retrieve salary history from Remita. Please ensure your bank details are correct and you have salary payment history.", 400);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error during salary history retrieval/processing for application {ApplicationId}", application.Id);
-            throw new AppException("Unable to retrieve salary history. Please try again or contact support if the problem persists.", 500);
-        }
+
+        // Save salary history to database
+
+        await _salaryEligibilityService.SaveSalaryHistoryAsync(application.Id, salaryHistoryResponse);
+
+
+        // Calculate eligibility based on salary history
+        SalaryEligibilityDto eligibilityResult;
+        eligibilityResult = await _salaryEligibilityService.CalculateLoanEligibilityAsync(salaryHistoryResponse, product);
+
+        // Use calculated eligibility amounts
+        minLoanEligible = eligibilityResult.FinalMinEligible;
+        maxLoanEligible = eligibilityResult.FinalMaxEligible;
+
+        // Log the eligibility calculation for debugging
+        _logger.LogInformation("Salary-based eligibility calculated for application {ApplicationId}: Min={MinEligible}, Max={MaxEligible}, Reason={Reason}",
+            application.Id, minLoanEligible, maxLoanEligible, eligibilityResult.EligibilityReason);
 
         // Update application
         application.Address = request.Address;
@@ -342,7 +315,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         {
             throw new AppException("Failed to create loan", 500);
         }
-        
+
         // Since the loan entity now has the generated ID, we can use it
         application.LoanId = loan.Id;
 
@@ -518,7 +491,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             // Get settings to determine OTP fee
             var settings = await _settingsService.GetSettingsAsync();
             var otpFee = settings.OtpFee;
-            
+
             // Skip if OTP fee is 0 or negative
             if (otpFee <= 0)
             {
@@ -551,10 +524,10 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             // Transfer funds from company wallet to SuperAdmin wallet
             var transferDescription = $"{otpType} generation fee - Company: {companyWallet.CompanyName ?? "Unknown"}";
             var transferSuccess = await _walletService.TransferFundsAsync(
-                companyWallet.Id, 
-                superAdminWallet.Id, 
-                otpFee, 
-                transferDescription, 
+                companyWallet.Id,
+                superAdminWallet.Id,
+                otpFee,
+                transferDescription,
                 null // System-initiated transfer - null for system transactions
             );
 
@@ -654,17 +627,17 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         {
             response.EmailVerifiedAt = borrowerApplication.EmailVerifiedAt;
         }
-        
+
         if (borrowerApplication.CurrentStep >= BorrowerOnboardingStep.Step2B_BvnValidated || borrowerApplication.IsCompleted)
         {
             response.BvnVerifiedAt = borrowerApplication.BvnVerifiedAt;
         }
-        
+
         if (borrowerApplication.CurrentStep >= BorrowerOnboardingStep.Step3_DocumentsUploaded || borrowerApplication.IsCompleted)
         {
             response.DocumentsUploadedAt = borrowerApplication.DocumentsUploadedAt;
         }
-        
+
         if (borrowerApplication.CurrentStep >= BorrowerOnboardingStep.Step4_LoanSubmitted || borrowerApplication.IsCompleted)
         {
             response.LoanSubmittedAt = borrowerApplication.LoanSubmittedAt;

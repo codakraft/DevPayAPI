@@ -355,60 +355,60 @@ public class RemitaService : IRemitaService
             return await Task.FromResult(GetMockSalaryHistory(request));
         // }
 
-        // var token = await GetAccessTokenAsync();
-        // if (token == null)
-        // {
-        //     _logger.LogError("Failed to get access token for salary history request");
-        //     return null;
-        // }
+        var token = await GetAccessTokenAsync();
+        if (token == null)
+        {
+            _logger.LogError("Failed to get access token for salary history request");
+            return null;
+        }
 
-        // var payload = new
-        // {
-        //     authorisationCode = request.AuthorisationCode ?? "",
-        //     firstName = request.FirstName,
-        //     lastName = request.LastName,
-        //     middleName = request.MiddleName ?? "R ",
-        //     accountNumber = request.AccountNumber,
-        //     bankCode = request.BankCode,
-        //     bvn = request.Bvn,
-        //     authorisationChannel = request.AuthorisationChannel ?? "USSD"
-        // };
+        var payload = new
+        {
+            authorisationCode = request.AuthorisationCode ?? "",
+            firstName = request.FirstName,
+            lastName = request.LastName,
+            middleName = request.MiddleName ?? "R ",
+            accountNumber = request.AccountNumber,
+            bankCode = request.BankCode,
+            bvn = request.Bvn,
+            authorisationChannel = request.AuthorisationChannel ?? "USSD"
+        };
 
-        // var requestUrl = BuildUrl("/send/api/loansvc/data/api/v2/payday/salary/history/provideCustomerDetails");
-        // var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUrl)
-        // {
-        //     Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
-        // };
+        var requestUrl = BuildUrl("/send/api/loansvc/data/api/v2/payday/salary/history/provideCustomerDetails");
+        var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUrl)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+        };
 
-        // // Use specific headers for salary history endpoint as per API documentation
-        // httpRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        // httpRequest.Headers.Add("API_KEY", _settings.ApiKey);
-        // httpRequest.Headers.Add("MERCHANT_ID", _settings.MerchantId);
-        // httpRequest.Headers.Add("REQUEST_ID", Guid.NewGuid().ToString());
+        // Use specific headers for salary history endpoint as per API documentation
+        httpRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        httpRequest.Headers.Add("API_KEY", _settings.ApiKey);
+        httpRequest.Headers.Add("MERCHANT_ID", _settings.MerchantId);
+        httpRequest.Headers.Add("REQUEST_ID", Guid.NewGuid().ToString());
         
-        // if (!string.IsNullOrWhiteSpace(token))
-        //     httpRequest.Headers.Add("AUTHORIZATION", token);
+        if (!string.IsNullOrWhiteSpace(token))
+            httpRequest.Headers.Add("AUTHORIZATION", token);
 
-        // _logger.LogInformation("Sending salary history request to: {Url}", requestUrl);
+        _logger.LogInformation("Sending salary history request to: {Url}", requestUrl);
 
-        // var response = await _httpClient.SendAsync(httpRequest);
-        // if (!response.IsSuccessStatusCode)
-        // {
-        //     _logger.LogWarning("Salary history request failed: {Status} - {Reason}", 
-        //         response.StatusCode, response.ReasonPhrase);
-        //     return null;
-        // }
+        var response = await _httpClient.SendAsync(httpRequest);
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("Salary history request failed: {Status} - {Reason}", 
+                response.StatusCode, response.ReasonPhrase);
+            return null;
+        }
 
-        // try
-        // {
-        //     var responseContent = await response.Content.ReadAsStringAsync();
-        //     return JsonSerializer.Deserialize<SalaryHistoryResponse>(responseContent);
-        // }
-        // catch (Exception ex)
-        // {
-        //     _logger.LogError(ex, "Error parsing salary history response");
-        //     return null;
-        // }
+        try
+        {
+            var responseContent = await response.Content.ReadAsStringAsync();
+            return JsonSerializer.Deserialize<SalaryHistoryResponse>(responseContent);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error parsing salary history response");
+            return null;
+        }
     }
 
     public async Task<AccountVerificationResponseDto?> VerifyAccountAsync(AccountVerificationRequestDto request)
