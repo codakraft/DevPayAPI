@@ -5,6 +5,7 @@ using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Models;
 using LendingSolution.Core.Enum;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace LendingSolution.Application.Services.Implementations;
 
@@ -208,28 +209,58 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         // Fetch salary history from Remita - this is mandatory
         try
         {
+            _logger.LogInformation("Starting salary history retrieval for application {ApplicationId} - Account:{Account}, Bank:{Bank}, BVN:{BVN}",
+                application.Id, application.AccountNo, application.BankCode, application.BVN);
+
             var salaryHistoryResponse = await _remitaService.GetBorrowerSalaryHistoryAsync(
-                application.AccountNo, 
-                application.BankCode, 
+                application.AccountNo,
+                application.BankCode,
                 application.BVN);
 
-            if (salaryHistoryResponse == null || salaryHistoryResponse.Status != "success" || !salaryHistoryResponse.HasData)
+            if (salaryHistoryResponse == null)
             {
+                _logger.LogWarning("Salary history response was null for application {ApplicationId}", application.Id);
+                throw new AppException("Unable to retrieve salary history from Remita. Please ensure your bank details are correct and you have salary payment history.", 400);
+            }
+
+            _logger.LogDebug("Salary history raw response for application {ApplicationId}: {Response}", application.Id, JsonSerializer.Serialize(salaryHistoryResponse));
+
+            if (salaryHistoryResponse.Status != "success" || !salaryHistoryResponse.HasData)
+            {
+                _logger.LogWarning("Salary history returned no data/failed for application {ApplicationId} - Status:{Status} HasData:{HasData}",
+                    application.Id, salaryHistoryResponse.Status, salaryHistoryResponse.HasData);
                 throw new AppException("Unable to retrieve salary history from Remita. Please ensure your bank details are correct and you have salary payment history.", 400);
             }
 
             // Save salary history to database
-            await _salaryEligibilityService.SaveSalaryHistoryAsync(application.Id, salaryHistoryResponse);
+            try
+            {
+                await _salaryEligibilityService.SaveSalaryHistoryAsync(application.Id, salaryHistoryResponse);
+            }
+            catch (Exception exSave)
+            {
+                _logger.LogError(exSave, "Failed saving salary history for application {ApplicationId}", application.Id);
+                throw; // will be caught by outer catch and rethrown as AppException(500)
+            }
 
             // Calculate eligibility based on salary history
-            var eligibilityResult = await _salaryEligibilityService.CalculateLoanEligibilityAsync(salaryHistoryResponse, product);
+            SalaryEligibilityDto eligibilityResult;
+            try
+            {
+                eligibilityResult = await _salaryEligibilityService.CalculateLoanEligibilityAsync(salaryHistoryResponse, product);
+            }
+            catch (Exception exCalc)
+            {
+                _logger.LogError(exCalc, "Failed calculating eligibility for application {ApplicationId}", application.Id);
+                throw; // bubble up to outer catch
+            }
 
             // Use calculated eligibility amounts
             minLoanEligible = eligibilityResult.FinalMinEligible;
             maxLoanEligible = eligibilityResult.FinalMaxEligible;
 
             // Log the eligibility calculation for debugging
-            _logger.LogInformation("Salary-based eligibility calculated for application {ApplicationId}: Min={MinEligible}, Max={MaxEligible}, Reason={Reason}", 
+            _logger.LogInformation("Salary-based eligibility calculated for application {ApplicationId}: Min={MinEligible}, Max={MaxEligible}, Reason={Reason}",
                 application.Id, minLoanEligible, maxLoanEligible, eligibilityResult.EligibilityReason);
         }
         catch (AppException)
@@ -239,7 +270,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching salary history for application {ApplicationId}", application.Id);
+            _logger.LogError(ex, "Error during salary history retrieval/processing for application {ApplicationId}", application.Id);
             throw new AppException("Unable to retrieve salary history. Please try again or contact support if the problem persists.", 500);
         }
 
