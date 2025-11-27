@@ -86,7 +86,7 @@ public class FirebaseDocumentService : IThirdPartyDocumentService
             }
             catch (FormatException)
             {
-                _logger.LogInformation("Invalid base64 content")
+                _logger.LogInformation("Invalid base64 content");
                 throw new ArgumentException("Invalid base64 content provided");
             }
 
