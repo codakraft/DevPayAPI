@@ -28,7 +28,7 @@ jobs:
         run: dotnet build LendingSolution.sln --configuration Release --no-restore
 
       - name: Install EF Core tools
-        run: dotnet tool install --global dotnet-ef
+        run: dotnet tool install --global dotnet-ef --version 9.0.0
 
       - name: Apply database migrations
         run: dotnet ef database update --project LendingSolution.Infrastructure --startup-project LendingSolution.API --configuration Release
