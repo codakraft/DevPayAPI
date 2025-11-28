@@ -27,6 +27,9 @@ jobs:
       - name: Build solution
         run: dotnet build LendingSolution.sln --configuration Release --no-restore
 
+      - name: Apply database migrations
+        run: dotnet ef database update --project LendingSolution.Infrastructure --startup-project LendingSolution.API --configuration Release
+
       - name: Publish API project
         run: dotnet publish ./LendingSolution.API/LendingSolution.API.csproj --configuration Release --output ./publish --no-restore
 
