@@ -62,4 +62,7 @@ public class BorrowerApplication : Base
     // Status
     public bool IsCompleted { get; set; } = false;
     public bool IsActive { get; set; } = true;
+    
+    // Remita Salary History navigation property
+    public RemitaSalaryHistory? RemitaSalaryHistory { get; set; }
 }

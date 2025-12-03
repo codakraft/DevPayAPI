@@ -98,9 +98,15 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     {
         var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
 
-        if (application.CurrentStep != BorrowerOnboardingStep.Step1_EmailSent)
+        // Allow resubmitting this step - clear subsequent step data if going back
+        if (application.CurrentStep > BorrowerOnboardingStep.Step1B_EmailValidated)
         {
-            throw new AppException("Invalid step for this operation", 400);
+            _logger.LogInformation("Borrower going back to Step 1B for application {ApplicationId}. Clearing subsequent step data.", application.Id);
+            ClearStepsFromStep2Onwards(application);
+        }
+        else if (application.CurrentStep < BorrowerOnboardingStep.Step1_EmailSent)
+        {
+            throw new AppException("Please complete Step 1 first", 400);
         }
 
         // Validate OTP (mock implementation - replace with real OTP validation)
@@ -123,9 +129,17 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     {
         var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
 
-        if (application.CurrentStep != BorrowerOnboardingStep.Step1B_EmailValidated)
+        // Must have completed Step 1B at minimum
+        if (application.CurrentStep < BorrowerOnboardingStep.Step1B_EmailValidated)
         {
-            throw new AppException("Invalid step for this operation", 400);
+            throw new AppException("Please complete email verification first", 400);
+        }
+
+        // Allow resubmitting this step - clear subsequent step data if going back
+        if (application.CurrentStep > BorrowerOnboardingStep.Step2_BvnSubmitted)
+        {
+            _logger.LogInformation("Borrower going back to Step 2 for application {ApplicationId}. Clearing subsequent step data.", application.Id);
+            ClearStepsFromStep2BOnwards(application);
         }
 
         // Update application with bank and BVN info
@@ -146,9 +160,18 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     public async Task<BorrowerStep2BResponseDto> Step2B_ValidateBvnOtpAsync(BorrowerStep2BRequestDto request)
     {
         var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
-        if (application.CurrentStep != BorrowerOnboardingStep.Step2_BvnSubmitted)
+        
+        // Must have completed Step 2 at minimum
+        if (application.CurrentStep < BorrowerOnboardingStep.Step2_BvnSubmitted)
         {
-            throw new AppException("Invalid step for this operation", 400);
+            throw new AppException("Please complete bank and BVN submission first", 400);
+        }
+
+        // Allow resubmitting this step - clear subsequent step data if going back
+        if (application.CurrentStep > BorrowerOnboardingStep.Step2B_BvnValidated)
+        {
+            _logger.LogInformation("Borrower going back to Step 2B for application {ApplicationId}. Clearing subsequent step data.", application.Id);
+            ClearStepsFromStep3Onwards(application);
         }
 
         // Validate BVN OTP (mock implementation)
@@ -171,9 +194,17 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     {
         var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
 
-        if (application.CurrentStep != BorrowerOnboardingStep.Step2B_BvnValidated)
+        // Must have completed Step 2B at minimum
+        if (application.CurrentStep < BorrowerOnboardingStep.Step2B_BvnValidated)
         {
-            throw new AppException("Invalid step for this operation", 400);
+            throw new AppException("Please complete BVN verification first", 400);
+        }
+
+        // Allow resubmitting this step - clear subsequent step data if going back
+        if (application.CurrentStep > BorrowerOnboardingStep.Step3_DocumentsUploaded)
+        {
+            _logger.LogInformation("Borrower going back to Step 3 for application {ApplicationId}. Clearing subsequent step data.", application.Id);
+            ClearStepsFromStep4Onwards(application);
         }
 
         // Upload documents
@@ -275,9 +306,16 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     {
         var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
 
-        if (application.CurrentStep != BorrowerOnboardingStep.Step3_DocumentsUploaded)
+        // Must have completed Step 3 at minimum
+        if (application.CurrentStep < BorrowerOnboardingStep.Step3_DocumentsUploaded)
         {
-            throw new AppException("Invalid step for this operation", 400);
+            throw new AppException("Please complete document upload first", 400);
+        }
+
+        // If already submitted, don't allow resubmission
+        if (application.IsCompleted)
+        {
+            throw new AppException("Loan application has already been submitted", 400);
         }
 
         // Validate loan amount and tenor are within eligible range
@@ -724,5 +762,69 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             _ => new List<string>()
         };
     }
+
+    #region Step Data Clearing Methods
+
+    /// <summary>
+    /// Clears all data from Step 2 onwards (bank/BVN info, documents, loan eligibility, loan submission)
+    /// </summary>
+    private static void ClearStepsFromStep2Onwards(BorrowerApplication application)
+    {
+        // Clear Step 2 data
+        application.BankCode = null;
+        application.AccountNo = null;
+        application.BVN = null;
+        application.BvnVerifiedAt = null;
+        application.LastBvnOtp = null;
+        application.BvnOtpGeneratedAt = null;
+
+        // Clear Step 3 and beyond
+        ClearStepsFromStep3Onwards(application);
+    }
+
+    /// <summary>
+    /// Clears all data from Step 2B onwards (BVN verification, documents, loan eligibility, loan submission)
+    /// </summary>
+    private static void ClearStepsFromStep2BOnwards(BorrowerApplication application)
+    {
+        // Clear Step 2B data
+        application.BvnVerifiedAt = null;
+
+        // Clear Step 3 and beyond
+        ClearStepsFromStep3Onwards(application);
+    }
+
+    /// <summary>
+    /// Clears all data from Step 3 onwards (documents, address, loan eligibility, loan submission)
+    /// </summary>
+    private static void ClearStepsFromStep3Onwards(BorrowerApplication application)
+    {
+        // Clear Step 3 data
+        application.Address = null;
+        application.IdNumber = null;
+        application.FrontDocumentId = null;
+        application.BackDocumentId = null;
+        application.DocumentsUploadedAt = null;
+        application.MinLoanEligible = null;
+        application.MaxLoanEligible = null;
+        application.MinTenor = null;
+        application.MaxTenor = null;
+
+        // Clear Step 4 and beyond
+        ClearStepsFromStep4Onwards(application);
+    }
+
+    /// <summary>
+    /// Clears all data from Step 4 onwards (loan submission)
+    /// </summary>
+    private static void ClearStepsFromStep4Onwards(BorrowerApplication application)
+    {
+        // Clear Step 4 data
+        application.LoanId = null;
+        application.LoanSubmittedAt = null;
+        application.IsCompleted = false;
+    }
+
+    #endregion
 }
 

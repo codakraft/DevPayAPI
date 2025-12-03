@@ -50,4 +50,12 @@ public class Loan : Base
     public DateTime? MandateActivationDate { get; set; }
     public DateTime? MandateStoppedDate { get; set; }
     public string? FailureReason { get; set; }
+    
+    // Offer Letter properties
+    public Guid? OfferLetterDocumentId { get; set; }
+    public string? OfferLetterUrl { get; set; }
+    public DateTime? OfferLetterSentAt { get; set; }
+    public Guid? SignedOfferLetterDocumentId { get; set; }
+    public string? SignedOfferLetterUrl { get; set; }
+    public DateTime? SignedOfferLetterUploadedAt { get; set; }
 }

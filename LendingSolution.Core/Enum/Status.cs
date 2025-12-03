@@ -9,7 +9,9 @@ public enum LoanStatus
     Disbursed = 4,
     Repaid = 5,
     Overdue = 6,
-    Cancelled = 7
+    Cancelled = 7,
+    OfferLetterSent = 8,
+    OfferLetterSigned = 9
 }
 
 public enum InterestComputationBasis

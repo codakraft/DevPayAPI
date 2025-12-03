@@ -20,7 +20,10 @@ public class LoanService(
     ILoanRepository loanRepository,
     ICompanyRepository companyRepository,
     IBorrowerApplicationRepository borrowerApplicationRepository,
-    IConfiguration configuration
+    IConfiguration configuration,
+    IEmailService emailService,
+    IDocumentService documentService,
+    IProvidusDisbursementService providusDisbursementService
 ) : ILoanService
 {
     private readonly UserManager<ApplicationUser> _userManager = userManager;
@@ -29,6 +32,9 @@ public class LoanService(
     private readonly ICompanyRepository _companyRepository = companyRepository;
     private readonly ILoanRepository _loanRepository = loanRepository;
     private readonly IBorrowerApplicationRepository _borrowerApplicationRepository = borrowerApplicationRepository;
+    private readonly IEmailService _emailService = emailService;
+    private readonly IDocumentService _documentService = documentService;
+    private readonly IProvidusDisbursementService _providusDisbursementService = providusDisbursementService;
 
     public async Task<String> Register(RegisterRequestDto body)
     {
@@ -140,7 +146,7 @@ public class LoanService(
             throw new AppException("Loan not found", 404);
         }
 
-        if (loan.Status == LoanStatus.Approved)
+        if (loan.Status == LoanStatus.Approved || loan.Status == LoanStatus.OfferLetterSent || loan.Status == LoanStatus.OfferLetterSigned)
         {
             throw new AppException("Loan already approved", 400);
         }
@@ -155,6 +161,7 @@ public class LoanService(
             throw new AppException("Loan has already been disbursed", 400);
         }
 
+        // Set loan to Approved status first
         loan.Status = LoanStatus.Approved;
         loan.ApprovedAt = DateTime.UtcNow;
         loan.ApprovedBy = approvedBy;
@@ -165,6 +172,17 @@ public class LoanService(
         if (!updateResult)
         {
             throw new AppException("Failed to update loan status", 500);
+        }
+        
+        // Send offer letter after approval
+        try
+        {
+            await SendOfferLetterAsync(loanId, approvedBy);
+        }
+        catch (Exception)
+        {
+            // Log but don't fail the approval if offer letter sending fails
+            // The admin can resend the offer letter manually
         }
 
         return loan;
@@ -515,9 +533,324 @@ public class LoanService(
             ProductInterestRate = loan.Product.InterestRate,
             Message = loan.Message,
             IsMandateGenerated = loan.IsMandateGenerated,
-            MandateId = loan.MandateId
+            MandateId = loan.MandateId,
+            SalaryHistory = MapToSalaryHistoryDto(loan.BorrowerApplication?.RemitaSalaryHistory)
         };
     }
+    
+    private SalaryHistoryInfoDto? MapToSalaryHistoryDto(RemitaSalaryHistory? salaryHistory)
+    {
+        if (salaryHistory == null)
+            return null;
+            
+        return new SalaryHistoryInfoDto
+        {
+            CompanyName = salaryHistory.CompanyName ?? string.Empty,
+            CustomerName = salaryHistory.CustomerName ?? string.Empty,
+            Category = salaryHistory.Category ?? string.Empty,
+            SalaryCount = salaryHistory.SalaryCount,
+            AverageMonthlySalary = salaryHistory.AverageMonthlySalary,
+            LatestSalaryAmount = salaryHistory.LatestSalaryAmount,
+            LatestPaymentDate = salaryHistory.LatestPaymentDate,
+            MinSalaryAmount = salaryHistory.MinSalaryAmount,
+            MaxSalaryAmount = salaryHistory.MaxSalaryAmount,
+            ConsistentMonths = salaryHistory.ConsistentMonths,
+            HasOutstandingLoans = salaryHistory.HasOutstandingLoans,
+            TotalOutstandingAmount = salaryHistory.TotalOutstandingAmount,
+            FirstPaymentDate = salaryHistory.FirstPaymentDate
+        };
+    }
+    
+    #region Offer Letter and Disbursement Methods
+    
+    public async Task<OfferLetterDto> GetOfferLetterDetailsAsync(Guid loanId)
+    {
+        var loan = await _loanRepository.GetLoanByIdWithIncludes(loanId);
+        if (loan == null)
+        {
+            throw new AppException("Loan not found", 404);
+        }
+        
+        return BuildOfferLetterDto(loan);
+    }
+    
+    public async Task<OfferLetterResponseDto> SendOfferLetterAsync(Guid loanId, string? approvedBy = null)
+    {
+        var loan = await _loanRepository.GetLoanByIdWithIncludes(loanId);
+        if (loan == null)
+        {
+            throw new AppException("Loan not found", 404);
+        }
+        
+        // Only allow sending offer letter for Approved status or resending for OfferLetterSent
+        if (loan.Status != LoanStatus.Approved && loan.Status != LoanStatus.OfferLetterSent)
+        {
+            throw new AppException($"Cannot send offer letter for loan with status: {loan.Status}", 400);
+        }
+        
+        // Build offer letter details
+        var offerLetterDto = BuildOfferLetterDto(loan);
+        
+        // Send the offer letter email
+        var emailSent = await _emailService.SendOfferLetterEmailAsync(offerLetterDto);
+        
+        if (!emailSent)
+        {
+            throw new AppException("Failed to send offer letter email", 500);
+        }
+        
+        // Update loan status to OfferLetterSent
+        loan.Status = LoanStatus.OfferLetterSent;
+        loan.OfferLetterSentAt = DateTime.UtcNow;
+        
+        var updateResult = await _loanRepository.UpdateLoan(loan);
+        if (!updateResult)
+        {
+            throw new AppException("Failed to update loan status", 500);
+        }
+        
+        return new OfferLetterResponseDto
+        {
+            LoanId = loanId,
+            Status = LoanStatus.OfferLetterSent.ToString(),
+            Message = "Offer letter sent successfully. Please check your email.",
+            OfferLetterUrl = loan.OfferLetterUrl,
+            SentAt = loan.OfferLetterSentAt,
+            ExpiresAt = DateTime.UtcNow.AddDays(7) // Offer valid for 7 days
+        };
+    }
+    
+    public async Task<SignedOfferLetterResponseDto> UploadSignedOfferLetterAsync(Guid loanId, SignedOfferLetterUploadDto dto, string uploadedBy)
+    {
+        var loan = await _loanRepository.GetLoanByIdWithIncludes(loanId);
+        if (loan == null)
+        {
+            throw new AppException("Loan not found", 404);
+        }
+        
+        // Only allow upload for OfferLetterSent status
+        if (loan.Status != LoanStatus.OfferLetterSent && loan.Status != LoanStatus.OfferLetterSigned)
+        {
+            throw new AppException($"Cannot upload signed offer letter for loan with status: {loan.Status}. Offer letter must be sent first.", 400);
+        }
+        
+        // Validate file extension
+        var extension = dto.FileExtension?.ToLowerInvariant().TrimStart('.');
+        if (extension != "pdf")
+        {
+            throw new AppException("Only PDF files are allowed for signed offer letters", 400);
+        }
+        
+        // Upload the signed document
+        var uploadResult = await _documentService.UploadDocumentAsync(new UploadDocumentDto
+        {
+            DocumentName = $"SignedOfferLetter_{loanId}_{DateTime.UtcNow:yyyyMMddHHmmss}",
+            Base64String = dto.Base64String,
+            FileExtension = "pdf"
+        }, uploadedBy);
+        
+        // Update loan with signed offer letter details
+        loan.SignedOfferLetterDocumentId = Guid.Parse(uploadResult.Id);
+        loan.SignedOfferLetterUrl = uploadResult.Url;
+        loan.SignedOfferLetterUploadedAt = DateTime.UtcNow;
+        loan.Status = LoanStatus.OfferLetterSigned;
+        
+        var updateResult = await _loanRepository.UpdateLoan(loan);
+        if (!updateResult)
+        {
+            throw new AppException("Failed to update loan with signed offer letter", 500);
+        }
+        
+        return new SignedOfferLetterResponseDto
+        {
+            LoanId = loanId,
+            Status = LoanStatus.OfferLetterSigned.ToString(),
+            Message = "Signed offer letter uploaded successfully. Loan is now ready for disbursement.",
+            SignedOfferLetterUrl = uploadResult.Url,
+            UploadedAt = loan.SignedOfferLetterUploadedAt,
+            ReadyForDisbursement = true
+        };
+    }
+    
+    public async Task<LoanDisbursementResponseDto> DisburseLoanAsync(Guid loanId, string? disbursedBy = null)
+    {
+        var loan = await _loanRepository.GetLoanByIdWithIncludes(loanId);
+        if (loan == null)
+        {
+            throw new AppException("Loan not found", 404);
+        }
+        
+        // Only allow disbursement for OfferLetterSigned status
+        if (loan.Status != LoanStatus.OfferLetterSigned)
+        {
+            throw new AppException($"Cannot disburse loan with status: {loan.Status}. Signed offer letter must be uploaded first.", 400);
+        }
+        
+        // Verify signed offer letter exists
+        if (loan.SignedOfferLetterDocumentId == null || string.IsNullOrEmpty(loan.SignedOfferLetterUrl))
+        {
+            throw new AppException("Signed offer letter not found. Please upload the signed offer letter before disbursement.", 400);
+        }
+        
+        // Get borrower details for transfer
+        string borrowerEmail;
+        string borrowerName;
+        string? accountNumber = null;
+        string? bankCode = null;
+        
+        if (loan.BorrowerApplication != null)
+        {
+            borrowerEmail = loan.BorrowerApplication.Email;
+            borrowerName = $"{loan.BorrowerApplication.FirstName} {loan.BorrowerApplication.LastName}";
+            accountNumber = loan.BorrowerApplication.AccountNo;
+            bankCode = loan.BorrowerApplication.BankCode;
+        }
+        else if (loan.User != null)
+        {
+            borrowerEmail = loan.User.Email ?? string.Empty;
+            borrowerName = $"{loan.User.FirstName} {loan.User.LastName}";
+            // Note: ApplicationUser doesn't have account details - must be provided via loan or separate lookup
+            // For now, account details must come from BorrowerApplication
+        }
+        else
+        {
+            throw new AppException("Borrower information not found", 400);
+        }
+        
+        // Validate account details for disbursement
+        if (string.IsNullOrEmpty(accountNumber))
+        {
+            throw new AppException("Borrower account number not found. Cannot process disbursement.", 400);
+        }
+        
+        // Initiate fund transfer via Providus
+        var disbursementRequest = new ProvidusDisbursementInternalRequestDto
+        {
+            LoanId = loanId,
+            DestinationAccountNumber = accountNumber,
+            DestinationBankCode = bankCode ?? string.Empty,
+            Amount = loan.Amount,
+            Narration = $"Loan Disbursement for {borrowerName} - Loan ID: {loanId.ToString()[..8]}",
+            BeneficiaryName = borrowerName
+        };
+        
+        var disbursementResult = await _providusDisbursementService.TransferFundsAsync(disbursementRequest);
+        
+        if (!disbursementResult.IsSuccessful)
+        {
+            throw new AppException($"Disbursement failed: {disbursementResult.Message}. {disbursementResult.ErrorDetails}", 500);
+        }
+        
+        // Update loan to Disbursed status
+        loan.Status = LoanStatus.Disbursed;
+        loan.DisbursementDate = disbursementResult.DisbursedAt;
+        loan.DisbursementReference = disbursementResult.DisbursementReference;
+        loan.DueDate = DateTime.UtcNow.AddMonths(loan.DurationInMonths);
+        
+        var updateResult = await _loanRepository.UpdateLoan(loan);
+        if (!updateResult)
+        {
+            // Log critical: money was transferred but loan status update failed
+            throw new AppException("CRITICAL: Disbursement successful but failed to update loan status. Reference: " + disbursementResult.DisbursementReference, 500);
+        }
+        
+        // Send disbursement notification email
+        if (!string.IsNullOrEmpty(borrowerEmail))
+        {
+            await _emailService.SendDisbursementNotificationAsync(borrowerEmail, borrowerName, loan.Amount, disbursementResult.DisbursementReference);
+        }
+        
+        return new LoanDisbursementResponseDto
+        {
+            LoanId = loanId,
+            Status = LoanStatus.Disbursed.ToString(),
+            Message = disbursementResult.IsMockTransaction 
+                ? "Loan has been disbursed successfully (MOCK MODE)." 
+                : "Loan has been disbursed successfully.",
+            Amount = loan.Amount,
+            DisbursedAt = loan.DisbursementDate,
+            DisbursementReference = disbursementResult.DisbursementReference,
+            DueDate = loan.DueDate
+        };
+    }
+    
+    private OfferLetterDto BuildOfferLetterDto(Loan loan)
+    {
+        // Get borrower details
+        string borrowerName;
+        string borrowerEmail;
+        string borrowerAddress;
+        
+        if (loan.BorrowerApplication != null)
+        {
+            borrowerName = $"{loan.BorrowerApplication.FirstName} {loan.BorrowerApplication.LastName}";
+            borrowerEmail = loan.BorrowerApplication.Email;
+            borrowerAddress = loan.BorrowerApplication.Address ?? "Address not provided";
+        }
+        else if (loan.User != null)
+        {
+            borrowerName = $"{loan.User.FirstName} {loan.User.LastName}";
+            borrowerEmail = loan.User.Email ?? string.Empty;
+            borrowerAddress = loan.User.Address ?? "Address not provided";
+        }
+        else
+        {
+            throw new AppException("Borrower information not found", 400);
+        }
+        
+        // Calculate loan details
+        var interestRate = loan.Product.InterestRate;
+        var isMonthlyRate = loan.Product.InterestCostComputation == InterestCostComputation.PerMonth;
+        var monthlyRate = isMonthlyRate ? interestRate : interestRate / 12;
+        
+        decimal totalInterest;
+        if (loan.Product.InterestComputationBasis == InterestComputationBasis.Flat)
+        {
+            totalInterest = loan.Amount * (monthlyRate / 100) * loan.DurationInMonths;
+        }
+        else // Reducing balance
+        {
+            // Simple approximation for reducing balance
+            totalInterest = loan.Amount * (monthlyRate / 100) * loan.DurationInMonths * 0.55m;
+        }
+        
+        var totalRepayment = loan.Amount + totalInterest;
+        var monthlyRepayment = totalRepayment / loan.DurationInMonths;
+        
+        // Company address
+        var companyAddress = string.Join(", ", new[]
+        {
+            loan.Company.Street,
+            loan.Company.City,
+            loan.Company.State
+        }.Where(s => !string.IsNullOrEmpty(s)));
+        
+        return new OfferLetterDto
+        {
+            LoanId = loan.Id,
+            BorrowerName = borrowerName,
+            BorrowerEmail = borrowerEmail,
+            BorrowerAddress = borrowerAddress,
+            CompanyName = loan.Company.Name,
+            CompanyAddress = string.IsNullOrEmpty(companyAddress) ? "Company Address" : companyAddress,
+            LoanAmount = loan.Amount,
+            DurationInMonths = loan.DurationInMonths,
+            InterestRate = interestRate,
+            InterestComputationBasis = loan.Product.InterestComputationBasis.ToString(),
+            TotalInterest = Math.Round(totalInterest, 2),
+            TotalRepayment = Math.Round(totalRepayment, 2),
+            MonthlyRepayment = Math.Round(monthlyRepayment, 2),
+            Purpose = loan.Purpose,
+            ProductName = loan.Product.Name,
+            PenaltyRate = loan.Product.PenaltyOnDefaultPrincipal,
+            MoratoriumDays = loan.Product.Moratorium,
+            OfferDate = DateTime.UtcNow,
+            ExpiryDate = DateTime.UtcNow.AddDays(7),
+            ExpectedDisbursementDate = DateTime.UtcNow.AddDays(3),
+            ExpectedMaturityDate = DateTime.UtcNow.AddMonths(loan.DurationInMonths),
+            OfferLetterUrl = loan.OfferLetterUrl
+        };
+    }
+    
+    #endregion
 }
-
-    // ...existing code...

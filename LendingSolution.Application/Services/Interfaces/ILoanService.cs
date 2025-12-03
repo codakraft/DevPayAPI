@@ -21,6 +21,12 @@ public interface ILoanService
     Task<PagedLoanListDto> GetCompanyLoansAsync(Guid companyId, LoanFilterDto filter); // For Admin/SuperAdmin - specific company
     Task<LoanListDto> GetLoanByIdAsync(Guid loanId, string? requestingUserId = null); // Get single loan with access control
     
+    // Offer letter and disbursement methods
+    Task<OfferLetterResponseDto> SendOfferLetterAsync(Guid loanId, string? approvedBy = null);
+    Task<SignedOfferLetterResponseDto> UploadSignedOfferLetterAsync(Guid loanId, SignedOfferLetterUploadDto dto, string uploadedBy);
+    Task<LoanDisbursementResponseDto> DisburseLoanAsync(Guid loanId, string? disbursedBy = null);
+    Task<OfferLetterDto> GetOfferLetterDetailsAsync(Guid loanId);
+    
     // ApiResponse GetLoanBreakdown(LoanBreakdownRequestDto body);
     // Task<ApiResponse> SubmitLoan(Guid loanId, SubmitRequestDto body);
     // Task<ApiResponse> SalaryHistoryReview(ReviewHistoryRequestDto body);

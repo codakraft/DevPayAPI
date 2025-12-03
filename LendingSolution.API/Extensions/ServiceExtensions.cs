@@ -193,6 +193,9 @@ public static class ServiceExtensions
             var supportTicketRepository = provider.GetRequiredService<ISupportTicketRepository>();
             var borrowerApplicationRepository = provider.GetRequiredService<IBorrowerApplicationRepository>();
             var walletService = provider.GetRequiredService<IWalletService>();
+            var emailService = provider.GetRequiredService<IEmailService>();
+            var documentService = provider.GetRequiredService<IDocumentService>();
+            var providusDisbursementService = provider.GetRequiredService<IProvidusDisbursementService>();
 
             return new ServiceManager(
                 contextAccessor,
@@ -217,7 +220,10 @@ public static class ServiceExtensions
                 repaymentRepository,
                 supportTicketRepository,
                 borrowerApplicationRepository,
-                walletService
+                walletService,
+                emailService,
+                documentService,
+                providusDisbursementService
             );
         });
     }
@@ -246,6 +252,7 @@ public static class ServiceExtensions
         services.AddScoped<ISmsService, SmsService>();
         services.AddScoped<ISalaryEligibilityService, SalaryEligibilityService>();
         services.AddScoped<ISalaryHistoryViewService, SalaryHistoryViewService>();
+        services.AddScoped<IProvidusDisbursementService, ProvidusDisbursementService>();
     }
 
     public static void RegisterRepositories(this IServiceCollection services)
@@ -275,6 +282,7 @@ public static class ServiceExtensions
     public static void ConfigureServices(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<RemitaSettings>(configuration.GetSection("Remita"));
+        services.Configure<ProvidusSettings>(configuration.GetSection("Providus"));
         // services.AddScoped<IRemitaService, RemitaService>();
         // services.AddScoped<IAuthService, AuthService>();
         // services.AddScoped<IProfileService, ProfileService>();

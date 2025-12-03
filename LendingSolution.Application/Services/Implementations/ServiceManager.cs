@@ -37,7 +37,10 @@ public class ServiceManager(
     IRepaymentRepository repaymentRepository,
     ISupportTicketRepository supportTicketRepository,
     IBorrowerApplicationRepository borrowerApplicationRepository,
-    IWalletService walletService
+    IWalletService walletService,
+    IEmailService emailService,
+    IDocumentService documentService,
+    IProvidusDisbursementService providusDisbursementService
 ) : IServiceManager
 {
     private readonly Lazy<IAuthService> _authService = new Lazy<IAuthService>(() =>
@@ -65,7 +68,10 @@ public class ServiceManager(
                     loanRepository,
                     companyRepository,
                     borrowerApplicationRepository,
-                    configuration
+                    configuration,
+                    emailService,
+                    documentService,
+                    providusDisbursementService
                 ));
     private readonly Lazy<IRemitaService> _remitaService = new Lazy<IRemitaService>(() =>
                 new RemitaService(

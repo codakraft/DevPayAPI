@@ -35,6 +35,29 @@ public class LoanListDto
     public string Message { get; set; } = string.Empty;
     public bool IsMandateGenerated { get; set; }
     public string MandateId { get; set; } = string.Empty;
+    
+    // Salary History Information
+    public SalaryHistoryInfoDto? SalaryHistory { get; set; }
+}
+
+/// <summary>
+/// DTO for salary history information
+/// </summary>
+public class SalaryHistoryInfoDto
+{
+    public string CompanyName { get; set; } = string.Empty;
+    public string CustomerName { get; set; } = string.Empty;
+    public string Category { get; set; } = string.Empty;
+    public int SalaryCount { get; set; }
+    public decimal AverageMonthlySalary { get; set; }
+    public decimal LatestSalaryAmount { get; set; }
+    public DateTime? LatestPaymentDate { get; set; }
+    public decimal MinSalaryAmount { get; set; }
+    public decimal MaxSalaryAmount { get; set; }
+    public int ConsistentMonths { get; set; }
+    public bool HasOutstandingLoans { get; set; }
+    public decimal TotalOutstandingAmount { get; set; }
+    public DateTime? FirstPaymentDate { get; set; }
 }
 
 public class LoanFilterDto

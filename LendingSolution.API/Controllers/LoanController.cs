@@ -267,4 +267,119 @@ public class LoanController(
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
+    
+    #region Offer Letter and Disbursement Endpoints
+    
+    /// <summary>
+    /// Get offer letter details for a loan
+    /// </summary>
+    [HttpGet("{id:guid}/offer-letter")]
+    [Authorize]
+    public async Task<IActionResult> GetOfferLetterDetails(Guid id)
+    {
+        try
+        {
+            var result = await _loanService.GetOfferLetterDetailsAsync(id);
+            
+            _logger.LogInformation("Successfully fetched offer letter details for loan {LoanId}", id);
+            
+            return Ok(ApiResponse.Ok("Offer letter details fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while fetching offer letter details for loan {LoanId}", id);
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+    
+    /// <summary>
+    /// Send or resend offer letter for an approved loan
+    /// </summary>
+    [HttpPost("{id:guid}/send-offer-letter")]
+    [Authorize(Roles = "Admin,SuperAdmin")]
+    public async Task<IActionResult> SendOfferLetter(Guid id)
+    {
+        try
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var result = await _loanService.SendOfferLetterAsync(id, userId);
+            
+            _logger.LogInformation("Offer letter sent for loan {LoanId} by user {UserId}", id, userId);
+            
+            return Ok(ApiResponse.Ok("Offer letter sent successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while sending offer letter for loan {LoanId}", id);
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+    
+    /// <summary>
+    /// Upload signed offer letter (PDF only)
+    /// </summary>
+    [HttpPost("{id:guid}/upload-signed-offer-letter")]
+    [Authorize]
+    public async Task<IActionResult> UploadSignedOfferLetter(Guid id, [FromBody] SignedOfferLetterUploadDto dto)
+    {
+        try
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "anonymous";
+            var result = await _loanService.UploadSignedOfferLetterAsync(id, dto, userId);
+            
+            _logger.LogInformation("Signed offer letter uploaded for loan {LoanId} by user {UserId}", id, userId);
+            
+            return Ok(ApiResponse.Ok("Signed offer letter uploaded successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while uploading signed offer letter for loan {LoanId}", id);
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+    
+    /// <summary>
+    /// Disburse loan after signed offer letter is received
+    /// </summary>
+    [HttpPost("{id:guid}/disburse")]
+    [Authorize(Roles = "Admin,SuperAdmin")]
+    public async Task<IActionResult> DisburseLoan(Guid id)
+    {
+        try
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var result = await _loanService.DisburseLoanAsync(id, userId);
+            
+            _logger.LogInformation("Loan {LoanId} disbursed by user {UserId}", id, userId);
+            
+            return Ok(ApiResponse.Ok("Loan disbursed successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while disbursing loan {LoanId}", id);
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+    
+    #endregion
 }
