@@ -393,6 +393,12 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 
         modelBuilder.Entity<MonoCreditAnalysisRecord>()
             .HasIndex(c => c.ExpiresAt);
+
+        modelBuilder.Entity<RemitaSalaryHistory>()
+            .HasOne(rsh => rsh.BorrowerApplication)
+            .WithMany() // If BorrowerApplication has a collection `SalaryHistories`, use .WithMany(ba => ba.SalaryHistories)
+            .HasForeignKey(rsh => rsh.BorrowerApplicationId)
+            .OnDelete(DeleteBehavior.Restrict); // Or Cascade, if you want deletions to cascade
     }
 
     // protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
