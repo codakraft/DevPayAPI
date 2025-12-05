@@ -323,11 +323,11 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         modelBuilder.Entity<WalletTransaction>()
             .HasIndex(wt => wt.PaystackReference);
 
-        // Configure RemitaSalaryHistory relationships
+        // Configure RemitaSalaryHistory relationships (one-to-one with BorrowerApplication)
         modelBuilder.Entity<RemitaSalaryHistory>()
             .HasOne(rsh => rsh.BorrowerApplication)
-            .WithMany()
-            .HasForeignKey(rsh => rsh.BorrowerApplicationId)
+            .WithOne(ba => ba.RemitaSalaryHistory)
+            .HasForeignKey<RemitaSalaryHistory>(rsh => rsh.BorrowerApplicationId)
             .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<RemitaSalaryPayment>()
