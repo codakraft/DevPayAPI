@@ -22,25 +22,29 @@ public class EmailService : IEmailService
         _logger = logger;
     }
 
-    public async Task<bool> SendOtpEmailAsync(string emailAddress, string otp, string purpose = "Email Verification")
+    public async Task<bool> SendOtpEmailAsync(string emailAddress, string otp, string purpose = "Email Verification", string? senderName = null, string? senderEmail = null)
     {
         var subject = $"Your {purpose} Code";
-        var body = GenerateOtpEmailTemplate(otp, purpose);
+        var body = GenerateOtpEmailTemplate(otp, purpose, senderName ?? _emailSettings.FromName);
         
-        return await SendEmailAsync(emailAddress, subject, body);
+        return await SendEmailAsync(emailAddress, subject, body, senderName, senderEmail);
     }
 
-    public async Task<bool> SendEmailAsync(string emailAddress, string subject, string body)
+    public async Task<bool> SendEmailAsync(string emailAddress, string subject, string body, string? senderName = null, string? senderEmail = null)
     {
         try
         {
+            // Use provided sender info or fall back to configured defaults
+            var fromEmail = senderEmail ?? _emailSettings.FromEmail;
+            var fromName = senderName ?? _emailSettings.FromName;
+
             // Check if email service is properly configured
             if (string.IsNullOrEmpty(_emailSettings.SmtpHost) || 
                 _emailSettings.SmtpHost.Contains("dummy") ||
-                string.IsNullOrEmpty(_emailSettings.FromEmail))
+                string.IsNullOrEmpty(fromEmail))
             {
                 _logger.LogWarning("Email service not configured - simulating email send to {EmailAddress}", emailAddress);
-                _logger.LogInformation("EMAIL SIMULATION - To: {EmailAddress}, Subject: {Subject}", emailAddress, subject);
+                _logger.LogInformation("EMAIL SIMULATION - To: {EmailAddress}, Subject: {Subject}, From: {FromName} <{FromEmail}>", emailAddress, subject, fromName, fromEmail);
                 return true; // Simulate successful send
             }
 
@@ -51,7 +55,7 @@ public class EmailService : IEmailService
 
             var mailMessage = new MailMessage
             {
-                From = new MailAddress(_emailSettings.FromEmail, _emailSettings.FromName),
+                From = new MailAddress(fromEmail, fromName),
                 Subject = subject,
                 Body = body,
                 IsBodyHtml = true
@@ -60,7 +64,7 @@ public class EmailService : IEmailService
             mailMessage.To.Add(emailAddress);
 
             await client.SendMailAsync(mailMessage);
-            _logger.LogInformation("Email sent successfully to {EmailAddress}", emailAddress);
+            _logger.LogInformation("Email sent successfully to {EmailAddress} from {FromName} <{FromEmail}>", emailAddress, fromName, fromEmail);
             return true;
         }
         catch (Exception ex)
@@ -70,7 +74,7 @@ public class EmailService : IEmailService
         }
     }
 
-    private string GenerateOtpEmailTemplate(string otp, string purpose)
+    private string GenerateOtpEmailTemplate(string otp, string purpose, string companyName)
     {
         return $@"
 <!DOCTYPE html>
@@ -98,7 +102,7 @@ public class EmailService : IEmailService
 <body>
     <div class='container'>
         <div class='header'>
-            <h1>LendingSolution</h1>
+            <h1>{companyName}</h1>
         </div>
         <div class='content'>
             <h2>{purpose}</h2>
@@ -113,7 +117,7 @@ public class EmailService : IEmailService
         </div>
         <div class='footer'>
             <p>This is an automated message, please do not reply.</p>
-            <p>&copy; 2025 LendingSolution. All rights reserved.</p>
+            <p>&copy; {DateTime.UtcNow.Year} {companyName}. All rights reserved.</p>
         </div>
     </div>
 </body>

@@ -13,7 +13,9 @@ public interface IEmailService
     /// <param name="emailAddress">Recipient email address</param>
     /// <param name="otp">One-time password</param>
     /// <param name="purpose">Purpose of the OTP (e.g., "Email Verification", "Account Recovery")</param>
-    Task<bool> SendOtpEmailAsync(string emailAddress, string otp, string purpose = "Email Verification");
+    /// <param name="senderName">Optional sender name (defaults to configured value)</param>
+    /// <param name="senderEmail">Optional sender email (defaults to configured value)</param>
+    Task<bool> SendOtpEmailAsync(string emailAddress, string otp, string purpose = "Email Verification", string? senderName = null, string? senderEmail = null);
 
     /// <summary>
     /// Send general email
@@ -21,7 +23,9 @@ public interface IEmailService
     /// <param name="emailAddress">Recipient email address</param>
     /// <param name="subject">Email subject</param>
     /// <param name="body">Email body (HTML or plain text)</param>
-    Task<bool> SendEmailAsync(string emailAddress, string subject, string body);
+    /// <param name="senderName">Optional sender name (defaults to configured value)</param>
+    /// <param name="senderEmail">Optional sender email (defaults to configured value)</param>
+    Task<bool> SendEmailAsync(string emailAddress, string subject, string body, string? senderName = null, string? senderEmail = null);
     
     /// <summary>
     /// Send loan offer letter via email with PDF attachment link
