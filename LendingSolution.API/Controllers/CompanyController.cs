@@ -2,6 +2,7 @@ using LendingSolution.Application.Exceptions;
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Dtos.Response;
+using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -10,7 +11,8 @@ namespace LendingSolution.API.Controllers;
 
 [Authorize]
 [ApiController]
-[Route("api/company")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/company")]
 public class CompanyController(
     ICompanyService companySErvice,
     ILoanProductService loanProductService,

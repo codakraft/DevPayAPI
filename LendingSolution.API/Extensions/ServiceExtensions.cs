@@ -1,4 +1,5 @@
 using System.Text;
+using Asp.Versioning;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -26,7 +27,7 @@ public static class ServiceExtensions
             {
                 Title = "LendingSolution API",
                 Version = "v1",
-                Description = "LendingSolution API by Naries",
+                Description = "LendingSolution API by Naries (Version 1)",
                 Contact = new OpenApiContact
                 {
                     Name = "Mayokun Ajiboye",
@@ -34,6 +35,7 @@ public static class ServiceExtensions
                     Url = new Uri("https://www.linkedin.com/in/mayokunayobami")
                 }
             });
+            
             opt.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
             {
                 Name = "Authorization",
@@ -351,6 +353,26 @@ public static class ServiceExtensions
     public static void ConfigureSmsSettings(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<SmsSettings>(configuration.GetSection("SmsSettings"));
+    }
+
+    public static void ConfigureApiVersioning(this IServiceCollection services)
+    {
+        services.AddApiVersioning(options =>
+        {
+            options.DefaultApiVersion = new ApiVersion(1, 0);
+            options.AssumeDefaultVersionWhenUnspecified = true;
+            options.ReportApiVersions = true;
+            options.ApiVersionReader = ApiVersionReader.Combine(
+                new UrlSegmentApiVersionReader(),
+                new HeaderApiVersionReader("X-Api-Version"),
+                new QueryStringApiVersionReader("api-version")
+            );
+        })
+        .AddApiExplorer(options =>
+        {
+            options.GroupNameFormat = "'v'V";
+            options.SubstituteApiVersionInUrl = true;
+        });
     }
 
 }

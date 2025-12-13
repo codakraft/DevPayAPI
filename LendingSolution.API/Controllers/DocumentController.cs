@@ -1,6 +1,7 @@
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
 using LendingSolution.Application.Exceptions;
+using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using LendingSolution.Core.Dtos.Response;
@@ -10,7 +11,8 @@ using System.Security.Claims;
 namespace LendingSolution.API.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/[controller]")]
 // [Authorize]
 [AllowAnonymous]
 public class DocumentController : ControllerBase

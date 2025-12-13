@@ -2,6 +2,7 @@ using LendingSolution.Application.Exceptions;
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Dtos.Response;
+using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -9,7 +10,8 @@ using System.Security.Claims;
 namespace LendingSolution.API.Controllers;
 
 [ApiController]
-[Route("api/finance")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/finance")]
 [Authorize(Roles = "FinanceOfficer,SuperAdmin")]
 public class FinanceController(
     IFinanceService financeService,

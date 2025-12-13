@@ -2,6 +2,7 @@ using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
 using LendingSolution.API.Models;
 using LendingSolution.Application.Exceptions;
+using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -10,7 +11,8 @@ using LendingSolution.Core.Dtos.Response;
 namespace LendingSolution.API.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/[controller]")]
 [Authorize]
 public class WalletController(IWalletService walletService, ILogger<WalletController> logger) : ControllerBase
 {

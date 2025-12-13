@@ -3,6 +3,7 @@ using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Dtos.Response;
 using LendingSolution.Core.Settings;
+using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -10,7 +11,8 @@ using Microsoft.Extensions.Options;
 namespace LendingSolution.API.Controllers;
 
 [ApiController]
-[Route("api/misc")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/misc")]
 public class MiscController : Controller
 {
     private readonly IAuthService _authService;

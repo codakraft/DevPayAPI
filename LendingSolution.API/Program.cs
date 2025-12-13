@@ -24,6 +24,7 @@ builder.Services.ConfigureSmsSettings(builder.Configuration);
 builder.Services.ConfigureServices(builder.Configuration);
 builder.Services.AddJwtConfiguration(builder.Configuration);
 builder.Services.ConfigureJwt(builder.Configuration);
+builder.Services.ConfigureApiVersioning();
 builder.Services.ConfigureEndpointExplorer();
 
 var nigeriaCulture = new CultureInfo("en-NG");

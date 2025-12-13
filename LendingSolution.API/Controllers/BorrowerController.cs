@@ -2,13 +2,15 @@ using LendingSolution.Application.Repositories.Interfaces;
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Dtos.Response;
+using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 using LendingSolution.Application.Exceptions;
 
 namespace LendingSolution.API.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/[controller]")]
 public class BorrowerController(
     IBorrowerOnboardingService borrowerOnboardingService,
     IBorrowerApplicationRepository borrowerApplicationRepository,
