@@ -3,6 +3,7 @@ using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Models;
 using LendingSolution.Application.Exceptions;
+using Microsoft.Extensions.Logging;
 
 namespace LendingSolution.Application.Services.Implementations;
 
@@ -14,15 +15,18 @@ public class WalletService : IWalletService
     private readonly IWalletRepository _walletRepository;
     private readonly IWalletTransactionRepository _transactionRepository;
     private readonly IPaystackService _paystackService;
+    private readonly ILogger<WalletService> _logger;
 
     public WalletService(
         IWalletRepository walletRepository,
         IWalletTransactionRepository transactionRepository,
-        IPaystackService paystackService)
+        IPaystackService paystackService,
+        ILogger<WalletService> logger)
     {
         _walletRepository = walletRepository;
         _transactionRepository = transactionRepository;
         _paystackService = paystackService;
+        _logger = logger;
     }
 
     public async Task<WalletDto?> GetWalletByIdAsync(Guid walletId)
@@ -233,6 +237,63 @@ public class WalletService : IWalletService
     public async Task<bool> HasSufficientBalanceAsync(Guid walletId, decimal amount)
     {
         return await _walletRepository.HasSufficientBalanceAsync(walletId, amount);
+    }
+
+    public async Task ValidateCompanyBalanceForFeeAsync(Guid companyId, decimal amount, string feePurpose)
+    {
+        try
+        {
+            // Skip if amount is 0 or negative
+            if (amount <= 0)
+            {
+                _logger.LogInformation("Fee amount is {Amount}, skipping wallet validation for Company ID: {CompanyId}", amount, companyId);
+                return;
+            }
+
+            // Get company wallet
+            var companyWallet = await GetWalletByCompanyIdAsync(companyId);
+            if (companyWallet == null)
+            {
+                _logger.LogWarning("Company (ID: {CompanyId}) does not have a wallet. Unable to process {FeePurpose}.", 
+                    companyId, feePurpose);
+                throw new AppException(
+                    "Wallet not found. Please contact support.", 
+                    404);
+            }
+
+            // Check if company has sufficient balance
+            var hasSufficientBalance = await HasSufficientBalanceAsync(companyWallet.Id, amount);
+            if (!hasSufficientBalance)
+            {
+                _logger.LogWarning(
+                    "Insufficient wallet balance for Company: {CompanyName} (ID: {CompanyId}). " +
+                    "Required: {RequiredAmount:C}, Current Balance: {CurrentBalance:C}. " +
+                    "Purpose: {FeePurpose}",
+                    companyWallet.CompanyName, companyId, amount, companyWallet.Balance, feePurpose);
+                
+                throw new AppException(
+                    $"Insufficient wallet balance. Required: {amount:C}, Available: {companyWallet.Balance:C}. Please fund your wallet.", 
+                    400);
+            }
+
+            _logger.LogDebug(
+                "Wallet balance validated successfully for Company: {CompanyName}. Balance: {Balance:C}, Required: {Required:C}, Purpose: {Purpose}",
+                companyWallet.CompanyName, companyWallet.Balance, amount, feePurpose);
+        }
+        catch (AppException)
+        {
+            // Re-throw application exceptions
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, 
+                "Error validating wallet balance for Company ID: {CompanyId}, Purpose: {FeePurpose}",
+                companyId, feePurpose);
+            throw new AppException(
+                "Error validating wallet balance. Please try again later.", 
+                500);
+        }
     }
 
     public async Task<List<WalletTransactionDto>> GetWalletTransactionsAsync(Guid walletId, int page = 1, int pageSize = 20)

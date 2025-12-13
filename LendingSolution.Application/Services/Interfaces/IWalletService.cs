@@ -84,6 +84,15 @@ public interface IWalletService
     Task<bool> HasSufficientBalanceAsync(Guid walletId, decimal amount);
     
     /// <summary>
+    /// Validate company has sufficient balance for a fee (throws exception if insufficient)
+    /// </summary>
+    /// <param name="companyId">Company ID</param>
+    /// <param name="amount">Required amount</param>
+    /// <param name="feePurpose">Purpose of the fee (for logging)</param>
+    /// <exception cref="AppException">Thrown if wallet not found or insufficient balance</exception>
+    Task ValidateCompanyBalanceForFeeAsync(Guid companyId, decimal amount, string feePurpose);
+    
+    /// <summary>
     /// Get wallet transactions
     /// </summary>
     Task<List<WalletTransactionDto>> GetWalletTransactionsAsync(Guid walletId, int page = 1, int pageSize = 20);

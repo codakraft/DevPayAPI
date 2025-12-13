@@ -65,10 +65,22 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         var product = await _loanProductRepository.GetLoanProductById(request.ProductId) ?? throw new AppException("Loan product not found", 404);
 
         // Get company from the product
-        var company = await _companyRepository.GetCompanyById(product.CompanyId);
-        if (company == null)
+        var company = await _companyRepository.GetCompanyById(product.CompanyId) ?? throw new AppException("Company associated with this loan product not found", 404);
+
+        // EARLY VALIDATION: Check company wallet balance before starting onboarding process
+        try
         {
-            throw new AppException("Company associated with this loan product not found", 404);
+            var settings = await _settingsService.GetSettingsAsync();
+            await _walletService.ValidateCompanyBalanceForFeeAsync(product.CompanyId, settings.OtpFee, "Email OTP");
+        }
+        catch (AppException ex) when (ex.StatusCode == 400 || ex.StatusCode == 404)
+        {
+            _logger.LogWarning(
+                "AUDIT: Borrower application blocked for Company {CompanyName} (ID: {CompanyId}). Reason: {Reason}",
+                company.Name, product.CompanyId, ex.Message);
+            throw new AppException(
+                "We're unable to process your application at this time. Please contact support.",
+                503);
         }
 
         // Create borrower application
@@ -133,6 +145,26 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         if (application.CurrentStep < BorrowerOnboardingStep.Step1B_EmailValidated)
         {
             throw new AppException("Please complete email verification first", 400);
+        }
+
+        // Get company for logging
+        var company = await _companyRepository.GetCompanyById(application.CompanyId);
+        var companyName = company?.Name ?? "Unknown Company";
+
+        // EARLY VALIDATION: Check company wallet balance before proceeding
+        try
+        {
+            var settings = await _settingsService.GetSettingsAsync();
+            await _walletService.ValidateCompanyBalanceForFeeAsync(application.CompanyId, settings.OtpFee, "BVN OTP");
+        }
+        catch (AppException ex) when (ex.StatusCode == 400 || ex.StatusCode == 404)
+        {
+            _logger.LogWarning(
+                "AUDIT: Borrower application blocked for Company {CompanyName} (ID: {CompanyId}). Reason: {Reason}",
+                companyName, application.CompanyId, ex.Message);
+            throw new AppException(
+                "We're unable to process your application at this time. Please contact support.",
+                503);
         }
 
         // Allow resubmitting this step - clear subsequent step data if going back
@@ -486,6 +518,26 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         if (application.CurrentStep != BorrowerOnboardingStep.Step1_EmailSent)
         {
             throw new AppException("Email OTP can only be resent for applications in Step 1 (Email Sent) status", 400);
+        }
+
+        // Get company for logging
+        var company = await _companyRepository.GetCompanyById(application.CompanyId);
+        var companyName = company?.Name ?? "Unknown Company";
+
+        // EARLY VALIDATION: Check company wallet balance before resending OTP
+        try
+        {
+            var settings = await _settingsService.GetSettingsAsync();
+            await _walletService.ValidateCompanyBalanceForFeeAsync(application.CompanyId, settings.OtpFee, "Email OTP Resend");
+        }
+        catch (AppException ex) when (ex.StatusCode == 400 || ex.StatusCode == 404)
+        {
+            _logger.LogWarning(
+                "AUDIT: Borrower OTP resend blocked for Company {CompanyName} (ID: {CompanyId}). Reason: {Reason}",
+                companyName, application.CompanyId, ex.Message);
+            throw new AppException(
+                "We're unable to process your request at this time. Please contact support.",
+                503);
         }
 
         // Deduct OTP fee from company wallet before resending OTP
