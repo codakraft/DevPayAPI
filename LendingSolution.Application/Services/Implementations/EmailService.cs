@@ -80,44 +80,214 @@ public class EmailService : IEmailService
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
     <style>
-        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-        .header {{ background-color: #007bff; color: white; padding: 20px; text-align: center; }}
-        .content {{ padding: 30px; background-color: #f9f9f9; }}
-        .otp-code {{ 
-            font-size: 32px; 
-            font-weight: bold; 
-            color: #007bff; 
-            text-align: center; 
-            letter-spacing: 5px; 
-            padding: 20px; 
-            background-color: white; 
-            border: 2px dashed #007bff; 
-            margin: 20px 0; 
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6; 
+            color: #1a1a1a; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 40px 20px;
         }}
-        .footer {{ padding: 20px; text-align: center; color: #666; font-size: 12px; }}
+        .email-wrapper {{ 
+            max-width: 600px; 
+            margin: 0 auto; 
+            background: white;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }}
+        .header {{ 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 40px 30px;
+            text-align: center;
+            position: relative;
+        }}
+        .header::after {{
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #f093fb 0%, #f5576c 100%);
+        }}
+        .logo {{ 
+            color: white; 
+            font-size: 32px; 
+            font-weight: 700;
+            letter-spacing: 1px;
+            margin: 0;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }}
+        .content {{ 
+            padding: 50px 40px;
+            background: white;
+        }}
+        .greeting {{ 
+            font-size: 24px; 
+            font-weight: 600; 
+            color: #2d3748;
+            margin-bottom: 20px;
+        }}
+        .message {{ 
+            font-size: 16px; 
+            color: #4a5568;
+            margin-bottom: 30px;
+        }}
+        .otp-container {{
+            background: linear-gradient(135deg, #f6f8fb 0%, #e9ecef 100%);
+            border-radius: 12px;
+            padding: 30px;
+            margin: 30px 0;
+            text-align: center;
+            border: 2px solid #e2e8f0;
+        }}
+        .otp-label {{
+            font-size: 14px;
+            color: #718096;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 15px;
+        }}
+        .otp-code {{ 
+            font-size: 48px; 
+            font-weight: 800; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: 12px; 
+            padding: 15px 0;
+            font-family: 'Courier New', monospace;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        .timer-badge {{
+            display: inline-block;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-top: 15px;
+        }}
+        .security-notice {{
+            background: #fff5f5;
+            border-left: 4px solid #fc8181;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 30px 0;
+        }}
+        .security-notice h3 {{
+            color: #c53030;
+            font-size: 16px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+        }}
+        .security-notice h3::before {{
+            content: '🔒';
+            margin-right: 8px;
+            font-size: 20px;
+        }}
+        .security-notice ul {{
+            margin: 0;
+            padding-left: 20px;
+            color: #742a2a;
+        }}
+        .security-notice li {{
+            margin: 8px 0;
+            font-size: 14px;
+        }}
+        .help-section {{
+            background: #f7fafc;
+            padding: 25px;
+            border-radius: 8px;
+            margin-top: 30px;
+            text-align: center;
+        }}
+        .help-section p {{
+            color: #4a5568;
+            font-size: 14px;
+            margin: 5px 0;
+        }}
+        .help-section strong {{
+            color: #2d3748;
+        }}
+        .footer {{ 
+            background: #2d3748;
+            padding: 30px;
+            text-align: center;
+            color: #a0aec0;
+        }}
+        .footer p {{
+            margin: 8px 0;
+            font-size: 13px;
+        }}
+        .footer-links {{
+            margin: 15px 0;
+        }}
+        .footer-links a {{
+            color: #a0aec0;
+            text-decoration: none;
+            margin: 0 10px;
+            font-size: 12px;
+        }}
+        .footer-links a:hover {{
+            color: #cbd5e0;
+        }}
+        @media only screen and (max-width: 600px) {{
+            .content {{ padding: 30px 20px; }}
+            .otp-code {{ font-size: 36px; letter-spacing: 8px; }}
+            .greeting {{ font-size: 20px; }}
+        }}
     </style>
 </head>
 <body>
-    <div class='container'>
+    <div class='email-wrapper'>
         <div class='header'>
-            <h1>{companyName}</h1>
+            <h1 class='logo'>🚀 {companyName}</h1>
         </div>
         <div class='content'>
-            <h2>{purpose}</h2>
-            <p>Your verification code is:</p>
-            <div class='otp-code'>{otp}</div>
-            <p><strong>Important:</strong></p>
-            <ul>
-                <li>This code expires in 10 minutes</li>
-                <li>Do not share this code with anyone</li>
-                <li>If you didn't request this code, please ignore this email</li>
-            </ul>
+            <div class='greeting'>Hey there! 👋</div>
+            <p class='message'>
+                We received a request to verify your {purpose.ToLower()}. 
+                Use the code below to complete your verification and get started!
+            </p>
+            
+            <div class='otp-container'>
+                <div class='otp-label'>Your Verification Code</div>
+                <div class='otp-code'>{otp}</div>
+                <div class='timer-badge'>⏱️ Expires in 10 minutes</div>
+            </div>
+
+            <div class='security-notice'>
+                <h3>Security First!</h3>
+                <ul>
+                    <li><strong>Never share</strong> this code with anyone, including our support team</li>
+                    <li>This code works only <strong>once</strong> and expires in 10 minutes</li>
+                    <li>Didn't request this? <strong>Ignore this email</strong> - your account is safe</li>
+                </ul>
+            </div>
+
+            <div class='help-section'>
+                <p><strong>Having trouble?</strong></p>
+                <p>If you didn't request this code or need assistance, please contact our support team.</p>
+            </div>
         </div>
         <div class='footer'>
-            <p>This is an automated message, please do not reply.</p>
+            <p><strong>{companyName}</strong> - Powering Your Financial Future</p>
+            <div class='footer-links'>
+                <a href='#'>Privacy Policy</a> | 
+                <a href='#'>Terms of Service</a> | 
+                <a href='#'>Contact Support</a>
+            </div>
             <p>&copy; {DateTime.UtcNow.Year} {companyName}. All rights reserved.</p>
+            <p style='margin-top: 15px; font-size: 11px;'>This is an automated message. Please do not reply to this email.</p>
         </div>
     </div>
 </body>
