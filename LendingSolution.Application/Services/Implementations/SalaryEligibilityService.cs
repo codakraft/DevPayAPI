@@ -109,20 +109,14 @@ public class SalaryEligibilityService : ISalaryEligibilityService
         var existingSalaryHistory = await _salaryHistoryRepository.GetByBorrowerApplicationIdAsync(borrowerApplicationId);
         if (existingSalaryHistory != null)
         {
-            _logger.LogInformation("Updating existing salary history for borrower application: {ApplicationId}", borrowerApplicationId);
+            _logger.LogInformation("Deleting and recreating salary history for borrower application: {ApplicationId}", borrowerApplicationId);
             
-            // Clear existing related data
-            existingSalaryHistory.SalaryPayments.Clear();
-            existingSalaryHistory.LoanHistories.Clear();
-            
-            // Update main record
-            UpdateSalaryHistoryFromResponse(existingSalaryHistory, salaryData);
-            
-            await _salaryHistoryRepository.UpdateAsync(existingSalaryHistory);
-            return existingSalaryHistory;
+            // Delete the existing record to avoid concurrency issues
+            await _salaryHistoryRepository.DeleteAsync(existingSalaryHistory.Id);
         }
 
         // Create new salary history record
+        _logger.LogInformation("Creating new salary history for borrower application: {ApplicationId}", borrowerApplicationId);
         var salaryHistory = CreateSalaryHistoryFromResponse(borrowerApplicationId, salaryData);
         return await _salaryHistoryRepository.CreateAsync(salaryHistory);
     }

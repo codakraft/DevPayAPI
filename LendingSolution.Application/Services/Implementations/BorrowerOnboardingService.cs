@@ -184,7 +184,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         await _borrowerRepository.UpdateAsync(application);
 
         // Generate BVN OTP
-        await GenerateBvnOtpAsync(new GenerateBvnOtpRequestDto { BVN = request.BVN });
+        await GenerateBvnOtpAsync(new GenerateBvnOtpRequestDto { Email = application.Email });
 
         return new BorrowerStep2ResponseDto();
     }
@@ -262,6 +262,14 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         decimal maxLoanEligible;
         var minTenor = product.MinTenor;
         var maxTenor = product.MaxTenor;
+        
+        // Ensure minTenor and maxTenor are valid (not 0)
+        if (minTenor <= 0 || maxTenor <= 0)
+        {
+            _logger.LogWarning("Product {ProductId} has invalid tenor values (Min: {MinTenor}, Max: {MaxTenor}). Please update the product configuration.",
+                product.Id, minTenor, maxTenor);
+            throw new AppException("Loan product configuration error: Invalid tenor range. Please contact support.", 500);
+        }
 
         // Require salary history check - borrower cannot proceed without it
         if (string.IsNullOrEmpty(application.BVN) || string.IsNullOrEmpty(application.AccountNo) || string.IsNullOrEmpty(application.BankCode))
@@ -356,9 +364,34 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             throw new AppException($"Loan amount must be between {application.MinLoanEligible:C} and {application.MaxLoanEligible:C}", 400);
         }
 
+        if (request.Tenor <= 0)
+        {
+            throw new AppException("Tenor must be at least 1 month", 400);
+        }
+
         if (request.Tenor < application.MinTenor || request.Tenor > application.MaxTenor)
         {
             throw new AppException($"Tenor must be between {application.MinTenor} and {application.MaxTenor} months", 400);
+        }
+
+        // Get company for logging
+        var company = await _companyRepository.GetCompanyById(application.CompanyId);
+        var companyName = company?.Name ?? "Unknown Company";
+
+        // EARLY VALIDATION: Check company wallet balance before proceeding with email notification
+        try
+        {
+            var settings = await _settingsService.GetSettingsAsync();
+            await _walletService.ValidateCompanyBalanceForFeeAsync(application.CompanyId, settings.EmailFee, "Loan Application Summary Email");
+        }
+        catch (AppException ex) when (ex.StatusCode == 400 || ex.StatusCode == 404)
+        {
+            _logger.LogWarning(
+                "AUDIT: Loan submission blocked for Company {CompanyName} (ID: {CompanyId}). Reason: {Reason}",
+                companyName, application.CompanyId, ex.Message);
+            throw new AppException(
+                "We're unable to process your application at this time. Please contact support.",
+                503);
         }
 
         // Calculate repayment (mock calculation)
@@ -397,7 +430,39 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
         await _borrowerRepository.UpdateAsync(application);
 
-        // Send email notification (mock)
+        // Send loan application summary email to borrower
+        var borrowerFullName = $"{application.FirstName} {application.LastName}";
+        var emailSent = await _emailService.SendLoanApplicationSummaryEmailAsync(
+            application.Email,
+            borrowerFullName,
+            request.LoanAmount,
+            request.Tenor,
+            monthlyRepayment,
+            totalRepayment,
+            product.Name,
+            application.Company?.Name ?? "DevPay"
+        );
+
+        if (!emailSent)
+        {
+            _logger.LogWarning("Failed to send loan application summary email to {Email} for application {ApplicationId}", 
+                application.Email, application.Id);
+            // Don't throw - email failure shouldn't block loan submission
+        }
+        else
+        {
+            // Deduct email fee from company wallet only after successful email send
+            try
+            {
+                await DeductEmailFeeAsync(application.CompanyId, "Loan Application Summary");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to deduct email fee for application {ApplicationId}, Company {CompanyId}",
+                    application.Id, application.CompanyId);
+                // Don't throw - fee deduction failure shouldn't block loan submission at this point
+            }
+        }
 
         return new BorrowerStep4ResponseDto
         {
@@ -410,14 +475,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     public async Task<GenerateEmailOtpResponseDto> GenerateEmailOtpAsync(GenerateEmailOtpRequestDto request)
     {
         // Find application by email to get company information
-        var application = await _borrowerRepository.GetByEmailAsync(request.EmailAddress);
-        if (application == null)
-        {
-            throw new AppException("No application found for this email", 404);
-        }
-
-        // Deduct OTP fee from company wallet before generating OTP
-        await DeductOtpFeeAsync(application.CompanyId, "Email OTP");
+        var application = await _borrowerRepository.GetByEmailAsync(request.EmailAddress) ?? throw new AppException("No application found for this email", 404);
 
         // Generate OTP
         var otp = GenerateOtp();
@@ -438,6 +496,9 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         {
             throw new AppException("Failed to send verification email. Please try again.", 500);
         }
+
+        // Deduct OTP fee from company wallet only after successful email send
+        await DeductOtpFeeAsync(application.CompanyId, "Email OTP");
 
         return new GenerateEmailOtpResponseDto();
     }
@@ -460,15 +521,23 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
     public async Task<GenerateBvnOtpResponseDto> GenerateBvnOtpAsync(GenerateBvnOtpRequestDto request)
     {
-        // Find application by BVN to get company information
-        var application = await _borrowerRepository.GetByBvnAsync(request.BVN);
+        _logger.LogInformation("Attempting to generate BVN OTP for borrower with email: {Email}", request.Email);
+        
+        // Find application by email
+        var application = await _borrowerRepository.GetByEmailAsync(request.Email);
         if (application == null)
         {
-            throw new AppException("No application found for this BVN", 404);
+            _logger.LogWarning("No application found for email: {Email}", request.Email);
+            throw new AppException("No application found with this email address.", 404);
         }
-
-        // Deduct OTP fee from company wallet before generating OTP
-        await DeductOtpFeeAsync(application.CompanyId, "BVN OTP");
+        
+        // Ensure BVN was saved in Step 2
+        if (string.IsNullOrEmpty(application.BVN))
+        {
+            _logger.LogWarning("Application {ApplicationId} for email {Email} has no BVN saved. Step 2 not completed.", 
+                application.Id, request.Email);
+            throw new AppException("Please complete Step 2 (Submit Bank & BVN Info) first before generating BVN OTP.", 400);
+        }
 
         // Generate BVN OTP
         var otp = GenerateOtp();
@@ -478,25 +547,20 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         application.BvnOtpGeneratedAt = DateTime.UtcNow;
         await _borrowerRepository.UpdateAsync(application);
 
-        // Note: In a real implementation, BVN OTP would be sent via the bank's SMS service
-        // or retrieved from a BVN verification service like Mono, Paystack, or Flutterwave
-        // For now, we simulate the OTP generation and logging
+        // Send BVN OTP via email (temporary - should be SMS via BVN verification service in production)
+        var emailSent = await _emailService.SendOtpEmailAsync(
+            application.Email,
+            otp,
+            "BVN Verification"
+        );
 
-        // In production, this would be:
-        // 1. Call BVN verification service to get phone number
-        // 2. Send OTP via that phone number
-        // 3. The OTP validation would also go through the BVN service
-
-        // Simulate SMS sending (replace with actual BVN service integration)
-        var phoneNumber = "0901234567"; // This would come from BVN service
-        var smsSent = await _smsService.SendOtpSmsAsync(phoneNumber, otp, "BVN Verification");
-
-        if (!smsSent)
+        if (!emailSent)
         {
-            // In development, this might be expected if SMS is not configured
-            // In production, this should be a critical error
-            throw new AppException("Failed to send BVN verification SMS. Please try again.", 500);
+            throw new AppException("Failed to send BVN verification code. Please try again.", 500);
         }
+
+        // Deduct OTP fee from company wallet only after successful email send
+        await DeductOtpFeeAsync(application.CompanyId, "BVN OTP");
 
         return new GenerateBvnOtpResponseDto();
     }
@@ -540,9 +604,6 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
                 503);
         }
 
-        // Deduct OTP fee from company wallet before resending OTP
-        await DeductOtpFeeAsync(application.CompanyId, "Email OTP Resend");
-
         // Generate new OTP
         var otp = GenerateOtp();
 
@@ -564,6 +625,9 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         {
             throw new AppException("Failed to resend verification email. Please try again.", 500);
         }
+
+        // Deduct OTP fee from company wallet only after successful email send
+        await DeductOtpFeeAsync(application.CompanyId, "Email OTP Resend");
 
         return new ResendStep1EmailOtpResponseDto();
     }
@@ -640,11 +704,77 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         }
     }
 
-    private string GenerateOtp()
+    /// <summary>
+    /// Deducts Email fee from company wallet and transfers to SuperAdmin wallet
+    /// </summary>
+    /// <param name="companyId">Company ID from the borrower application</param>
+    /// <param name="emailType">Type of email being sent (for transaction description)</param>
+    /// <returns>True if fee deduction was successful</returns>
+    private async Task<bool> DeductEmailFeeAsync(Guid companyId, string emailType = "Email")
     {
-        // var random = new Random();
-        // return random.Next(100000, 999999).ToString();
-        return "564312";
+        try
+        {
+            // Get settings to determine Email fee
+            var settings = await _settingsService.GetSettingsAsync();
+            var emailFee = settings.EmailFee;
+
+            // Skip if Email fee is 0 or negative
+            if (emailFee <= 0)
+            {
+                return true; // No fee to deduct
+            }
+
+            // Get or create company wallet
+            var companyWallet = await _walletService.GetWalletByCompanyIdAsync(companyId);
+            // Automatically create a wallet for the company
+            companyWallet ??= await _walletService.CreateCompanyWalletAsync(companyId);
+
+            // Check if company has sufficient balance
+            var hasSufficientBalance = await _walletService.HasSufficientBalanceAsync(companyWallet.Id, emailFee);
+            if (!hasSufficientBalance)
+            {
+                throw new AppException($"Insufficient wallet balance to send {emailType}. Please fund your wallet.", 400);
+            }
+
+            // Get or create SuperAdmin wallet
+            var superAdminWallet = await _walletService.GetSuperAdminWalletAsync();
+            // Create SuperAdmin wallet if it doesn't exist
+            superAdminWallet ??= await _walletService.CreateSuperAdminWalletAsync();
+
+            // Transfer funds from company wallet to SuperAdmin wallet
+            var transferDescription = $"{emailType} fee - Company: {companyWallet.CompanyName ?? "Unknown"}";
+            var transferSuccess = await _walletService.TransferFundsAsync(
+                companyWallet.Id,
+                superAdminWallet.Id,
+                emailFee,
+                transferDescription,
+                null // System-initiated transfer - null for system transactions
+            );
+
+            if (!transferSuccess)
+            {
+                throw new AppException("Failed to process Email fee. Please try again.", 500);
+            }
+
+            return true;
+        }
+        catch (AppException)
+        {
+            // Re-throw application exceptions (like insufficient balance)
+            throw;
+        }
+        catch (Exception)
+        {
+            // Log the exception and throw a generic error
+            throw new AppException("An error occurred while processing Email fee. Please try again.", 500);
+        }
+    }
+
+    private static string GenerateOtp()
+    {
+        var random = new Random();
+        return random.Next(100000, 999999).ToString();
+        // return "564312";
     }
 
     private static bool ValidateOtp(string identifier, string providedOtp, string? storedOtp, DateTime? generatedAt)
@@ -654,11 +784,11 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             return false;
         }
 
-        // // OTP expires after 10 minutes
-        // if (DateTime.UtcNow.Subtract(generatedAt.Value).TotalMinutes > 10)
-        // {
-        //     return false;
-        // }
+        // OTP expires after 10 minutes
+        if (DateTime.UtcNow.Subtract(generatedAt.Value).TotalMinutes > 3)
+        {
+            return false;
+        }
 
         return providedOtp == storedOtp;
     }

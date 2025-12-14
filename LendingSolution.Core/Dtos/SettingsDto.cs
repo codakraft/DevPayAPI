@@ -12,9 +12,12 @@ public class SettingsDto
     public decimal PenaltyFee { get; set; }
     public decimal LateFee { get; set; }
     public decimal OtpFee { get; set; }
+    public decimal EmailFee { get; set; }
     public decimal DocumentationFee { get; set; }
     public FeeType OtpFeeType { get; set; }
     public string OtpFeeTypeName => OtpFeeType.ToString();
+    public FeeType EmailFeeType { get; set; }
+    public string EmailFeeTypeName => EmailFeeType.ToString();
     public FeeType LegalFeeType { get; set; }
     public string LegalFeeTypeName => LegalFeeType.ToString();
     public FeeType ManagementFeeType { get; set; }
@@ -47,10 +50,14 @@ public class UpdateSettingsDto
     [Range(0, double.MaxValue, ErrorMessage = "OTP fee must be a positive value")]
     public decimal? OtpFee { get; set; }
     
+    [Range(0, double.MaxValue, ErrorMessage = "Email fee must be a positive value")]
+    public decimal? EmailFee { get; set; }
+    
     [Range(0, double.MaxValue, ErrorMessage = "Documentation fee must be a positive value")]
     public decimal? DocumentationFee { get; set; }
     
     public FeeType? OtpFeeType { get; set; }
+    public FeeType? EmailFeeType { get; set; }
     public FeeType? LegalFeeType { get; set; }
     public FeeType? ManagementFeeType { get; set; }
     public FeeType? ProcessingFeeType { get; set; }

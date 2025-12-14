@@ -179,7 +179,8 @@ public class ValidateEmailOtpResponseDto
 public class GenerateBvnOtpRequestDto
 {
     [Required]
-    public required string BVN { get; set; }
+    [EmailAddress]
+    public required string Email { get; set; }
 }
 
 public class GenerateBvnOtpResponseDto

@@ -1,4 +1,5 @@
 using LendingSolution.Core.Enum;
+using System.ComponentModel.DataAnnotations;
 
 namespace LendingSolution.Core.Dtos;
 
@@ -74,10 +75,17 @@ public class UpdateLoanProductRequestDto
     public required string Description { get; set; }
     
     // Amount and Tenor ranges
+    [Range(0, double.MaxValue, ErrorMessage = "Minimum amount must be a positive value")]
     public decimal MinAmount { get; set; } = 0;
+    
+    [Range(0, double.MaxValue, ErrorMessage = "Maximum amount must be a positive value")]
     public decimal MaxAmount { get; set; } = 0;
-    public int MinTenor { get; set; } = 0;
-    public int MaxTenor { get; set; } = 0;
+    
+    [Range(1, int.MaxValue, ErrorMessage = "Minimum tenor must be at least 1 month")]
+    public int MinTenor { get; set; } = 1;
+    
+    [Range(1, int.MaxValue, ErrorMessage = "Maximum tenor must be at least 1 month")]
+    public int MaxTenor { get; set; } = 12;
     
     // Interest and fees
     public decimal InterestRate { get; set; } = 0;

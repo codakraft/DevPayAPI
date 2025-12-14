@@ -41,4 +41,17 @@ public interface IEmailService
     /// <param name="amount">Disbursed amount</param>
     /// <param name="disbursementReference">Disbursement reference number</param>
     Task<bool> SendDisbursementNotificationAsync(string emailAddress, string borrowerName, decimal amount, string disbursementReference);
+    
+    /// <summary>
+    /// Send loan application summary email after submission
+    /// </summary>
+    /// <param name="emailAddress">Recipient email address</param>
+    /// <param name="borrowerName">Borrower's full name</param>
+    /// <param name="loanAmount">Requested loan amount</param>
+    /// <param name="tenor">Loan tenor in months</param>
+    /// <param name="monthlyRepayment">Monthly repayment amount</param>
+    /// <param name="totalRepayment">Total repayment amount</param>
+    /// <param name="productName">Loan product name</param>
+    /// <param name="companyName">Company name</param>
+    Task<bool> SendLoanApplicationSummaryEmailAsync(string emailAddress, string borrowerName, decimal loanAmount, int tenor, decimal monthlyRepayment, decimal totalRepayment, string productName, string companyName);
 }

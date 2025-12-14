@@ -154,8 +154,8 @@ public class EmailService : IEmailService
             margin-bottom: 15px;
         }}
         .otp-code {{ 
-            font-size: 48px; 
-            font-weight: 800; 
+            font-size: 80px; 
+            font-weight: 900; 
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -255,21 +255,20 @@ public class EmailService : IEmailService
         <div class='content'>
             <div class='greeting'>Hey there! 👋</div>
             <p class='message'>
-                We received a request to verify your {purpose.ToLower()}. 
-                Use the code below to complete your verification and get started!
+                Use the code below to complete your continue!
             </p>
             
             <div class='otp-container'>
                 <div class='otp-label'>Your Verification Code</div>
                 <div class='otp-code'>{otp}</div>
-                <div class='timer-badge'>⏱️ Expires in 10 minutes</div>
+                <div class='timer-badge'>⏱️ Expires in 3 minutes</div>
             </div>
 
             <div class='security-notice'>
                 <h3>Security First!</h3>
                 <ul>
                     <li><strong>Never share</strong> this code with anyone, including our support team</li>
-                    <li>This code works only <strong>once</strong> and expires in 10 minutes</li>
+                    <li>This code works only <strong>once</strong> and expires in 3 minutes</li>
                     <li>Didn't request this? <strong>Ignore this email</strong> - your account is safe</li>
                 </ul>
             </div>
@@ -306,6 +305,14 @@ public class EmailService : IEmailService
     {
         var subject = "Loan Disbursement Notification";
         var body = GenerateDisbursementEmailTemplate(borrowerName, amount, disbursementReference);
+        
+        return await SendEmailAsync(emailAddress, subject, body);
+    }
+    
+    public async Task<bool> SendLoanApplicationSummaryEmailAsync(string emailAddress, string borrowerName, decimal loanAmount, int tenor, decimal monthlyRepayment, decimal totalRepayment, string productName, string companyName)
+    {
+        var subject = "Loan Application Submitted Successfully! 🎉";
+        var body = GenerateLoanApplicationSummaryTemplate(borrowerName, loanAmount, tenor, monthlyRepayment, totalRepayment, productName, companyName);
         
         return await SendEmailAsync(emailAddress, subject, body);
     }
@@ -488,5 +495,282 @@ public class EmailService : IEmailService
     </div>
 </body>
 </html>";
-    }
-}
+    }    
+    private string GenerateLoanApplicationSummaryTemplate(string borrowerName, decimal loanAmount, int tenor, decimal monthlyRepayment, decimal totalRepayment, string productName, string companyName)
+    {
+        return $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6; 
+            color: #1a1a1a; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 40px 20px;
+        }}
+        .email-wrapper {{ 
+            max-width: 650px; 
+            margin: 0 auto; 
+            background: white;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }}
+        .header {{ 
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            padding: 50px 40px;
+            text-align: center;
+            position: relative;
+        }}
+        .header::after {{
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #34d399 0%, #10b981 100%);
+        }}
+        .success-icon {{
+            font-size: 64px;
+            margin-bottom: 15px;
+        }}
+        .header h1 {{ 
+            color: white; 
+            font-size: 32px; 
+            font-weight: 700;
+            margin-bottom: 10px;
+        }}
+        .header p {{
+            color: rgba(255,255,255,0.9);
+            font-size: 18px;
+        }}
+        .content {{ 
+            padding: 50px 40px;
+            background: white;
+        }}
+        .greeting {{ 
+            font-size: 24px; 
+            font-weight: 600; 
+            color: #2d3748;
+            margin-bottom: 20px;
+        }}
+        .intro-text {{ 
+            font-size: 16px; 
+            color: #4a5568;
+            margin-bottom: 35px;
+            line-height: 1.8;
+        }}
+        .summary-card {{
+            background: linear-gradient(135deg, #f6f8fb 0%, #e9ecef 100%);
+            border-radius: 12px;
+            padding: 35px;
+            margin: 30px 0;
+            border: 2px solid #e2e8f0;
+        }}
+        .summary-title {{
+            font-size: 18px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 25px;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }}
+        .detail-row {{
+            display: flex;
+            justify-content: space-between;
+            padding: 15px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }}
+        .detail-row:last-child {{
+            border-bottom: none;
+        }}
+        .detail-label {{
+            font-size: 15px;
+            color: #718096;
+            font-weight: 500;
+        }}
+        .detail-value {{
+            font-size: 15px;
+            color: #2d3748;
+            font-weight: 700;
+        }}
+        .highlight-amount {{
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 25px 0;
+            text-align: center;
+        }}
+        .highlight-amount .label {{
+            font-size: 14px;
+            opacity: 0.9;
+            margin-bottom: 8px;
+        }}
+        .highlight-amount .amount {{
+            font-size: 36px;
+            font-weight: 800;
+            letter-spacing: 1px;
+        }}
+        .info-box {{
+            background: #eff6ff;
+            border-left: 4px solid #3b82f6;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 30px 0;
+        }}
+        .info-box h3 {{
+            color: #1e40af;
+            font-size: 16px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+        }}
+        .info-box h3::before {{
+            content: 'ℹ️';
+            margin-right: 8px;
+            font-size: 20px;
+        }}
+        .info-box ul {{
+            margin: 0;
+            padding-left: 20px;
+            color: #1e3a8a;
+        }}
+        .info-box li {{
+            margin: 8px 0;
+            font-size: 14px;
+        }}
+        .next-steps {{
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 30px 0;
+        }}
+        .next-steps h3 {{
+            color: #92400e;
+            font-size: 16px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+        }}
+        .next-steps h3::before {{
+            content: '📋';
+            margin-right: 8px;
+            font-size: 20px;
+        }}
+        .next-steps ol {{
+            margin: 0;
+            padding-left: 20px;
+            color: #78350f;
+        }}
+        .next-steps li {{
+            margin: 10px 0;
+            font-size: 14px;
+            line-height: 1.6;
+        }}
+        .footer {{ 
+            background: #2d3748;
+            padding: 30px;
+            text-align: center;
+            color: #a0aec0;
+        }}
+        .footer p {{
+            margin: 8px 0;
+            font-size: 13px;
+        }}
+        .footer strong {{
+            color: #cbd5e0;
+        }}
+        @media only screen and (max-width: 600px) {{
+            .content {{ padding: 30px 20px; }}
+            .summary-card {{ padding: 25px 20px; }}
+            .greeting {{ font-size: 20px; }}
+            .highlight-amount .amount {{ font-size: 28px; }}
+        }}
+    </style>
+</head>
+<body>
+    <div class='email-wrapper'>
+        <div class='header'>
+            <div class='success-icon'>🎉</div>
+            <h1>Application Submitted!</h1>
+            <p>Your loan request is being reviewed</p>
+        </div>
+        <div class='content'>
+            <div class='greeting'>Hello {borrowerName}! 👋</div>
+            <p class='intro-text'>
+                Thank you for submitting your loan application with <strong>{companyName}</strong>. 
+                We're excited to help you achieve your financial goals! Your application has been received 
+                and is now under review by our team.
+            </p>
+            
+            <div class='summary-card'>
+                <div class='summary-title'>📄 Application Summary</div>
+                
+                <div class='detail-row'>
+                    <span class='detail-label'>Loan Product</span>
+                    <span class='detail-value'>{productName}</span>
+                </div>
+                
+                <div class='detail-row'>
+                    <span class='detail-label'>Loan Amount</span>
+                    <span class='detail-value'>₦{loanAmount:N2}</span>
+                </div>
+                
+                <div class='detail-row'>
+                    <span class='detail-label'>Loan Duration</span>
+                    <span class='detail-value'>{tenor} months</span>
+                </div>
+                
+                <div class='detail-row'>
+                    <span class='detail-label'>Total Repayment</span>
+                    <span class='detail-value'>₦{totalRepayment:N2}</span>
+                </div>
+            </div>
+
+            <div class='highlight-amount'>
+                <div class='label'>Your Monthly Payment</div>
+                <div class='amount'>₦{monthlyRepayment:N2}</div>
+            </div>
+
+            <div class='next-steps'>
+                <h3>What Happens Next?</h3>
+                <ol>
+                    <li><strong>Application Review:</strong> Our team will review your application and supporting documents within 24-48 hours</li>
+                    <li><strong>Decision Notification:</strong> You'll receive an email notification once a decision has been made</li>
+                    <li><strong>Approval & Disbursement:</strong> If approved, funds will be disbursed to your registered bank account</li>
+                    <li><strong>Repayment Schedule:</strong> Your repayment will be automatically deducted from your salary account monthly</li>
+                </ol>
+            </div>
+
+            <div class='info-box'>
+                <h3>Important Information</h3>
+                <ul>
+                    <li>Reference Number: Your application ID can be used to track your status</li>
+                    <li>Keep your contact details updated to receive timely notifications</li>
+                    <li>Ensure your salary account has sufficient funds for repayments</li>
+                    <li>Contact support if you have any questions about your application</li>
+                </ul>
+            </div>
+
+            <p style='margin-top: 30px; font-size: 15px; color: #4a5568;'>
+                We appreciate your trust in <strong>{companyName}</strong> and look forward to serving you!
+            </p>
+        </div>
+        <div class='footer'>
+            <p><strong>{companyName}</strong> - Powering Your Financial Future</p>
+            <p style='margin-top: 15px;'>This is an automated message. Please do not reply to this email.</p>
+            <p>&copy; {DateTime.UtcNow.Year} {companyName}. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>";
+    }}
