@@ -33,6 +33,23 @@ public class CompanyController(
     {
         try
         {
+            // Validate tenor ranges
+            if (body.MinTenor <= 0)
+            {
+                return BadRequest(ApiResponse.Fail("Minimum tenor must be greater than 0 months"));
+            }
+
+            if (body.MaxTenor <= body.MinTenor)
+            {
+                return BadRequest(ApiResponse.Fail("Maximum tenor must be greater than minimum tenor"));
+            }
+
+            // Validate interest rate
+            if (body.InterestRate <= 0)
+            {
+                return BadRequest(ApiResponse.Fail("Interest rate must be greater than 0%"));
+            }
+
             // Get company ID from JWT
             var companyIdClaim = User.FindFirstValue("CompanyId");
             if (string.IsNullOrEmpty(companyIdClaim) || !Guid.TryParse(companyIdClaim, out var companyId))
@@ -182,6 +199,23 @@ public class CompanyController(
     {
         try
         {
+            // Validate tenor ranges
+            if (body.MinTenor <= 0)
+            {
+                return BadRequest(ApiResponse.Fail("Minimum tenor must be greater than 0 months"));
+            }
+
+            if (body.MaxTenor <= body.MinTenor)
+            {
+                return BadRequest(ApiResponse.Fail("Maximum tenor must be greater than minimum tenor"));
+            }
+
+            // Validate interest rate
+            if (body.InterestRate <= 0)
+            {
+                return BadRequest(ApiResponse.Fail("Interest rate must be greater than 0%"));
+            }
+
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrEmpty(userId))
             {
