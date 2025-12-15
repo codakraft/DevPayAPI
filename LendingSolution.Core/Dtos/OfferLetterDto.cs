@@ -46,9 +46,8 @@ public class OfferLetterDto
 /// </summary>
 public class SignedOfferLetterUploadDto
 {
-    [Required(ErrorMessage = "Signed offer letter URL is required")]
-    [Url(ErrorMessage = "Signed offer letter URL must be a valid URL")]
-    public string SignedOfferLetterUrl { get; set; } = string.Empty;
+    [Required(ErrorMessage = "Signed offer letter document ID is required")]
+    public string SignedOfferLetterDocumentId { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -72,7 +71,7 @@ public class SignedOfferLetterResponseDto
     public Guid LoanId { get; set; }
     public string Status { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
-    public string? SignedOfferLetterUrl { get; set; }
+    public string? SignedOfferLetterDocumentId { get; set; }
     public DateTime? UploadedAt { get; set; }
     public bool ReadyForDisbursement { get; set; }
 }

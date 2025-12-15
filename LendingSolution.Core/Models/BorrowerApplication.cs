@@ -27,8 +27,8 @@ public class BorrowerApplication : Base
     // Address and documents (Step 3)
     public string? Address { get; set; }
     public string? IdNumber { get; set; }
-    public string? FrontDocumentUrl { get; set; }
-    public string? BackDocumentUrl { get; set; }
+    public string? FrontDocumentId { get; set; }
+    public string? BackDocumentId { get; set; }
     
     // Loan information
     public Guid CompanyId { get; set; }

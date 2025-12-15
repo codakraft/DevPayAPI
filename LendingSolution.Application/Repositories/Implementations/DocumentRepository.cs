@@ -1,4 +1,5 @@
 using LendingSolution.Application.Repositories.Interfaces;
+using LendingSolution.Core.Enum;
 using LendingSolution.Core.Models;
 using LendingSolution.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -39,6 +40,14 @@ public class DocumentRepository : IDocumentRepository
         return await _context.Documents
             .Where(d => d.DocumentType == documentType)
             .OrderByDescending(d => d.CreatedAt)
+            .ToListAsync();
+    }
+
+    public async Task<List<Document>> GetDocumentsByStatusAsync(DocumentStatus status)
+    {
+        return await _context.Documents
+            .Where(d => d.Status == status)
+            .OrderBy(d => d.CreatedAt)
             .ToListAsync();
     }
 

@@ -255,6 +255,9 @@ public static class ServiceExtensions
         services.AddScoped<ISalaryEligibilityService, SalaryEligibilityService>();
         services.AddScoped<ISalaryHistoryViewService, SalaryHistoryViewService>();
         services.AddScoped<IProvidusDisbursementService, ProvidusDisbursementService>();
+        
+        // Background services
+        services.AddHostedService<DocumentUploadBackgroundService>();
     }
 
     public static void RegisterRepositories(this IServiceCollection services)

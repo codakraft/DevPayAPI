@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using LendingSolution.Core.Enum;
 
 namespace LendingSolution.Core.Dtos;
 
@@ -7,9 +8,26 @@ public class DocumentDto
     public string Id { get; set; } = string.Empty;
     public string DocumentName { get; set; } = string.Empty;
     public string? DocumentType { get; set; }
-    public string DocumentUrl { get; set; } = string.Empty;
+    public string? DocumentUrl { get; set; }
+    public DocumentStatus Status { get; set; }
+    public string? ErrorMessage { get; set; }
+    public string? FileExtension { get; set; }
     public DateTime CreatedAt { get; set; }
-    public DateTime UploadedAt { get; set; }
+    public DateTime? UploadedAt { get; set; }
+}
+
+public class MultipartUploadResponseDto
+{
+    public List<DocumentUploadPendingDto> Documents { get; set; } = new();
+    public string Message { get; set; } = string.Empty;
+}
+
+public class DocumentUploadPendingDto
+{
+    public string Id { get; set; } = string.Empty;
+    public string DocumentName { get; set; } = string.Empty;
+    public DocumentStatus Status { get; set; }
+    public DateTime CreatedAt { get; set; }
 }
 
 public class UploadDocumentDto

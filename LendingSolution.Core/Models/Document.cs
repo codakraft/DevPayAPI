@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using LendingSolution.Core.Enum;
 
 namespace LendingSolution.Core.Models;
 
@@ -14,11 +15,27 @@ public class Document
     [MaxLength(100)]
     public string? DocumentType { get; set; }
 
-    [Required]
     [MaxLength(500)]
-    public string DocumentUrl { get; set; } = string.Empty;
+    public string? DocumentUrl { get; set; }
+
+    [MaxLength(255)]
+    public string? UploadedBy { get; set; }
+
+    public DocumentStatus Status { get; set; } = DocumentStatus.Pending;
+
+    [MaxLength(1000)]
+    public string? ErrorMessage { get; set; }
+
+    [MaxLength(50)]
+    public string? FileExtension { get; set; }
+
+    public long? FileSizeBytes { get; set; }
+
+    // Temporary file path for background processing
+    [MaxLength(500)]
+    public string? TempFilePath { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-    public DateTime UploadedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UploadedAt { get; set; }
 }

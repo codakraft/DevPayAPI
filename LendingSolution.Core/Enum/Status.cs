@@ -38,3 +38,10 @@ public enum PaymentScheduleType
     Fixed = 0,
     Variable = 1
 }
+
+public enum DocumentStatus
+{
+    Pending = 0,
+    Completed = 1,
+    Failed = 2
+}

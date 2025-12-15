@@ -239,6 +239,42 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             ClearStepsFromStep4Onwards(application);
         }
 
+        // Validate document IDs exist and have completed upload
+        var frontDocument = await _documentService.GetDocumentByIdAsync(request.FrontImageId);
+        if (frontDocument == null)
+        {
+            throw new AppException("Front ID document not found. Please upload the document first.", 404);
+        }
+        if (frontDocument.Status != Core.Enum.DocumentStatus.Completed)
+        {
+            throw new AppException($"Front ID document upload is {frontDocument.Status}. Please wait for upload to complete or retry upload.", 400);
+        }
+        
+        // Validate that front document is an image
+        var validImageExtensions = new[] { ".png", ".jpg", ".jpeg" };
+        var frontExtension = frontDocument.FileExtension?.ToLowerInvariant();
+        if (string.IsNullOrEmpty(frontExtension) || !validImageExtensions.Contains(frontExtension))
+        {
+            throw new AppException("Front ID document must be an image file (PNG, JPG, or JPEG).", 400);
+        }
+
+        var backDocument = await _documentService.GetDocumentByIdAsync(request.BackImageId);
+        if (backDocument == null)
+        {
+            throw new AppException("Back ID document not found. Please upload the document first.", 404);
+        }
+        if (backDocument.Status != Core.Enum.DocumentStatus.Completed)
+        {
+            throw new AppException($"Back ID document upload is {backDocument.Status}. Please wait for upload to complete or retry upload.", 400);
+        }
+        
+        // Validate that back document is an image
+        var backExtension = backDocument.FileExtension?.ToLowerInvariant();
+        if (string.IsNullOrEmpty(backExtension) || !validImageExtensions.Contains(backExtension))
+        {
+            throw new AppException("Back ID document must be an image file (PNG, JPG, or JPEG).", 400);
+        }
+
         // Calculate loan eligibility (enhanced with salary history)
         var product = application.Product ?? await _loanProductRepository.GetLoanProductById(application.ProductId) ?? throw new AppException("Loan product not found", 404);
 
@@ -322,8 +358,8 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         // Update application
         application.Address = request.Address;
         application.IdNumber = request.IdNumber;
-        application.FrontDocumentUrl = request.FrontImageUrl;
-        application.BackDocumentUrl = request.BackImageUrl;
+        application.FrontDocumentId = request.FrontImageId;
+        application.BackDocumentId = request.BackImageId;
         application.MinLoanEligible = finalMinEligible;
         application.MaxLoanEligible = finalMaxEligible;
         application.MinTenor = minTenor;
@@ -985,8 +1021,8 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         // Clear Step 3 data
         application.Address = null;
         application.IdNumber = null;
-        application.FrontDocumentUrl = null;
-        application.BackDocumentUrl = null;
+        application.FrontDocumentId = null;
+        application.BackDocumentId = null;
         application.DocumentsUploadedAt = null;
         application.MinLoanEligible = null;
         application.MaxLoanEligible = null;

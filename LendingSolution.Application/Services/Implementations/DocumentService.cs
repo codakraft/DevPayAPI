@@ -39,7 +39,7 @@ public class DocumentService(
             DocumentId = uploadResult.DocumentId, // Firebase document ID
             Url = uploadResult.Url,
             DocumentName = uploadDto.DocumentName,
-            UploadedAt = savedDocument.UploadedAt
+            UploadedAt = savedDocument.UploadedAt ?? DateTime.UtcNow
         };
     }
 
@@ -86,6 +86,9 @@ public class DocumentService(
             DocumentName = document.DocumentName,
             DocumentType = document.DocumentType,
             DocumentUrl = document.DocumentUrl,
+            Status = document.Status,
+            ErrorMessage = document.ErrorMessage,
+            FileExtension = document.FileExtension,
             CreatedAt = document.CreatedAt,
             UploadedAt = document.UploadedAt
         };

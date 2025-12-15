@@ -634,8 +634,27 @@ public class LoanService(
             throw new AppException($"Cannot upload signed offer letter for loan with status: {loan.Status}. Offer letter must be sent first.", 400);
         }
         
-        // Update loan with signed offer letter URL
-        loan.SignedOfferLetterUrl = dto.SignedOfferLetterUrl;
+        // Validate document exists and has completed upload
+        var document = await _documentService.GetDocumentByIdAsync(dto.SignedOfferLetterDocumentId);
+        if (document == null)
+        {
+            throw new AppException("Signed offer letter document not found. Please upload the document first.", 404);
+        }
+        if (document.Status != Core.Enum.DocumentStatus.Completed)
+        {
+            throw new AppException($"Signed offer letter document upload is {document.Status}. Please wait for upload to complete or retry upload.", 400);
+        }
+        
+        // Validate that document is a PDF
+        var pdfExtension = ".pdf";
+        var documentExtension = document.FileExtension?.ToLowerInvariant();
+        if (string.IsNullOrEmpty(documentExtension) || documentExtension != pdfExtension)
+        {
+            throw new AppException("Signed offer letter must be a PDF file.", 400);
+        }
+        
+        // Update loan with signed offer letter document ID
+        loan.SignedOfferLetterDocumentId = Guid.Parse(dto.SignedOfferLetterDocumentId);
         loan.SignedOfferLetterUploadedAt = DateTime.UtcNow;
         loan.Status = LoanStatus.OfferLetterSigned;
         
@@ -650,7 +669,7 @@ public class LoanService(
             LoanId = loanId,
             Status = LoanStatus.OfferLetterSigned.ToString(),
             Message = "Signed offer letter uploaded successfully. Loan is now ready for disbursement.",
-            SignedOfferLetterUrl = loan.SignedOfferLetterUrl,
+            SignedOfferLetterDocumentId = loan.SignedOfferLetterDocumentId?.ToString(),
             UploadedAt = loan.SignedOfferLetterUploadedAt,
             ReadyForDisbursement = true
         };
@@ -670,8 +689,8 @@ public class LoanService(
             throw new AppException($"Cannot disburse loan with status: {loan.Status}. Signed offer letter must be uploaded first.", 400);
         }
         
-        // Verify signed offer letter exists
-        if (string.IsNullOrEmpty(loan.SignedOfferLetterUrl))
+        // Verify signed offer letter document exists
+        if (!loan.SignedOfferLetterDocumentId.HasValue)
         {
             throw new AppException("Signed offer letter not found. Please upload the signed offer letter before disbursement.", 400);
         }
