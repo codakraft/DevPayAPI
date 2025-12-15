@@ -239,22 +239,6 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             ClearStepsFromStep4Onwards(application);
         }
 
-        // Upload documents
-        var frontDocResult = await _documentService.UploadDocumentAsync(new UploadDocumentDto
-        {
-            DocumentName = $"ID_Front_{application.Email}",
-            Base64String = request.FrontImageBase64,
-            FileExtension = request.FrontImageExtension
-
-        }, application.Id.ToString());
-
-        var backDocResult = await _documentService.UploadDocumentAsync(new UploadDocumentDto
-        {
-            DocumentName = $"ID_Back_{application.Email}",
-            Base64String = request.BackImageBase64,
-            FileExtension = request.BackImageExtension
-        }, application.Id.ToString());
-
         // Calculate loan eligibility (enhanced with salary history)
         var product = application.Product ?? await _loanProductRepository.GetLoanProductById(application.ProductId) ?? throw new AppException("Loan product not found", 404);
 
@@ -318,13 +302,30 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         _logger.LogInformation("Salary-based eligibility calculated for application {ApplicationId}: Min={MinEligible}, Max={MaxEligible}, Reason={Reason}",
             application.Id, minLoanEligible, maxLoanEligible, eligibilityResult.EligibilityReason);
 
+        // Check if borrower qualifies: max eligible amount must be at least the product's min amount
+        if (maxLoanEligible < product.MinAmount)
+        {
+            _logger.LogWarning("Borrower does not qualify for loan product {ProductId}. Max eligible ({MaxEligible}) is less than product min ({ProductMin})",
+                product.Id, maxLoanEligible, product.MinAmount);
+            throw new AppException($"Unfortunately, you do not qualify for this loan product. Your maximum eligible amount ({maxLoanEligible:C}) is below the minimum loan amount ({product.MinAmount:C}) for this product.", 400);
+        }
+
+        // Adjust max eligible amount: use the smaller of calculated max or product max
+        var finalMaxEligible = Math.Min(maxLoanEligible, product.MaxAmount);
+        
+        // Min eligible should always reflect the product's min amount
+        var finalMinEligible = product.MinAmount;
+
+        _logger.LogInformation("Final eligibility for application {ApplicationId}: Min={FinalMin} (Product Min), Max={FinalMax} (Lesser of Calculated {CalculatedMax} or Product Max {ProductMax})",
+            application.Id, finalMinEligible, finalMaxEligible, maxLoanEligible, product.MaxAmount);
+
         // Update application
         application.Address = request.Address;
         application.IdNumber = request.IdNumber;
-        application.FrontDocumentId = Guid.TryParse(frontDocResult.DocumentId, out var frontDocId) ? frontDocId : (Guid?)null;
-        application.BackDocumentId = Guid.TryParse(backDocResult.DocumentId, out var backDocId) ? backDocId : (Guid?)null;
-        application.MinLoanEligible = minLoanEligible;
-        application.MaxLoanEligible = maxLoanEligible;
+        application.FrontDocumentUrl = request.FrontImageUrl;
+        application.BackDocumentUrl = request.BackImageUrl;
+        application.MinLoanEligible = finalMinEligible;
+        application.MaxLoanEligible = finalMaxEligible;
         application.MinTenor = minTenor;
         application.MaxTenor = maxTenor;
         application.CurrentStep = BorrowerOnboardingStep.Step3_DocumentsUploaded;
@@ -335,8 +336,8 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
         return new BorrowerStep3ResponseDto
         {
-            MinLoanEligible = minLoanEligible,
-            MaxLoanEligible = maxLoanEligible,
+            MinLoanEligible = finalMinEligible,
+            MaxLoanEligible = finalMaxEligible,
             MinTenor = minTenor,
             MaxTenor = maxTenor
         };
@@ -984,8 +985,8 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         // Clear Step 3 data
         application.Address = null;
         application.IdNumber = null;
-        application.FrontDocumentId = null;
-        application.BackDocumentId = null;
+        application.FrontDocumentUrl = null;
+        application.BackDocumentUrl = null;
         application.DocumentsUploadedAt = null;
         application.MinLoanEligible = null;
         application.MaxLoanEligible = null;

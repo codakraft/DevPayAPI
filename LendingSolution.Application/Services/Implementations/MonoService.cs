@@ -705,7 +705,7 @@ public class MonoService : IMonoService
         return Convert.ToBase64String(hash);
     }
 
-    private string MaskBvn(string bvn)
+    private static string MaskBvn(string bvn)
     {
         if (string.IsNullOrEmpty(bvn) || bvn.Length < 4)
             return "****";

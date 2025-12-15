@@ -46,17 +46,9 @@ public class OfferLetterDto
 /// </summary>
 public class SignedOfferLetterUploadDto
 {
-    [Required(ErrorMessage = "Document name is required")]
-    [MaxLength(255, ErrorMessage = "Document name cannot exceed 255 characters")]
-    public string DocumentName { get; set; } = string.Empty;
-
-    [Required(ErrorMessage = "Base64 string is required")]
-    public string Base64String { get; set; } = string.Empty;
-
-    [Required(ErrorMessage = "File extension is required")]
-    [MaxLength(10, ErrorMessage = "File extension cannot exceed 10 characters")]
-    [RegularExpression(@"^(pdf|PDF)$", ErrorMessage = "Only PDF files are allowed for signed offer letters")]
-    public string FileExtension { get; set; } = "pdf";
+    [Required(ErrorMessage = "Signed offer letter URL is required")]
+    [Url(ErrorMessage = "Signed offer letter URL must be a valid URL")]
+    public string SignedOfferLetterUrl { get; set; } = string.Empty;
 }
 
 /// <summary>

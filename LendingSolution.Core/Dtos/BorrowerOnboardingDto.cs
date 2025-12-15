@@ -101,17 +101,12 @@ public class BorrowerStep3RequestDto
     public required string IdNumber { get; set; }
     
     [Required]
-    public required string FrontImageBase64 { get; set; }
-
-    [Required]
-    public required string FrontImageExtension { get; set; } = "png"; // Default to PNG
-
+    [Url(ErrorMessage = "Front image URL must be a valid URL")]
+    public required string FrontImageUrl { get; set; }
     
     [Required]
-    public required string BackImageBase64 { get; set; }
-    
-    [Required]
-    public required string BackImageExtension { get; set; } = "png"; // Default to PNG
+    [Url(ErrorMessage = "Back image URL must be a valid URL")]
+    public required string BackImageUrl { get; set; }
 
     [Required]
     public Guid LoanId { get; set; }

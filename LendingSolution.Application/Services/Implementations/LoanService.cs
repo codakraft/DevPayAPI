@@ -634,24 +634,8 @@ public class LoanService(
             throw new AppException($"Cannot upload signed offer letter for loan with status: {loan.Status}. Offer letter must be sent first.", 400);
         }
         
-        // Validate file extension
-        var extension = dto.FileExtension?.ToLowerInvariant().TrimStart('.');
-        if (extension != "pdf")
-        {
-            throw new AppException("Only PDF files are allowed for signed offer letters", 400);
-        }
-        
-        // Upload the signed document
-        var uploadResult = await _documentService.UploadDocumentAsync(new UploadDocumentDto
-        {
-            DocumentName = $"SignedOfferLetter_{loanId}_{DateTime.UtcNow:yyyyMMddHHmmss}",
-            Base64String = dto.Base64String,
-            FileExtension = "pdf"
-        }, uploadedBy);
-        
-        // Update loan with signed offer letter details
-        loan.SignedOfferLetterDocumentId = Guid.Parse(uploadResult.Id);
-        loan.SignedOfferLetterUrl = uploadResult.Url;
+        // Update loan with signed offer letter URL
+        loan.SignedOfferLetterUrl = dto.SignedOfferLetterUrl;
         loan.SignedOfferLetterUploadedAt = DateTime.UtcNow;
         loan.Status = LoanStatus.OfferLetterSigned;
         
@@ -666,7 +650,7 @@ public class LoanService(
             LoanId = loanId,
             Status = LoanStatus.OfferLetterSigned.ToString(),
             Message = "Signed offer letter uploaded successfully. Loan is now ready for disbursement.",
-            SignedOfferLetterUrl = uploadResult.Url,
+            SignedOfferLetterUrl = loan.SignedOfferLetterUrl,
             UploadedAt = loan.SignedOfferLetterUploadedAt,
             ReadyForDisbursement = true
         };
@@ -687,7 +671,7 @@ public class LoanService(
         }
         
         // Verify signed offer letter exists
-        if (loan.SignedOfferLetterDocumentId == null || string.IsNullOrEmpty(loan.SignedOfferLetterUrl))
+        if (string.IsNullOrEmpty(loan.SignedOfferLetterUrl))
         {
             throw new AppException("Signed offer letter not found. Please upload the signed offer letter before disbursement.", 400);
         }
