@@ -240,39 +240,16 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         }
 
         // Validate document IDs exist and have completed upload
-        var frontDocument = await _documentService.GetDocumentByIdAsync(request.FrontImageId);
-        if (frontDocument == null)
-        {
-            throw new AppException("Front ID document not found. Please upload the document first.", 404);
-        }
+        var frontDocument = await _documentService.GetDocumentByIdAsync(request.FrontImageId) ?? throw new AppException("Front ID document not found. Please upload the document first.", 404);
         if (frontDocument.Status != Core.Enum.DocumentStatus.Completed)
         {
             throw new AppException($"Front ID document upload is {frontDocument.Status}. Please wait for upload to complete or retry upload.", 400);
         }
-        
-        // Validate that front document is an image
-        var validImageExtensions = new[] { ".png", ".jpg", ".jpeg" };
-        var frontExtension = frontDocument.FileExtension?.ToLowerInvariant();
-        if (string.IsNullOrEmpty(frontExtension) || !validImageExtensions.Contains(frontExtension))
-        {
-            throw new AppException("Front ID document must be an image file (PNG, JPG, or JPEG).", 400);
-        }
 
-        var backDocument = await _documentService.GetDocumentByIdAsync(request.BackImageId);
-        if (backDocument == null)
-        {
-            throw new AppException("Back ID document not found. Please upload the document first.", 404);
-        }
+        var backDocument = await _documentService.GetDocumentByIdAsync(request.BackImageId) ?? throw new AppException("Back ID document not found. Please upload the document first.", 404);
         if (backDocument.Status != Core.Enum.DocumentStatus.Completed)
         {
             throw new AppException($"Back ID document upload is {backDocument.Status}. Please wait for upload to complete or retry upload.", 400);
-        }
-        
-        // Validate that back document is an image
-        var backExtension = backDocument.FileExtension?.ToLowerInvariant();
-        if (string.IsNullOrEmpty(backExtension) || !validImageExtensions.Contains(backExtension))
-        {
-            throw new AppException("Back ID document must be an image file (PNG, JPG, or JPEG).", 400);
         }
 
         // Calculate loan eligibility (enhanced with salary history)
