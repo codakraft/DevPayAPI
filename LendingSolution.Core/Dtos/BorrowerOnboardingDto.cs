@@ -7,17 +7,17 @@ public class BorrowerStep1RequestDto
 {
     [Required]
     public required string Employer { get; set; }
-    
+
     [Required]
     public required string FirstName { get; set; }
-    
+
     [Required]
     public required string LastName { get; set; }
-    
+
     [Required]
     [EmailAddress]
     public required string Email { get; set; }
-    
+
     [Required]
     public Guid ProductId { get; set; }
 }
@@ -33,7 +33,7 @@ public class BorrowerStep1BRequestDto
 {
     [Required]
     public required string Otp { get; set; }
-    
+
     [Required]
     public Guid LoanId { get; set; }
 }
@@ -60,13 +60,13 @@ public class BorrowerStep2RequestDto
 {
     [Required]
     public required string BankCode { get; set; }
-    
+
     [Required]
     public required string AccountNo { get; set; }
-    
+
     [Required]
     public required string BVN { get; set; }
-    
+
     [Required]
     public Guid LoanId { get; set; }
 }
@@ -81,7 +81,7 @@ public class BorrowerStep2BRequestDto
 {
     [Required]
     public required string Otp { get; set; }
-    
+
     [Required]
     public Guid LoanId { get; set; }
 }
@@ -96,15 +96,12 @@ public class BorrowerStep3RequestDto
 {
     [Required]
     public required string Address { get; set; }
-    
+
     [Required]
     public required string IdNumber { get; set; }
-    
+
     [Required]
-    public required string FrontImageId { get; set; }
-    
-    [Required]
-    public required string BackImageId { get; set; }
+    public required List<string> ImageIds { get; set; }
 
     [Required]
     public Guid LoanId { get; set; }
@@ -124,10 +121,10 @@ public class BorrowerStep4RequestDto
 {
     [Required]
     public decimal LoanAmount { get; set; }
-    
+
     [Required]
     public int Tenor { get; set; }
-    
+
     [Required]
     public Guid LoanId { get; set; }
 }
@@ -158,7 +155,7 @@ public class ValidateEmailOtpRequestDto
     [Required]
     [EmailAddress]
     public required string Email { get; set; }
-    
+
     [Required]
     public required string Otp { get; set; }
 }
@@ -185,7 +182,7 @@ public class ValidateBvnOtpRequestDto
 {
     [Required]
     public required string BVN { get; set; }
-    
+
     [Required]
     public required string Otp { get; set; }
 }

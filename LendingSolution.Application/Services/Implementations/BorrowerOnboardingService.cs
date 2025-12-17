@@ -192,7 +192,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     public async Task<BorrowerStep2BResponseDto> Step2B_ValidateBvnOtpAsync(BorrowerStep2BRequestDto request)
     {
         var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
-        
+
         // Must have completed Step 2 at minimum
         if (application.CurrentStep < BorrowerOnboardingStep.Step2_BvnSubmitted)
         {
@@ -232,6 +232,16 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             throw new AppException("Please complete BVN verification first", 400);
         }
 
+        // Validate BVN is not already attached to a different user
+        if (!string.IsNullOrEmpty(application.BVN))
+        {
+            var existingBvnApplication = await _borrowerRepository.GetByBvnAsync(application.BVN);
+            if (existingBvnApplication != null && existingBvnApplication.Id != application.Id)
+            {
+                throw new AppException("BVN already exists", 409);
+            }
+        }
+
         // Allow resubmitting this step - clear subsequent step data if going back
         if (application.CurrentStep > BorrowerOnboardingStep.Step3_DocumentsUploaded)
         {
@@ -239,17 +249,10 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             ClearStepsFromStep4Onwards(application);
         }
 
-        // Validate document IDs exist and have completed upload
-        var frontDocument = await _documentService.GetDocumentByIdAsync(request.FrontImageId) ?? throw new AppException("Front ID document not found. Please upload the document first.", 404);
-        if (frontDocument.Status != Core.Enum.DocumentStatus.Completed)
+        // Validate at least 2 images are provided
+        if (request.ImageIds == null || request.ImageIds.Count < 2)
         {
-            throw new AppException($"Front ID document upload is {frontDocument.Status}. Please wait for upload to complete or retry upload.", 400);
-        }
-
-        var backDocument = await _documentService.GetDocumentByIdAsync(request.BackImageId) ?? throw new AppException("Back ID document not found. Please upload the document first.", 404);
-        if (backDocument.Status != Core.Enum.DocumentStatus.Completed)
-        {
-            throw new AppException($"Back ID document upload is {backDocument.Status}. Please wait for upload to complete or retry upload.", 400);
+            throw new AppException("Please upload at least 2 ID documents", 400);
         }
 
         // Calculate loan eligibility (enhanced with salary history)
@@ -259,7 +262,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         decimal maxLoanEligible;
         var minTenor = product.MinTenor;
         var maxTenor = product.MaxTenor;
-        
+
         // Ensure minTenor and maxTenor are valid (not 0)
         if (minTenor <= 0 || maxTenor <= 0)
         {
@@ -325,7 +328,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
         // Adjust max eligible amount: use the smaller of calculated max or product max
         var finalMaxEligible = Math.Min(maxLoanEligible, product.MaxAmount);
-        
+
         // Min eligible should always reflect the product's min amount
         var finalMinEligible = product.MinAmount;
 
@@ -335,8 +338,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         // Update application
         application.Address = request.Address;
         application.IdNumber = request.IdNumber;
-        application.FrontDocumentId = request.FrontImageId;
-        application.BackDocumentId = request.BackImageId;
+        application.DocumentIds = string.Join(",", request.ImageIds);
         application.MinLoanEligible = finalMinEligible;
         application.MaxLoanEligible = finalMaxEligible;
         application.MinTenor = minTenor;
@@ -459,7 +461,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
         if (!emailSent)
         {
-            _logger.LogWarning("Failed to send loan application summary email to {Email} for application {ApplicationId}", 
+            _logger.LogWarning("Failed to send loan application summary email to {Email} for application {ApplicationId}",
                 application.Email, application.Id);
             // Don't throw - email failure shouldn't block loan submission
         }
@@ -536,7 +538,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     public async Task<GenerateBvnOtpResponseDto> GenerateBvnOtpAsync(GenerateBvnOtpRequestDto request)
     {
         _logger.LogInformation("Attempting to generate BVN OTP for borrower with email: {Email}", request.Email);
-        
+
         // Find application by email
         var application = await _borrowerRepository.GetByEmailAsync(request.Email);
         if (application == null)
@@ -544,11 +546,11 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             _logger.LogWarning("No application found for email: {Email}", request.Email);
             throw new AppException("No application found with this email address.", 404);
         }
-        
+
         // Ensure BVN was saved in Step 2
         if (string.IsNullOrEmpty(application.BVN))
         {
-            _logger.LogWarning("Application {ApplicationId} for email {Email} has no BVN saved. Step 2 not completed.", 
+            _logger.LogWarning("Application {ApplicationId} for email {Email} has no BVN saved. Step 2 not completed.",
                 application.Id, request.Email);
             throw new AppException("Please complete Step 2 (Submit Bank & BVN Info) first before generating BVN OTP.", 400);
         }
@@ -998,8 +1000,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         // Clear Step 3 data
         application.Address = null;
         application.IdNumber = null;
-        application.FrontDocumentId = null;
-        application.BackDocumentId = null;
+        application.DocumentIds = null;
         application.DocumentsUploadedAt = null;
         application.MinLoanEligible = null;
         application.MaxLoanEligible = null;

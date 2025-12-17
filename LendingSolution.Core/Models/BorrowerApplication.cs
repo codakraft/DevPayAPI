@@ -27,8 +27,7 @@ public class BorrowerApplication : Base
     // Address and documents (Step 3)
     public string? Address { get; set; }
     public string? IdNumber { get; set; }
-    public string? FrontDocumentId { get; set; }
-    public string? BackDocumentId { get; set; }
+    public string? DocumentIds { get; set; } // Stores comma-separated document IDs
     
     // Loan information
     public Guid CompanyId { get; set; }
