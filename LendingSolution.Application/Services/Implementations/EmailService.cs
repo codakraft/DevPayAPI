@@ -781,7 +781,7 @@ public class EmailService : IEmailService
     </div>
 </body>
 </html>";
-    }}
+    }
 
     private string GenerateImageReuploadRequestTemplate(string borrowerName, string reason, string reuploadUrl)
     {
