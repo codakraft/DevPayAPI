@@ -639,4 +639,36 @@ public class CompanyController(
         }
     }
 
+    /// <summary>
+    /// Request borrower to re-upload ID documents
+    /// Admin/SuperAdmin can trigger this when existing documents are unclear or need updating
+    /// </summary>
+    [HttpPost("loans/{loanId}/request-image-reupload")]
+    [Authorize(Roles = "Admin, SuperAdmin")]
+    public async Task<IActionResult> RequestImageReupload(Guid loanId, [FromBody] RequestImageReuploadDto request)
+    {
+        try
+        {
+            // Ensure loanId matches the request
+            if (request.LoanId != loanId)
+            {
+                return BadRequest(ApiResponse.Fail("Loan ID mismatch"));
+            }
+
+            var result = await _borrowerOnboardingService.RequestImageReuploadAsync(request);
+            _logger.LogInformation("Image re-upload request sent for loan {LoanId}", loanId);
+            return Ok(ApiResponse.Ok(result.Message));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error requesting image re-upload for loan {LoanId}", loanId);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error requesting image re-upload for loan {LoanId}", loanId);
+            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
+        }
+    }
+
 }

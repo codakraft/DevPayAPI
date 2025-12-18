@@ -5,6 +5,7 @@ using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Models;
 using LendingSolution.Core.Enum;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
 using System.Text.Json;
 
 namespace LendingSolution.Application.Services.Implementations;
@@ -22,6 +23,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     private readonly ISettingsService _settingsService;
     private readonly IRemitaService _remitaService;
     private readonly ISalaryEligibilityService _salaryEligibilityService;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<BorrowerOnboardingService> _logger;
 
     public BorrowerOnboardingService(
@@ -36,6 +38,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         ISettingsService settingsService,
         IRemitaService remitaService,
         ISalaryEligibilityService salaryEligibilityService,
+        IConfiguration configuration,
         ILogger<BorrowerOnboardingService> logger)
     {
         _borrowerRepository = borrowerRepository;
@@ -49,6 +52,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         _settingsService = settingsService;
         _remitaService = remitaService;
         _salaryEligibilityService = salaryEligibilityService;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -555,7 +559,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         }
 
         // Get client URL from configuration
-        var clientUrl = Environment.GetEnvironmentVariable("ClientUrl") ?? "http://localhost:3000";
+        var clientUrl = _configuration["ClientUrl"] ?? "http://localhost:3000";
         var reuploadUrl = $"{clientUrl}/{application.Id}/readd-images";
 
         // Send email notification

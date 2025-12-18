@@ -228,6 +228,40 @@ GET /api/admin/loans?search=john&status=Approved&minAmount=50000&maxAmount=20000
 - `GET /api/v1/borrower/{emailOrId}` - Get current step/status for borrower
 - `PUT /api/v1/borrower/update-documents` - **Update/Re-add ID document images (works on completed loans)**
 
+#### Admin: Request Borrower Document Re-upload
+- `POST /api/v1/company/loans/{loanId}/request-image-reupload` - **Admin/SuperAdmin request borrower to re-upload documents**
+
+**Request Image Re-upload Endpoint**  
+Allows company admins or super admins to send an email notification to a borrower requesting them to re-upload their ID documents with a specific reason.
+
+**Request:**
+```http
+POST /api/v1/company/loans/{loanId}/request-image-reupload
+Authorization: Bearer <admin_token>
+Content-Type: application/json
+
+{
+  "loanId": "550e8400-e29b-41d4-a716-446655440000",
+  "reason": "The uploaded images are blurry and the text is not clearly readable. Please upload clearer photos in good lighting."
+}
+```
+
+**Response (Success):**
+```json
+{
+  "success": true,
+  "message": "Image re-upload request sent successfully"
+}
+```
+
+**Features:**
+- Sends automated email to borrower with custom reason
+- Email includes direct link to re-upload page: `{ClientUrl}/{loanId}/readd-images`
+- ClientUrl configured in appsettings (dev: http://localhost:3000, prod: https://app.yourlendingplatform.com)
+- Professional email template with document quality guidelines
+- Admin/SuperAdmin roles required
+- Works on any loan status
+
 **Update Documents Endpoint**  
 Allows borrowers to update or re-upload ID document images to their loan application, regardless of whether the loan has been submitted (completed) or not.
 
