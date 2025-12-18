@@ -18,6 +18,7 @@ public class CompanyController(
     ILoanProductService loanProductService,
     ISupportService supportService,
     ILoanService loanService,
+    IBorrowerOnboardingService borrowerOnboardingService,
     ILogger<CompanyController> logger)
   : Controller
 {
@@ -25,6 +26,7 @@ public class CompanyController(
     private readonly ICompanyService _companyService = companySErvice;
     private readonly ISupportService _supportService = supportService;
     private readonly ILoanService _loanService = loanService;
+    private readonly IBorrowerOnboardingService _borrowerOnboardingService = borrowerOnboardingService;
     private readonly ILogger<CompanyController> _logger = logger;
 
     [Authorize(Roles = "Admin")]

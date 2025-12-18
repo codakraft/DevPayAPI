@@ -43,6 +43,15 @@ public interface IEmailService
     Task<bool> SendDisbursementNotificationAsync(string emailAddress, string borrowerName, decimal amount, string disbursementReference);
     
     /// <summary>
+    /// Send image re-upload request email
+    /// </summary>
+    /// <param name="emailAddress">Recipient email address</param>
+    /// <param name="borrowerName">Borrower's full name</param>
+    /// <param name="reason">Reason for requesting new images</param>
+    /// <param name="reuploadUrl">URL where borrower can re-upload images</param>
+    Task<bool> SendImageReuploadRequestAsync(string emailAddress, string borrowerName, string reason, string reuploadUrl);
+    
+    /// <summary>
     /// Send loan application summary email after submission
     /// </summary>
     /// <param name="emailAddress">Recipient email address</param>

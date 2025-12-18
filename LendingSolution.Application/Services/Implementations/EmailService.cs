@@ -316,6 +316,14 @@ public class EmailService : IEmailService
         
         return await SendEmailAsync(emailAddress, subject, body);
     }
+
+    public async Task<bool> SendImageReuploadRequestAsync(string emailAddress, string borrowerName, string reason, string reuploadUrl)
+    {
+        var subject = "Action Required: Please Re-upload Your ID Documents";
+        var body = GenerateImageReuploadRequestTemplate(borrowerName, reason, reuploadUrl);
+        
+        return await SendEmailAsync(emailAddress, subject, body);
+    }
     
     private string GenerateOfferLetterEmailTemplate(OfferLetterDto offer)
     {
@@ -774,3 +782,209 @@ public class EmailService : IEmailService
 </body>
 </html>";
     }}
+
+    private string GenerateImageReuploadRequestTemplate(string borrowerName, string reason, string reuploadUrl)
+    {
+        return $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6; 
+            color: #1a1a1a; 
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            padding: 40px 20px;
+        }}
+        .email-wrapper {{ 
+            max-width: 600px; 
+            margin: 0 auto; 
+            background: white;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }}
+        .header {{ 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 50px 40px;
+            text-align: center;
+        }}
+        .header h1 {{ 
+            font-size: 32px; 
+            margin-bottom: 10px;
+            font-weight: 700;
+        }}
+        .header p {{
+            font-size: 16px;
+            opacity: 0.95;
+            margin: 0;
+        }}
+        .content {{ 
+            padding: 50px 40px;
+        }}
+        .greeting {{
+            font-size: 22px;
+            font-weight: 600;
+            color: #1a1a1a;
+            margin-bottom: 25px;
+        }}
+        .message {{
+            font-size: 16px;
+            color: #4a5568;
+            margin-bottom: 30px;
+            line-height: 1.8;
+        }}
+        .reason-box {{
+            background: linear-gradient(135deg, #fff5f5 0%, #fed7d7 100%);
+            border-left: 4px solid #f56565;
+            padding: 25px;
+            border-radius: 8px;
+            margin: 30px 0;
+        }}
+        .reason-title {{
+            font-size: 14px;
+            text-transform: uppercase;
+            font-weight: 700;
+            color: #c53030;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+        }}
+        .reason-text {{
+            font-size: 16px;
+            color: #2d3748;
+            line-height: 1.6;
+            font-weight: 500;
+        }}
+        .cta-container {{
+            text-align: center;
+            margin: 40px 0;
+        }}
+        .cta-button {{
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 18px 45px;
+            text-decoration: none;
+            border-radius: 50px;
+            font-weight: 700;
+            font-size: 16px;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }}
+        .info-box {{
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 25px;
+            margin: 30px 0;
+        }}
+        .info-box h3 {{
+            color: #2d3748;
+            font-size: 18px;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }}
+        .info-box ul {{
+            list-style: none;
+            padding: 0;
+        }}
+        .info-box li {{
+            padding: 8px 0;
+            padding-left: 25px;
+            position: relative;
+            color: #4a5568;
+            font-size: 15px;
+        }}
+        .info-box li:before {{
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: #48bb78;
+            font-weight: bold;
+            font-size: 18px;
+        }}
+        .footer {{ 
+            background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }}
+        .footer p {{
+            margin: 10px 0;
+            opacity: 0.9;
+        }}
+        .divider {{
+            height: 1px;
+            background: linear-gradient(90deg, transparent, #cbd5e0, transparent);
+            margin: 30px 0;
+        }}
+    </style>
+</head>
+<body>
+    <div class='email-wrapper'>
+        <div class='header'>
+            <h1>📸 Document Update Required</h1>
+            <p>Action needed on your loan application</p>
+        </div>
+        
+        <div class='content'>
+            <div class='greeting'>
+                Hello {borrowerName},
+            </div>
+            
+            <div class='message'>
+                We're reviewing your loan application and need you to re-upload your ID documents to continue processing.
+            </div>
+
+            <div class='reason-box'>
+                <div class='reason-title'>Reason for Re-upload</div>
+                <div class='reason-text'>{reason}</div>
+            </div>
+
+            <div class='message'>
+                Please click the button below to upload new, clear images of your identification documents. This will help us expedite your application review.
+            </div>
+
+            <div class='cta-container'>
+                <a href='{reuploadUrl}' class='cta-button'>Upload New Documents</a>
+            </div>
+
+            <div class='divider'></div>
+
+            <div class='info-box'>
+                <h3>📋 Document Requirements</h3>
+                <ul>
+                    <li><strong>Clear & Readable:</strong> Ensure all text and photos are clearly visible</li>
+                    <li><strong>Good Lighting:</strong> Take photos in well-lit conditions</li>
+                    <li><strong>Complete Document:</strong> Include both front and back of your ID</li>
+                    <li><strong>Valid Format:</strong> Upload in JPG, JPEG, or PNG format</li>
+                    <li><strong>Recent:</strong> Documents should be current and not expired</li>
+                </ul>
+            </div>
+
+            <div class='message' style='margin-top: 30px;'>
+                If you have any questions or need assistance, please don't hesitate to reach out to our support team.
+            </div>
+
+            <div class='message' style='font-weight: 600; color: #2d3748;'>
+                Thank you for your prompt attention to this matter!
+            </div>
+        </div>
+        
+        <div class='footer'>
+            <p style='font-weight: 700; font-size: 16px;'>Lending Solution Support Team</p>
+            <p style='margin-top: 15px;'>This is an automated message regarding your loan application.</p>
+            <p>&copy; {DateTime.UtcNow.Year} Lending Solution. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>";
+    }
+}

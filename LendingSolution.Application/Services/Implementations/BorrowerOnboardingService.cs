@@ -545,6 +545,39 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         return new UpdateDocumentsResponseDto();
     }
 
+    public async Task<RequestImageReuploadResponseDto> RequestImageReuploadAsync(RequestImageReuploadDto request)
+    {
+        var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
+
+        if (string.IsNullOrWhiteSpace(application.Email))
+        {
+            throw new AppException("Borrower email not found", 400);
+        }
+
+        // Get client URL from configuration
+        var clientUrl = Environment.GetEnvironmentVariable("ClientUrl") ?? "http://localhost:3000";
+        var reuploadUrl = $"{clientUrl}/{application.Id}/readd-images";
+
+        // Send email notification
+        var borrowerName = $"{application.FirstName} {application.LastName}";
+        var emailSent = await _emailService.SendImageReuploadRequestAsync(
+            application.Email,
+            borrowerName,
+            request.Reason,
+            reuploadUrl
+        );
+
+        if (!emailSent)
+        {
+            throw new AppException("Failed to send re-upload request email", 500);
+        }
+
+        _logger.LogInformation("Image re-upload request sent to borrower {BorrowerEmail} for application {ApplicationId}. Reason: {Reason}",
+            application.Email, application.Id, request.Reason);
+
+        return new RequestImageReuploadResponseDto();
+    }
+
     public async Task<GenerateEmailOtpResponseDto> GenerateEmailOtpAsync(GenerateEmailOtpRequestDto request)
     {
         // Find application by email to get company information

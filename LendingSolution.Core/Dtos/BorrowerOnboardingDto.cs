@@ -121,6 +121,20 @@ public class UpdateDocumentsResponseDto
     public string Message { get; set; } = "Documents updated successfully";
 }
 
+public class RequestImageReuploadDto
+{
+    [Required]
+    public Guid LoanId { get; set; }
+
+    [Required]
+    public required string Reason { get; set; }
+}
+
+public class RequestImageReuploadResponseDto
+{
+    public string Message { get; set; } = "Image re-upload request sent successfully";
+}
+
 public class BorrowerStep3ResponseDto
 {
     public decimal MaxLoanEligible { get; set; }

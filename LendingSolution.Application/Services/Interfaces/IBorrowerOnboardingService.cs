@@ -36,4 +36,7 @@ public interface IBorrowerOnboardingService
     
     // Update documents (works regardless of completion status)
     Task<UpdateDocumentsResponseDto> UpdateDocumentsAsync(UpdateDocumentsRequestDto request);
+    
+    // Request borrower to re-upload images
+    Task<RequestImageReuploadResponseDto> RequestImageReuploadAsync(RequestImageReuploadDto request);
 }
