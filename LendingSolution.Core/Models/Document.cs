@@ -21,7 +21,7 @@ public class Document
     [MaxLength(255)]
     public string? UploadedBy { get; set; }
 
-    public DocumentStatus Status { get; set; } = DocumentStatus.Pending;
+    public DocumentStatus Status { get; set; } = DocumentStatus.Completed;
 
     [MaxLength(1000)]
     public string? ErrorMessage { get; set; }
@@ -30,10 +30,6 @@ public class Document
     public string? FileExtension { get; set; }
 
     public long? FileSizeBytes { get; set; }
-
-    // Temporary file path for background processing
-    [MaxLength(500)]
-    public string? TempFilePath { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

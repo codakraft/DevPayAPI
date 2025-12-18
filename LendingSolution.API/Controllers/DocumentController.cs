@@ -100,7 +100,7 @@ public class DocumentController : ControllerBase
 
     /// <summary>
     /// Upload multiple documents via multipart form data
-    /// Returns immediately with pending status, actual upload happens in background
+    /// Uploads documents immediately to Firebase
     /// </summary>
     [HttpPost("upload-multipart")]
     [RequestSizeLimit(52428800)] // 50MB limit
@@ -119,10 +119,6 @@ public class DocumentController : ControllerBase
 
             var uploadedDocuments = new List<DocumentUploadPendingDto>();
 
-            // Create temp directory if it doesn't exist
-            var tempPath = Path.Combine(_environment.ContentRootPath, "temp_uploads");
-            Directory.CreateDirectory(tempPath);
-
             foreach (var file in files)
             {
                 if (file.Length == 0)
@@ -131,28 +127,38 @@ public class DocumentController : ControllerBase
                     continue;
                 }
 
-                // Generate unique filename
-                var fileExtension = Path.GetExtension(file.FileName);
-                var tempFileName = $"{Guid.NewGuid()}{fileExtension}";
-                var tempFilePath = Path.Combine(tempPath, tempFileName);
+                // Read file as base64
+                using var memoryStream = new MemoryStream();
+                await file.CopyToAsync(memoryStream);
+                var fileBytes = memoryStream.ToArray();
+                var base64String = Convert.ToBase64String(fileBytes);
 
-                // Save file to temp location
-                using (var stream = new FileStream(tempFilePath, FileMode.Create))
+                var fileExtension = Path.GetExtension(file.FileName);
+
+                // Upload directly to Firebase
+                var uploadResult = await _firebaseService.UploadDocumentAsync(
+                    base64String,
+                    file.FileName,
+                    fileExtension);
+
+                if (!uploadResult.Success)
                 {
-                    await file.CopyToAsync(stream);
+                    _logger.LogError("Failed to upload file {FileName}: {Error}", file.FileName, uploadResult.ErrorMessage);
+                    continue;
                 }
 
-                // Create document record with pending status
+                // Create document record with completed status
                 var document = new Document
                 {
                     DocumentName = file.FileName,
                     DocumentType = file.ContentType,
                     FileExtension = fileExtension,
                     FileSizeBytes = file.Length,
-                    TempFilePath = tempFilePath,
+                    DocumentUrl = uploadResult.Url,
                     UploadedBy = userId,
-                    Status = DocumentStatus.Pending,
-                    CreatedAt = DateTime.UtcNow
+                    Status = DocumentStatus.Completed,
+                    CreatedAt = DateTime.UtcNow,
+                    UploadedAt = DateTime.UtcNow
                 };
 
                 var savedDocument = await _documentRepository.CreateDocumentAsync(document);
@@ -165,17 +171,17 @@ public class DocumentController : ControllerBase
                     CreatedAt = savedDocument.CreatedAt
                 });
 
-                _logger.LogInformation("Created pending document record {DocumentId} for file {FileName}", 
+                _logger.LogInformation("Uploaded document {DocumentId} for file {FileName}", 
                     savedDocument.Id, file.FileName);
             }
 
             var response = new MultipartUploadResponseDto
             {
                 Documents = uploadedDocuments,
-                Message = $"{uploadedDocuments.Count} document(s) queued for upload. Check status using document IDs."
+                Message = $"{uploadedDocuments.Count} document(s) uploaded successfully."
             };
 
-            return Ok(ApiResponse.Ok("Documents queued successfully", response));
+            return Ok(ApiResponse.Ok("Documents uploaded successfully", response));
         }
         catch (Exception ex)
         {

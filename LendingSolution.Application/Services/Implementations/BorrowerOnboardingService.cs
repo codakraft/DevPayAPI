@@ -110,6 +110,12 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     {
         var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
 
+        // Prevent modifications if loan application is already submitted
+        if (application.IsCompleted)
+        {
+            throw new AppException("Cannot modify a submitted loan application", 400);
+        }
+
         // Allow resubmitting this step - clear subsequent step data if going back
         if (application.CurrentStep > BorrowerOnboardingStep.Step1B_EmailValidated)
         {
@@ -140,6 +146,12 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     public async Task<BorrowerStep2ResponseDto> Step2_SaveBankBvnInfoAsync(BorrowerStep2RequestDto request)
     {
         var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
+
+        // Prevent modifications if loan application is already submitted
+        if (application.IsCompleted)
+        {
+            throw new AppException("Cannot modify a submitted loan application", 400);
+        }
 
         // Must have completed Step 1B at minimum
         if (application.CurrentStep < BorrowerOnboardingStep.Step1B_EmailValidated)
@@ -193,6 +205,12 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     {
         var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
 
+        // Prevent modifications if loan application is already submitted
+        if (application.IsCompleted)
+        {
+            throw new AppException("Cannot modify a submitted loan application", 400);
+        }
+
         // Must have completed Step 2 at minimum
         if (application.CurrentStep < BorrowerOnboardingStep.Step2_BvnSubmitted)
         {
@@ -226,6 +244,12 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     {
         var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
 
+        // Prevent modifications if loan application is already submitted
+        if (application.IsCompleted)
+        {
+            throw new AppException("Cannot modify a submitted loan application", 400);
+        }
+
         // Must have completed Step 2B at minimum
         if (application.CurrentStep < BorrowerOnboardingStep.Step2B_BvnValidated)
         {
@@ -253,6 +277,12 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         if (request.ImageIds == null || request.ImageIds.Count < 2)
         {
             throw new AppException("Please upload at least 2 ID documents", 400);
+        }
+
+        // Validate that all image IDs are not null or empty
+        if (request.ImageIds.Any(id => string.IsNullOrWhiteSpace(id)))
+        {
+            throw new AppException("Invalid document image IDs provided. All image IDs must be valid.", 400);
         }
 
         // Calculate loan eligibility (enhanced with salary history)

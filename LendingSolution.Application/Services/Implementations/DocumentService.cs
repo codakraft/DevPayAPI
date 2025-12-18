@@ -2,6 +2,7 @@ using LendingSolution.Application.Exceptions;
 using LendingSolution.Application.Repositories.Interfaces;
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
+using LendingSolution.Core.Enum;
 using LendingSolution.Core.Models;
 
 namespace LendingSolution.Application.Services.Implementations;
@@ -12,7 +13,7 @@ public class DocumentService(
 {
     public async Task<DocumentUploadResultDto> UploadDocumentAsync(UploadDocumentDto uploadDto, string userId)
     {
-        // Upload to third-party service
+        // Upload to third-party service immediately
         var uploadResult = await thirdPartyDocumentService.UploadDocumentAsync(
             uploadDto.Base64String,
             uploadDto.DocumentName,
@@ -23,12 +24,14 @@ public class DocumentService(
             throw new AppException($"Failed to upload document: {uploadResult.ErrorMessage}", 500);
         }
 
-        // Create document record in database
+        // Create document record in database with completed status
         var document = new Document
         {
             DocumentName = uploadDto.DocumentName,
             DocumentType = GetFileTypeFromExtension(uploadDto.FileExtension ?? string.Empty),
             DocumentUrl = uploadResult.Url,
+            Status = DocumentStatus.Completed,
+            UploadedAt = DateTime.UtcNow
         };
 
         var savedDocument = await documentRepository.CreateDocumentAsync(document);
