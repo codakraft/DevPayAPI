@@ -518,6 +518,33 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         };
     }
 
+    public async Task<UpdateDocumentsResponseDto> UpdateDocumentsAsync(UpdateDocumentsRequestDto request)
+    {
+        var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
+
+        // Validate at least 2 images are provided
+        if (request.ImageIds == null || request.ImageIds.Count < 2)
+        {
+            throw new AppException("Please upload at least 2 ID documents", 400);
+        }
+
+        // Validate that all image IDs are not null or empty
+        if (request.ImageIds.Any(id => string.IsNullOrWhiteSpace(id)))
+        {
+            throw new AppException("Invalid document image IDs provided. All image IDs must be valid.", 400);
+        }
+
+        // Update document IDs
+        application.DocumentIds = string.Join(",", request.ImageIds);
+        application.UpdatedAt = DateTime.UtcNow;
+
+        await _borrowerRepository.UpdateAsync(application);
+
+        _logger.LogInformation("Documents updated for application {ApplicationId}", application.Id);
+
+        return new UpdateDocumentsResponseDto();
+    }
+
     public async Task<GenerateEmailOtpResponseDto> GenerateEmailOtpAsync(GenerateEmailOtpRequestDto request)
     {
         // Find application by email to get company information

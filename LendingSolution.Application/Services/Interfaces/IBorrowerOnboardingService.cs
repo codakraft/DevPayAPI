@@ -33,4 +33,7 @@ public interface IBorrowerOnboardingService
     
     // Current step tracking
     Task<BorrowerCurrentStepResponseDto> GetCurrentStepAsync(BorrowerCurrentStepRequestDto request);
+    
+    // Update documents (works regardless of completion status)
+    Task<UpdateDocumentsResponseDto> UpdateDocumentsAsync(UpdateDocumentsRequestDto request);
 }

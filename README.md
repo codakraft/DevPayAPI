@@ -207,6 +207,69 @@ GET /api/admin/loans?search=john&status=Approved&minAmount=50000&maxAmount=20000
 - `GET /api/remita/banks` - Get supported banks list
 - `POST /api/remita/webhook/notifications` - Handle Remita webhooks
 
+### 👤 Borrower Onboarding & Management
+
+#### Multi-Step Onboarding Process
+- `POST /api/v1/borrower/step1` - Initial borrower info (name, email, phone, password)
+- `POST /api/v1/borrower/step1b` - Validate email OTP
+- `POST /api/v1/borrower/step2` - Bank and BVN information
+- `POST /api/v1/borrower/step2b` - Validate BVN OTP
+- `POST /api/v1/borrower/step3` - Address and ID documents
+- `POST /api/v1/borrower/step4` - Submit loan application with tenor
+
+#### OTP Management
+- `POST /api/v1/borrower/generate-email-otp` - Generate email OTP
+- `POST /api/v1/borrower/validate-email-otp` - Validate email OTP
+- `POST /api/v1/borrower/generate-bvn-otp` - Generate BVN OTP
+- `POST /api/v1/borrower/validate-bvn-otp` - Validate BVN OTP
+- `POST /api/v1/borrower/resend-step1-email-otp` - Resend Step 1 email OTP
+
+#### Borrower Application Management
+- `GET /api/v1/borrower/{emailOrId}` - Get current step/status for borrower
+- `PUT /api/v1/borrower/update-documents` - **Update/Re-add ID document images (works on completed loans)**
+
+**Update Documents Endpoint**  
+Allows borrowers to update or re-upload ID document images to their loan application, regardless of whether the loan has been submitted (completed) or not.
+
+**Request:**
+```http
+PUT /api/v1/borrower/update-documents
+Content-Type: application/json
+
+{
+  "loanId": "550e8400-e29b-41d4-a716-446655440000",
+  "imageIds": [
+    "firebase-doc-id-front-123",
+    "firebase-doc-id-back-456"
+  ]
+}
+```
+
+**Response (Success):**
+```json
+{
+  "success": true,
+  "message": "Documents updated successfully",
+  "data": {
+    "loanId": "550e8400-e29b-41d4-a716-446655440000"
+  }
+}
+```
+
+**Validation Rules:**
+- Minimum 2 image IDs required (front and back of ID card)
+- All image IDs must be valid (non-empty strings)
+- Image IDs should be Firebase document IDs from the document upload endpoint
+- Works regardless of loan `IsCompleted` status (bypasses completion check)
+
+**Use Cases:**
+- Borrower needs to replace blurry/unreadable ID photos
+- Admin requests better quality documents
+- ID document needs updating after loan submission
+- Correcting accidentally uploaded wrong documents
+
+
+
 ## Getting Started
 
 ### Prerequisites

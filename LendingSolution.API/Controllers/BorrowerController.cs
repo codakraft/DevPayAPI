@@ -317,5 +317,28 @@ public class BorrowerController(
             return StatusCode(500, ApiResponse.Fail("Something went wrong"));
         }
     }
-}
 
+    /// <summary>
+    /// Update/Re-add document images for loan application
+    /// Can be used regardless of loan completion status
+    /// </summary>
+    [HttpPut("update-documents")]
+    public async Task<IActionResult> UpdateDocuments([FromBody] UpdateDocumentsRequestDto request)
+    {
+        try
+        {
+            var result = await _borrowerOnboardingService.UpdateDocumentsAsync(request);
+            return Ok(ApiResponse.Ok(result.Message, new { loanId = request.LoanId }));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error updating documents for loan {LoanId}", request.LoanId);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error updating documents for loan {LoanId}", request.LoanId);
+            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
+        }
+    }
+}

@@ -107,6 +107,20 @@ public class BorrowerStep3RequestDto
     public Guid LoanId { get; set; }
 }
 
+public class UpdateDocumentsRequestDto
+{
+    [Required]
+    public required List<string> ImageIds { get; set; }
+
+    [Required]
+    public Guid LoanId { get; set; }
+}
+
+public class UpdateDocumentsResponseDto
+{
+    public string Message { get; set; } = "Documents updated successfully";
+}
+
 public class BorrowerStep3ResponseDto
 {
     public decimal MaxLoanEligible { get; set; }
