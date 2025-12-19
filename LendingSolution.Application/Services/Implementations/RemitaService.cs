@@ -38,10 +38,10 @@ public class RemitaService : IRemitaService
         _logger = logger;
         _cRepo = cRepo;
         _db = db;
-        
+
         // Log all settings on initialization for debugging
-        _logger.LogInformation("RemitaService initialized - BaseUrl={BaseUrl}, UseLiveData={UseLiveData}, ApiKey={ApiKey}, MerchantId={MerchantId}", 
-            _settings.BaseUrl, _settings.UseLiveData, 
+        _logger.LogInformation("RemitaService initialized - BaseUrl={BaseUrl}, UseLiveData={UseLiveData}, ApiKey={ApiKey}, MerchantId={MerchantId}",
+            _settings.BaseUrl, _settings.UseLiveData,
             string.IsNullOrEmpty(_settings.ApiKey) ? "[EMPTY]" : "[SET]",
             string.IsNullOrEmpty(_settings.MerchantId) ? "[EMPTY]" : "[SET]");
     }
@@ -55,14 +55,14 @@ public class RemitaService : IRemitaService
         if (!string.IsNullOrWhiteSpace(token))
             request.Headers.Add("AUTHORIZATION", token);
     }
-    private string BuildUrl(string path) 
+    private string BuildUrl(string path)
     {
         if (string.IsNullOrWhiteSpace(_settings.BaseUrl))
         {
             _logger.LogError("BaseUrl is not configured in RemitaSettings");
             throw new InvalidOperationException("Remita BaseUrl is not configured");
         }
-        
+
         var url = $"{_settings.BaseUrl.TrimEnd('/')}/{path.TrimStart('/')}";
         _logger.LogDebug("Built URL: {Url}", url);
         return url;
@@ -206,7 +206,7 @@ public class RemitaService : IRemitaService
 
         var requestId = Guid.NewGuid().ToString();
         var hash = HashUtils.ComputeSha512Hash($"{_settings.MerchantId}{_settings.ServiceTypeId}{requestId}{_settings.ApiKey}");
-        
+
         var payload = new { mandateId = loan.MandateId, requestId };
 
         var request = new HttpRequestMessage(HttpMethod.Post,
@@ -349,66 +349,8 @@ public class RemitaService : IRemitaService
     public async Task<SalaryHistoryResponse?> GetSalaryHistoryByBvnAsync(SalaryHistoryRequestDto request)
     {
         // Return mock data when UseLiveData is false
-        // if (!_settings.UseLiveData)
-        // {
-            _logger.LogInformation("UseLiveData=false, returning mock salary history");
-            return await Task.FromResult(GetMockSalaryHistory(request));
-        // }
-
-        var token = await GetAccessTokenAsync();
-        if (token == null)
-        {
-            _logger.LogError("Failed to get access token for salary history request");
-            return null;
-        }
-
-        var payload = new
-        {
-            authorisationCode = request.AuthorisationCode ?? "",
-            firstName = request.FirstName,
-            lastName = request.LastName,
-            middleName = request.MiddleName ?? "R ",
-            accountNumber = request.AccountNumber,
-            bankCode = request.BankCode,
-            bvn = request.Bvn,
-            authorisationChannel = request.AuthorisationChannel ?? "USSD"
-        };
-
-        var requestUrl = BuildUrl("/send/api/loansvc/data/api/v2/payday/salary/history/provideCustomerDetails");
-        var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUrl)
-        {
-            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
-        };
-
-        // Use specific headers for salary history endpoint as per API documentation
-        httpRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        httpRequest.Headers.Add("API_KEY", _settings.ApiKey);
-        httpRequest.Headers.Add("MERCHANT_ID", _settings.MerchantId);
-        httpRequest.Headers.Add("REQUEST_ID", Guid.NewGuid().ToString());
-        
-        if (!string.IsNullOrWhiteSpace(token))
-            httpRequest.Headers.Add("AUTHORIZATION", token);
-
-        _logger.LogInformation("Sending salary history request to: {Url}", requestUrl);
-
-        var response = await _httpClient.SendAsync(httpRequest);
-        if (!response.IsSuccessStatusCode)
-        {
-            _logger.LogWarning("Salary history request failed: {Status} - {Reason}", 
-                response.StatusCode, response.ReasonPhrase);
-            return null;
-        }
-
-        try
-        {
-            var responseContent = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize<SalaryHistoryResponse>(responseContent);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error parsing salary history response");
-            return null;
-        }
+        _logger.LogInformation("UseLiveData=false, returning mock salary history");
+        return await Task.FromResult(GetMockSalaryHistory(request));
     }
 
     public async Task<AccountVerificationResponseDto?> VerifyAccountAsync(AccountVerificationRequestDto request)
@@ -446,7 +388,7 @@ public class RemitaService : IRemitaService
         var response = await _httpClient.SendAsync(httpRequest);
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogWarning("Account verification failed: {Status} - {Reason}", 
+            _logger.LogWarning("Account verification failed: {Status} - {Reason}",
                 response.StatusCode, response.ReasonPhrase);
             return null;
         }
@@ -511,7 +453,7 @@ public class RemitaService : IRemitaService
         var response = await _httpClient.SendAsync(httpRequest);
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogWarning("Mandate creation failed: {Status} - {Reason}", 
+            _logger.LogWarning("Mandate creation failed: {Status} - {Reason}",
                 response.StatusCode, response.ReasonPhrase);
             return null;
         }
@@ -520,7 +462,7 @@ public class RemitaService : IRemitaService
         {
             var responseContent = await response.Content.ReadAsStringAsync();
             var result = JsonSerializer.Deserialize<CreateMandateResponseDto>(responseContent);
-            
+
             // Update loan with mandate ID if successful
             if (result != null && !string.IsNullOrEmpty(result.MandateId))
             {
@@ -592,7 +534,7 @@ public class RemitaService : IRemitaService
         var response = await _httpClient.SendAsync(httpRequest);
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogWarning("Disbursement failed: {Status} - {Reason}", 
+            _logger.LogWarning("Disbursement failed: {Status} - {Reason}",
                 response.StatusCode, response.ReasonPhrase);
             return null;
         }
@@ -601,7 +543,7 @@ public class RemitaService : IRemitaService
         {
             var responseContent = await response.Content.ReadAsStringAsync();
             var result = JsonSerializer.Deserialize<DisbursementResponseDto>(responseContent);
-            
+
             // Update loan status if successful
             if (result != null && result.TransactionStatus == "SUCCESS")
             {
@@ -673,7 +615,7 @@ public class RemitaService : IRemitaService
         var response = await _httpClient.SendAsync(httpRequest);
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogWarning("Repayment collection failed: {Status} - {Reason}", 
+            _logger.LogWarning("Repayment collection failed: {Status} - {Reason}",
                 response.StatusCode, response.ReasonPhrase);
             return null;
         }
@@ -682,11 +624,11 @@ public class RemitaService : IRemitaService
         {
             var responseContent = await response.Content.ReadAsStringAsync();
             var result = JsonSerializer.Deserialize<RepaymentCollectionResponseDto>(responseContent);
-            
+
             // Log repayment attempt
             if (result != null)
             {
-                _logger.LogInformation("Repayment collection processed for loan {LoanId}: {Status}", 
+                _logger.LogInformation("Repayment collection processed for loan {LoanId}: {Status}",
                     loanId, result.CollectionStatus);
             }
 
@@ -723,7 +665,7 @@ public class RemitaService : IRemitaService
         var response = await _httpClient.SendAsync(httpRequest);
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogWarning("Transaction status check failed: {Status} - {Reason}", 
+            _logger.LogWarning("Transaction status check failed: {Status} - {Reason}",
                 response.StatusCode, response.ReasonPhrase);
             return null;
         }
@@ -764,7 +706,7 @@ public class RemitaService : IRemitaService
         var response = await _httpClient.SendAsync(httpRequest);
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogWarning("Banks list request failed: {Status} - {Reason}", 
+            _logger.LogWarning("Banks list request failed: {Status} - {Reason}",
                 response.StatusCode, response.ReasonPhrase);
             return null;
         }
@@ -819,7 +761,7 @@ public class RemitaService : IRemitaService
         var response = await _httpClient.SendAsync(httpRequest);
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogWarning("Stop mandate request failed: {Status} - {Reason}", 
+            _logger.LogWarning("Stop mandate request failed: {Status} - {Reason}",
                 response.StatusCode, response.ReasonPhrase);
             return null;
         }
@@ -828,15 +770,15 @@ public class RemitaService : IRemitaService
         {
             var responseContent = await response.Content.ReadAsStringAsync();
             var result = JsonSerializer.Deserialize<StopMandateResponseDto>(responseContent);
-            
+
             // Update loan mandate status if successful
             if (result != null && result.Status == "SUCCESS")
             {
                 loan.MandateStatus = "STOPPED";
                 loan.MandateStoppedDate = DateTime.UtcNow;
                 await _cRepo.UpdateLoanAsync(loan);
-                
-                _logger.LogInformation("Mandate stopped for loan {LoanId}: {MandateId}", 
+
+                _logger.LogInformation("Mandate stopped for loan {LoanId}: {MandateId}",
                     loanId, loan.MandateId);
             }
 
@@ -853,7 +795,7 @@ public class RemitaService : IRemitaService
     {
         try
         {
-            _logger.LogInformation("Processing Remita webhook notification: {Type} - {TransactionRef}", 
+            _logger.LogInformation("Processing Remita webhook notification: {Type} - {TransactionRef}",
                 notification.NotificationType, notification.TransactionRef);
 
             // Verify webhook authenticity using hash
@@ -861,10 +803,10 @@ public class RemitaService : IRemitaService
             {
                 var expectedHash = HashUtils.ComputeSha512Hash(
                     $"{notification.MerchantId}{notification.ServiceTypeId}{notification.Amount}{_settings.ApiKey}");
-                
+
                 if (notification.Hash != expectedHash)
                 {
-                    _logger.LogWarning("Webhook hash verification failed for transaction: {TransactionRef}", 
+                    _logger.LogWarning("Webhook hash verification failed for transaction: {TransactionRef}",
                         notification.TransactionRef);
                     return false;
                 }
@@ -894,7 +836,7 @@ public class RemitaService : IRemitaService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing webhook notification: {TransactionRef}", 
+            _logger.LogError(ex, "Error processing webhook notification: {TransactionRef}",
                 notification.TransactionRef);
             return false;
         }
@@ -914,8 +856,8 @@ public class RemitaService : IRemitaService
             loan.MandateStatus = notification.Status;
             loan.MandateActivationDate = notification.TransactionDate;
             await _cRepo.UpdateLoanAsync(loan);
-            
-            _logger.LogInformation("Updated mandate status for loan {LoanId}: {Status}", 
+
+            _logger.LogInformation("Updated mandate status for loan {LoanId}: {Status}",
                 loan.Id, notification.Status);
         }
     }
@@ -938,8 +880,8 @@ public class RemitaService : IRemitaService
             }
 
             await _cRepo.UpdateLoanAsync(loan);
-            
-            _logger.LogInformation("Updated disbursement status for loan {LoanId}: {Status}", 
+
+            _logger.LogInformation("Updated disbursement status for loan {LoanId}: {Status}",
                 loan.Id, notification.Status);
         }
     }
@@ -968,8 +910,8 @@ public class RemitaService : IRemitaService
             };
 
             await _cRepo.CreateRepaymentAsync(repayment);
-            
-            _logger.LogInformation("Created repayment record for loan {LoanId}: {Amount}", 
+
+            _logger.LogInformation("Created repayment record for loan {LoanId}: {Amount}",
                 loan.Id, notification.Amount);
         }
     }
@@ -977,14 +919,106 @@ public class RemitaService : IRemitaService
     private Task ProcessTransactionStatusUpdateNotification(RemitaWebhookNotificationDto notification)
     {
         // Log the status update for monitoring purposes
-        _logger.LogInformation("Transaction status update: {TransactionRef} - {Status}", 
+        _logger.LogInformation("Transaction status update: {TransactionRef} - {Status}",
             notification.TransactionRef, notification.Status);
-            
+
         // Additional processing can be added here based on business requirements
         return Task.CompletedTask;
     }
 
-    public async Task<RemitaSalaryHistoryResponseDto?> GetBorrowerSalaryHistoryAsync(string accountNumber, string bankCode, string bvn)
+    public async Task<ActivateMandateViaPaymentResponseDto?> ActivateMandateViaPaymentAsync(Guid loanId, ActivateMandateViaPaymentRequestDto request, string? userId = null)
+    {
+        var loan = await _cRepo.GetAllLoanInfoByLoanId(loanId);
+        if (loan == null)
+        {
+            _logger.LogError("Loan not found: {LoanId}", loanId);
+            return null;
+        }
+
+        if (string.IsNullOrEmpty(_settings.ConnectGatewayBaseUrl))
+        {
+            _logger.LogError("ConnectGatewayBaseUrl is not configured");
+            throw new InvalidOperationException("Connect Gateway BaseUrl is not configured");
+        }
+
+        if (string.IsNullOrEmpty(_settings.SecretKey))
+        {
+            _logger.LogError("SecretKey is not configured for Connect Gateway");
+            throw new InvalidOperationException("Connect Gateway SecretKey is not configured");
+        }
+
+        // Get borrower application for account information
+        var borrowerApplication = await _db.BorrowerApplications
+            .FirstOrDefaultAsync(ba => ba.LoanId == loanId);
+
+        if (borrowerApplication == null)
+        {
+            _logger.LogError("Borrower application not found for loan: {LoanId}", loanId);
+            return null;
+        }
+
+        // Build payload
+        var payload = new
+        {
+            rrr = request.Rrr,
+            transactionRef = request.TransactionRef,
+            amount = request.Amount,
+            metadata = new
+            {
+                payerAccountNumber = request.Metadata?.PayerAccountNumber ?? borrowerApplication.AccountNo ?? string.Empty
+            }
+        };
+
+        var url = $"{_settings.ConnectGatewayBaseUrl.TrimEnd('/')}/services/connect-gateway/api/v1/biller/process";
+        var httpRequest = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+        };
+
+        // Add Connect Gateway specific headers
+        httpRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        httpRequest.Headers.Add("secretKey", _settings.SecretKey);
+
+        _logger.LogInformation("Sending mandate activation request to Connect Gateway for loan: {LoanId}, RRR: {RRR}",
+            loanId, request.Rrr);
+
+        var response = await _httpClient.SendAsync(httpRequest);
+        var responseContent = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogError("Connect Gateway mandate activation failed. Status: {Status}, Response: {Response}",
+                response.StatusCode, responseContent);
+            return null;
+        }
+
+        try
+        {
+            var result = JsonSerializer.Deserialize<ActivateMandateViaPaymentResponseDto>(responseContent, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+            // Update loan with activation details if successful
+            if (result != null && result.Status.Equals("success", StringComparison.OrdinalIgnoreCase))
+            {
+                loan.MandateStatus = "ACTIVE";
+                loan.MandateActivationDate = DateTime.UtcNow;
+                await _cRepo.UpdateLoanAsync(loan);
+
+                _logger.LogInformation("Mandate activated successfully for loan: {LoanId}", loanId);
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error parsing Connect Gateway response for loan: {LoanId}", loanId);
+            return null;
+        }
+    }
+
+    public async Task<RemitaSalaryHistoryResponseDto?> GetBorrowerSalaryHistoryAsync(string accountNumber, string bankCode, string bvn, string firstName = "", string lastName = "", string middleName = "", string authorisationCode = "", string authorisationChannel = "USSD")
     {
         // Return mock data when UseLiveData is false
         if (!_settings.UseLiveData)
@@ -995,36 +1029,42 @@ public class RemitaService : IRemitaService
 
         try
         {
-            var accessToken = await GetAccessTokenAsync();
-            if (accessToken == null)
-            {
-                _logger.LogError("Failed to get access token for salary history");
-                return null;
-            }
-
             var requestId = Guid.NewGuid().ToString();
-            var hash = HashUtils.ComputeSha512Hash($"{_settings.MerchantId}{accountNumber}{bankCode}{_settings.ApiKey}");
+            
+            // Build Remita Authorization header: remitaConsumerKey={apiKey},remitaConsumerToken={hash}
+            // Hash = SHA512(apiKey + requestId + apiToken)
+            var apiHash = HashUtils.ComputeSha512Hash($"{_settings.ApiKey}{requestId}{_settings.ApiToken}");
+            var authorizationHeader = $"remitaConsumerKey={_settings.ApiKey},remitaConsumerToken={apiHash}";
 
+            // Build payload matching Remita specification
             var payload = new
             {
-                merchantId = _settings.MerchantId,
-                accountNumber,
-                bankCode,
-                bvn,
-                hash,
-                requestId
+                authorisationCode = authorisationCode,
+                firstName = firstName,
+                lastName = lastName,
+                middleName = middleName,
+                accountNumber = accountNumber,
+                bankCode = bankCode,
+                bvn = bvn,
+                authorisationChannel = authorisationChannel
             };
 
-            using var httpClient = new HttpClient();
-            httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
-            httpClient.DefaultRequestHeaders.Add("Content-Type", "application/json");
+            var requestUrl = BuildUrl("/send/api/loansvc/data/api/v2/payday/salary/history/provideCustomerDetails");
+            var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUrl)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+            };
 
-            var jsonPayload = JsonSerializer.Serialize(payload);
-            var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+            // Add headers matching Remita specification
+            httpRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            httpRequest.Headers.Add("API_KEY", _settings.ApiKey);
+            httpRequest.Headers.Add("MERCHANT_ID", _settings.MerchantId);
+            httpRequest.Headers.Add("REQUEST_ID", requestId);
+            httpRequest.Headers.Add("AUTHORIZATION", authorizationHeader);
 
-            var apiUrl = $"{_settings.BaseUrl}/v1/salary/history/direct";
-            var response = await httpClient.PostAsync(apiUrl, content);
+            _logger.LogInformation("Sending salary history request to: {Url}", requestUrl);
 
+            var response = await _httpClient.SendAsync(httpRequest);
             if (response.IsSuccessStatusCode)
             {
                 var responseContent = await response.Content.ReadAsStringAsync();
@@ -1039,7 +1079,7 @@ public class RemitaService : IRemitaService
             else
             {
                 var errorContent = await response.Content.ReadAsStringAsync();
-                _logger.LogError("Failed to get salary history. Status: {StatusCode}, Response: {Response}", 
+                _logger.LogError("Failed to get salary history. Status: {StatusCode}, Response: {Response}",
                     response.StatusCode, errorContent);
                 return null;
             }
@@ -1056,7 +1096,7 @@ public class RemitaService : IRemitaService
     private BanksResponseDto GetMockBanks()
     {
         _logger.LogInformation("Returning mock banks data");
-        
+
         return new BanksResponseDto
         {
             Status = "success",
@@ -1082,7 +1122,7 @@ public class RemitaService : IRemitaService
     private SalaryHistoryResponse GetMockSalaryHistory(SalaryHistoryRequestDto request)
     {
         _logger.LogInformation("Returning mock salary history for BVN: {BVN}", request.Bvn);
-        
+
         return new SalaryHistoryResponse
         {
             Status = "success",
@@ -1098,7 +1138,7 @@ public class RemitaService : IRemitaService
     private AccountVerificationResponseDto GetMockAccountVerification(AccountVerificationRequestDto request)
     {
         _logger.LogInformation("Returning mock account verification for Account: {Account}", request.AccountNumber);
-        
+
         return new AccountVerificationResponseDto
         {
             Status = "success",
@@ -1121,7 +1161,7 @@ public class RemitaService : IRemitaService
     private CreateMandateResponseDto GetMockMandateCreation(CreateMandateRequestDto request)
     {
         _logger.LogInformation("Returning mock mandate creation for Payer: {Payer}", request.PayerName);
-        
+
         return new CreateMandateResponseDto
         {
             Status = "success",
@@ -1149,7 +1189,7 @@ public class RemitaService : IRemitaService
     private DisbursementResponseDto GetMockDisbursement(RemitaDisbursementRequestDto request)
     {
         _logger.LogInformation("Returning mock disbursement for Account: {Account}", request.BeneficiaryAccount);
-        
+
         return new DisbursementResponseDto
         {
             Status = "success",
@@ -1176,7 +1216,7 @@ public class RemitaService : IRemitaService
     private RepaymentCollectionResponseDto GetMockRepaymentCollection(RepaymentCollectionRequestDto request)
     {
         _logger.LogInformation("Returning mock repayment collection");
-        
+
         return new RepaymentCollectionResponseDto
         {
             Status = "success",
@@ -1202,7 +1242,7 @@ public class RemitaService : IRemitaService
     private TransactionStatusResponseDto GetMockTransactionStatus(string transactionRef)
     {
         _logger.LogInformation("Returning mock transaction status for: {Ref}", transactionRef);
-        
+
         return new TransactionStatusResponseDto
         {
             Status = "success",
@@ -1233,7 +1273,7 @@ public class RemitaService : IRemitaService
     private RemitaSalaryHistoryResponseDto GetMockBorrowerSalaryHistory(string accountNumber, string bankCode, string bvn)
     {
         _logger.LogInformation("Returning mock borrower salary history for Account: {Account}", accountNumber);
-        
+
         return new RemitaSalaryHistoryResponseDto
         {
             Status = "success",
@@ -1256,57 +1296,57 @@ public class RemitaService : IRemitaService
                 SalaryCount = "6",
                 SalaryPaymentDetails = new List<RemitaSalaryPaymentDto>
                 {
-                    new RemitaSalaryPaymentDto 
-                    { 
-                        PaymentDate = DateTime.UtcNow.AddDays(-15).ToString("yyyy-MM-dd"), 
-                        Amount = "350000", 
-                        AccountNumber = accountNumber, 
-                        BankCode = bankCode 
+                    new RemitaSalaryPaymentDto
+                    {
+                        PaymentDate = DateTime.UtcNow.AddDays(-15).ToString("yyyy-MM-dd"),
+                        Amount = "350000",
+                        AccountNumber = accountNumber,
+                        BankCode = bankCode
                     },
-                    new RemitaSalaryPaymentDto 
-                    { 
-                        PaymentDate = DateTime.UtcNow.AddMonths(-1).AddDays(-15).ToString("yyyy-MM-dd"), 
-                        Amount = "350000", 
-                        AccountNumber = accountNumber, 
-                        BankCode = bankCode 
+                    new RemitaSalaryPaymentDto
+                    {
+                        PaymentDate = DateTime.UtcNow.AddMonths(-1).AddDays(-15).ToString("yyyy-MM-dd"),
+                        Amount = "350000",
+                        AccountNumber = accountNumber,
+                        BankCode = bankCode
                     },
-                    new RemitaSalaryPaymentDto 
-                    { 
-                        PaymentDate = DateTime.UtcNow.AddMonths(-2).AddDays(-15).ToString("yyyy-MM-dd"), 
-                        Amount = "350000", 
-                        AccountNumber = accountNumber, 
-                        BankCode = bankCode 
+                    new RemitaSalaryPaymentDto
+                    {
+                        PaymentDate = DateTime.UtcNow.AddMonths(-2).AddDays(-15).ToString("yyyy-MM-dd"),
+                        Amount = "350000",
+                        AccountNumber = accountNumber,
+                        BankCode = bankCode
                     },
-                    new RemitaSalaryPaymentDto 
-                    { 
-                        PaymentDate = DateTime.UtcNow.AddMonths(-3).AddDays(-15).ToString("yyyy-MM-dd"), 
-                        Amount = "350000", 
-                        AccountNumber = accountNumber, 
-                        BankCode = bankCode 
+                    new RemitaSalaryPaymentDto
+                    {
+                        PaymentDate = DateTime.UtcNow.AddMonths(-3).AddDays(-15).ToString("yyyy-MM-dd"),
+                        Amount = "350000",
+                        AccountNumber = accountNumber,
+                        BankCode = bankCode
                     },
-                    new RemitaSalaryPaymentDto 
-                    { 
-                        PaymentDate = DateTime.UtcNow.AddMonths(-4).AddDays(-15).ToString("yyyy-MM-dd"), 
-                        Amount = "350000", 
-                        AccountNumber = accountNumber, 
-                        BankCode = bankCode 
+                    new RemitaSalaryPaymentDto
+                    {
+                        PaymentDate = DateTime.UtcNow.AddMonths(-4).AddDays(-15).ToString("yyyy-MM-dd"),
+                        Amount = "350000",
+                        AccountNumber = accountNumber,
+                        BankCode = bankCode
                     },
-                    new RemitaSalaryPaymentDto 
-                    { 
-                        PaymentDate = DateTime.UtcNow.AddMonths(-5).AddDays(-15).ToString("yyyy-MM-dd"), 
-                        Amount = "350000", 
-                        AccountNumber = accountNumber, 
-                        BankCode = bankCode 
+                    new RemitaSalaryPaymentDto
+                    {
+                        PaymentDate = DateTime.UtcNow.AddMonths(-5).AddDays(-15).ToString("yyyy-MM-dd"),
+                        Amount = "350000",
+                        AccountNumber = accountNumber,
+                        BankCode = bankCode
                     }
                 },
                 LoanHistoryDetails = new List<RemitaLoanHistoryDto>
                 {
-                    new RemitaLoanHistoryDto 
-                    { 
-                        LoanProvider = "Mock Bank", 
-                        LoanAmount = 500000, 
-                        OutstandingAmount = 0, 
-                        Status = "Paid", 
+                    new RemitaLoanHistoryDto
+                    {
+                        LoanProvider = "Mock Bank",
+                        LoanAmount = 500000,
+                        OutstandingAmount = 0,
+                        Status = "Paid",
                         LoanDisbursementDate = DateTime.UtcNow.AddYears(-1).ToString("yyyy-MM-dd"),
                         RepaymentAmount = 50000,
                         RepaymentFreq = "Monthly"

@@ -24,5 +24,8 @@ public interface IRemitaService
     Task<bool> ProcessWebhookNotificationAsync(RemitaWebhookNotificationDto notification);
 
     // New method for borrower onboarding salary history
-    Task<RemitaSalaryHistoryResponseDto?> GetBorrowerSalaryHistoryAsync(string accountNumber, string bankCode, string bvn);
+    Task<RemitaSalaryHistoryResponseDto?> GetBorrowerSalaryHistoryAsync(string accountNumber, string bankCode, string bvn, string firstName = "", string lastName = "", string middleName = "", string authorisationCode = "", string authorisationChannel = "USSD");
+    
+    // Connect Gateway - Mandate Activation via Payment
+    Task<ActivateMandateViaPaymentResponseDto?> ActivateMandateViaPaymentAsync(Guid loanId, ActivateMandateViaPaymentRequestDto request, string? userId = null);
 }

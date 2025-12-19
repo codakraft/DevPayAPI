@@ -15,7 +15,7 @@ namespace LendingSolution.Application.Services.Implementations;
 
 public class MonoService : IMonoService
 {
-    private readonly MonoSettings _settings;
+    private readonly MonoSettings _settings = null!;
     private readonly HttpClient _httpClient;
     private readonly ILogger<MonoService> _logger;
     private readonly ICombinedRepository _cRepo;
@@ -698,7 +698,7 @@ public class MonoService : IMonoService
     }
 
     // Private Helper Methods
-    private string GenerateBvnHash(string bvn)
+    private static string GenerateBvnHash(string bvn)
     {
         using var sha256 = System.Security.Cryptography.SHA256.Create();
         var hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(bvn));
@@ -822,6 +822,59 @@ public class MonoService : IMonoService
         analysis.PositiveFactors = positiveFactors;
 
         return analysis;
+    }
+
+    public async Task<MonoCreditworthinessResponseDto?> CheckCreditworthinessAsync(MonoCreditworthinessRequestDto request, string? userId = null)
+    {
+        try
+        {
+            // Build the request payload
+            var payload = new
+            {
+                bvn = request.Bvn,
+                principal = request.Principal,
+                interest_rate = request.InterestRate,
+                term = request.Term,
+                run_credit_check = request.RunCreditCheck,
+                existing_loans = request.ExistingLoans
+            };
+
+            // Create HTTP request
+            var httpRequest = new HttpRequestMessage(HttpMethod.Post, BuildUrl("/v2/accounts/id/creditworthiness"))
+            {
+                Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+            };
+
+            // Add headers
+            AddMonoHeaders(httpRequest);
+
+            _logger.LogInformation("Sending Mono creditworthiness check request for BVN: {BVN}", request.Bvn);
+
+            // Send request
+            var response = await _httpClient.SendAsync(httpRequest);
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("Mono creditworthiness check failed. Status: {Status}, Response: {Response}",
+                    response.StatusCode, responseContent);
+                return null;
+            }
+
+            var result = JsonSerializer.Deserialize<MonoCreditworthinessResponseDto>(responseContent, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+            _logger.LogInformation("Mono creditworthiness check initiated successfully for BVN: {BVN}", request.Bvn);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking creditworthiness for BVN: {BVN}", request.Bvn);
+            return null;
+        }
     }
 
     private void AddMonoHeaders(HttpRequestMessage request)

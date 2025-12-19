@@ -588,3 +588,67 @@ public class MonoErrorResponseDto
     [JsonPropertyName("errors")]
     public object? Errors { get; set; }
 }
+
+// Creditworthiness Check DTOs
+public class MonoCreditworthinessRequestDto
+{
+    [JsonPropertyName("bvn")]
+    public string Bvn { get; set; } = string.Empty;
+    
+    [JsonPropertyName("principal")]
+    public decimal Principal { get; set; }
+    
+    [JsonPropertyName("interest_rate")]
+    public decimal InterestRate { get; set; }
+    
+    [JsonPropertyName("term")]
+    public int Term { get; set; }
+    
+    [JsonPropertyName("run_credit_check")]
+    public bool RunCreditCheck { get; set; } = true;
+    
+    [JsonPropertyName("existing_loans")]
+    public List<MonoExistingLoanDto>? ExistingLoans { get; set; }
+}
+
+public class MonoExistingLoanDto
+{
+    [JsonPropertyName("tenor")]
+    public int Tenor { get; set; }
+    
+    [JsonPropertyName("date_opened")]
+    public string DateOpened { get; set; } = string.Empty;
+    
+    [JsonPropertyName("closed_date")]
+    public string? ClosedDate { get; set; }
+    
+    [JsonPropertyName("institution")]
+    public string Institution { get; set; } = string.Empty;
+    
+    [JsonPropertyName("currency")]
+    public string Currency { get; set; } = "NGN";
+    
+    [JsonPropertyName("repayment_amount")]
+    public decimal RepaymentAmount { get; set; }
+    
+    [JsonPropertyName("opening_balance")]
+    public decimal OpeningBalance { get; set; }
+    
+    [JsonPropertyName("repayment_schedule")]
+    public List<Dictionary<string, string>>? RepaymentSchedule { get; set; }
+}
+
+public class MonoCreditworthinessResponseDto
+{
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = string.Empty;
+    
+    [JsonPropertyName("message")]
+    public string Message { get; set; } = string.Empty;
+    
+    [JsonPropertyName("timestamp")]
+    public DateTime Timestamp { get; set; }
+    
+    [JsonPropertyName("data")]
+    public object? Data { get; set; }
+}

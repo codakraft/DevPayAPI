@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace LendingSolution.Core.Dtos;
 
@@ -48,4 +49,44 @@ public class CreateMandateRequestDto
 
     [StringLength(200)]
     public string? Description { get; set; }
+}
+
+// Connect Gateway Mandate Activation DTOs
+public class ActivateMandateViaPaymentRequestDto
+{
+    [JsonPropertyName("rrr")]
+    [Required]
+    [StringLength(100)]
+    public string Rrr { get; set; } = string.Empty;
+    
+    [JsonPropertyName("transactionRef")]
+    [Required]
+    [StringLength(100)]
+    public string TransactionRef { get; set; } = string.Empty;
+    
+    [JsonPropertyName("amount")]
+    [Required]
+    [Range(0.01, double.MaxValue)]
+    public decimal Amount { get; set; }
+    
+    [JsonPropertyName("metadata")]
+    public ActivateMandateMetadataDto? Metadata { get; set; }
+}
+
+public class ActivateMandateMetadataDto
+{
+    [JsonPropertyName("payerAccountNumber")]
+    public string PayerAccountNumber { get; set; } = string.Empty;
+}
+
+public class ActivateMandateViaPaymentResponseDto
+{
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = string.Empty;
+    
+    [JsonPropertyName("message")]
+    public string Message { get; set; } = string.Empty;
+    
+    [JsonPropertyName("data")]
+    public object? Data { get; set; }
 }

@@ -22,6 +22,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     private readonly IWalletService _walletService;
     private readonly ISettingsService _settingsService;
     private readonly IRemitaService _remitaService;
+    private readonly IMonoService _monoService;
     private readonly ISalaryEligibilityService _salaryEligibilityService;
     private readonly IConfiguration _configuration;
     private readonly ILogger<BorrowerOnboardingService> _logger;
@@ -37,6 +38,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         IWalletService walletService,
         ISettingsService settingsService,
         IRemitaService remitaService,
+        IMonoService monoService,
         ISalaryEligibilityService salaryEligibilityService,
         IConfiguration configuration,
         ILogger<BorrowerOnboardingService> logger)
@@ -51,6 +53,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         _walletService = walletService;
         _settingsService = settingsService;
         _remitaService = remitaService;
+        _monoService = monoService;
         _salaryEligibilityService = salaryEligibilityService;
         _configuration = configuration;
         _logger = logger;
@@ -167,11 +170,16 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         var company = await _companyRepository.GetCompanyById(application.CompanyId);
         var companyName = company?.Name ?? "Unknown Company";
 
-        // EARLY VALIDATION: Check company wallet balance before proceeding
+        // Check active data provider
+        var activeProvider = _configuration["ActiveDataProvider"] ?? "Remita";
+        _logger.LogInformation("Active data provider for BVN verification: {Provider}", activeProvider);
+
+        // Check company wallet balance before proceeding (both Remita OTP and Mono BVN lookup require fees)
         try
         {
             var settings = await _settingsService.GetSettingsAsync();
-            await _walletService.ValidateCompanyBalanceForFeeAsync(application.CompanyId, settings.OtpFee, "BVN OTP");
+            var feeDescription = activeProvider.Equals("Mono", StringComparison.OrdinalIgnoreCase) ? "Mono BVN Lookup" : "BVN OTP";
+            await _walletService.ValidateCompanyBalanceForFeeAsync(application.CompanyId, settings.OtpFee, feeDescription);
         }
         catch (AppException ex) when (ex.StatusCode == 400 || ex.StatusCode == 404)
         {
@@ -199,8 +207,70 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
         await _borrowerRepository.UpdateAsync(application);
 
-        // Generate BVN OTP
-        await GenerateBvnOtpAsync(new GenerateBvnOtpRequestDto { Email = application.Email });
+        // If Mono is active provider, use Mono BVN lookup directly (no OTP needed)
+        if (activeProvider.Equals("Mono", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogInformation("Using Mono BVN lookup for application {ApplicationId}", application.Id);
+            
+            try
+            {
+                var bvnLookupRequest = new MonoBvnLookupRequestDto
+                {
+                    Bvn = request.BVN
+                };
+                
+                var bvnLookupResponse = await _monoService.BvnLookupAsync(bvnLookupRequest);
+                
+                if (bvnLookupResponse == null || bvnLookupResponse.Status != "successful")
+                {
+                    _logger.LogWarning("Mono BVN lookup failed for application {ApplicationId}", application.Id);
+                    throw new AppException("BVN verification failed. Please ensure your BVN is correct.", 400);
+                }
+                
+                // Deduct BVN lookup fee from company wallet (Mono BVN service fee, not OTP fee)
+                try
+                {
+                    var settings = await _settingsService.GetSettingsAsync();
+                    // Use OTP fee amount as BVN lookup fee (can be configured separately in future)
+                    await _walletService.TransferFundsAsync(
+                        (await _walletService.GetWalletByCompanyIdAsync(application.CompanyId))?.Id ?? Guid.Empty,
+                        (await _walletService.GetSuperAdminWalletAsync())?.Id ?? Guid.Empty,
+                        settings.OtpFee,
+                        $"Mono BVN Lookup - Application {application.Id}",
+                        null
+                    );
+                    _logger.LogInformation("BVN lookup fee deducted for application {ApplicationId}", application.Id);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to deduct BVN lookup fee for application {ApplicationId}, Company {CompanyId}",
+                        application.Id, application.CompanyId);
+                    // Don't throw - fee deduction failure shouldn't block BVN verification at this point
+                }
+                
+                // Mark BVN as verified since Mono validated it
+                application.BvnVerifiedAt = DateTime.UtcNow;
+                application.CurrentStep = BorrowerOnboardingStep.Step2B_BvnValidated;
+                await _borrowerRepository.UpdateAsync(application);
+                
+                _logger.LogInformation("Mono BVN lookup successful for application {ApplicationId}. BVN automatically verified.", application.Id);
+            }
+            catch (AppException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during Mono BVN lookup for application {ApplicationId}", application.Id);
+                throw new AppException("Unable to verify BVN. Please try again later.", 500);
+            }
+        }
+        else
+        {
+            // For Remita: Generate BVN OTP
+            _logger.LogInformation("Using Remita BVN OTP verification for application {ApplicationId}", application.Id);
+            await GenerateBvnOtpAsync(new GenerateBvnOtpRequestDto { Email = application.Email });
+        }
 
         return new BorrowerStep2ResponseDto();
     }

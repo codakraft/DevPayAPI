@@ -31,4 +31,7 @@ public interface IMonoService
     // Credit History
     Task<MonoCreditHistoryResponseDto?> GetCreditHistoryAsync(string bvn, string provider = "xds", string? userId = null);
     Task<MonoCreditAnalysisResultDto?> AnalyzeCreditHistoryAsync(string bvn, string provider = "xds", string? userId = null);
+    
+    // Creditworthiness Check
+    Task<MonoCreditworthinessResponseDto?> CheckCreditworthinessAsync(MonoCreditworthinessRequestDto request, string? userId = null);
 }
