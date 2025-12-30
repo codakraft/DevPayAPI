@@ -138,10 +138,15 @@ public class RemitaService : IRemitaService
                     PropertyNameCaseInsensitive = true
                 });
 
-                if (result?.Status?.ToLower() == "fail")
+                // Validate Remita response - check multiple indicators of failure
+                if (result == null || 
+                    result.Status?.ToLower() == "fail" || 
+                    result.ResponseCode != "00" || 
+                    !result.HasData || 
+                    result.Data == null)
                 {
-                    _logger.LogWarning("Remita returned failure status for account {AccountNumber}: {ResponseMsg}",
-                        accountNumber, result.ResponseMsg);
+                    _logger.LogWarning("Remita returned failure for account {AccountNumber}. Status: {Status}, Code: {Code}, Message: {Message}, HasData: {HasData}",
+                        accountNumber, result?.Status, result?.ResponseCode, result?.ResponseMsg, result?.HasData);
                     return null;
                 }
 
@@ -217,6 +222,9 @@ public class RemitaService : IRemitaService
             var response = await _httpClient.SendAsync(httpRequest);
             var responseContent = await response.Content.ReadAsStringAsync();
 
+            _logger.LogInformation("Create Mandate Response - Status: {StatusCode}, Content: {Response}",
+                response.StatusCode, responseContent);
+
             if (response.IsSuccessStatusCode)
             {
                 var result = JsonSerializer.Deserialize<RemitaCreateMandateResponseDto>(responseContent, new JsonSerializerOptions
@@ -224,14 +232,20 @@ public class RemitaService : IRemitaService
                     PropertyNameCaseInsensitive = true
                 });
 
-                if (result?.Status?.ToLower() == "fail")
+                // Validate Remita response - check multiple indicators of failure
+                if (result == null || 
+                    result.Status?.ToLower() == "fail" || 
+                    result.ResponseCode != "00" || 
+                    !result.HasData || 
+                    result.Data == null)
                 {
-                    _logger.LogWarning("Remita returned failure status for customer {CustomerId}: {ResponseMsg}",
-                        customerId, result.ResponseMsg);
+                    _logger.LogWarning("Remita returned failure for customer {CustomerId}. Status: {Status}, Code: {Code}, Message: {Message}, HasData: {HasData}",
+                        customerId, result?.Status, result?.ResponseCode, result?.ResponseMsg, result?.HasData);
                     return null;
                 }
 
-                _logger.LogInformation("Successfully created mandate for customer: {CustomerId}", customerId);
+                _logger.LogInformation("Successfully created mandate for customer: {CustomerId}, MandateReference: {MandateReference}",
+                    customerId, result.Data?.MandateReference);
                 return result;
             }
             else
@@ -290,10 +304,13 @@ public class RemitaService : IRemitaService
                     PropertyNameCaseInsensitive = true
                 });
 
-                if (result?.Status?.ToLower() == "fail")
+                // Validate Remita response - check multiple indicators of failure
+                if (result == null || 
+                    result.Status?.ToLower() == "fail" || 
+                    result.Data == null)
                 {
-                    _logger.LogWarning("Remita returned failure status for stopping mandate {MandateReference}: {ResponseMsg}",
-                        mandateReference, result.ResponseMsg);
+                    _logger.LogWarning("Remita returned failure for stopping mandate {MandateReference}. Status: {Status}, Message: {Message}",
+                        mandateReference, result?.Status, result?.Data?.Status);
                     return null;
                 }
 
@@ -356,10 +373,13 @@ public class RemitaService : IRemitaService
                     PropertyNameCaseInsensitive = true
                 });
 
-                if (result?.Status?.ToLower() == "fail")
+                // Validate Remita response - check multiple indicators of failure
+                if (result == null || 
+                    result.Status?.ToLower() == "fail" || 
+                    result.Data == null)
                 {
-                    _logger.LogWarning("Remita returned failure status for mandate history {MandateReference}: {ResponseMsg}",
-                        mandateReference, result.ResponseMsg);
+                    _logger.LogWarning("Remita returned failure for mandate history {MandateReference}. Status: {Status}",
+                        mandateReference, result?.Status);
                     return null;
                 }
 
