@@ -5,27 +5,9 @@ namespace LendingSolution.Application.Services.Interfaces;
 
 public interface IRemitaService
 {
-    // Existing methods
-    Task<object?> GetSalaryHistory(Guid loanId, ReviewHistoryRequestDto body);
-    Task<MandateResponse?> GenerateMandate(Guid LoanId, SubmitRequestDto body);
-    Task<InitiateMandateOtpResponseDto?> Initiate(Guid loanId);
-    Task<ValidateMandateOtpResponseDto?> ValidateMandate(Guid loanId, ValidateMandateOtpRequestDto body);
-    Task<DebitInstructionResponseDto?> DebitInstruction(Guid loanId, DebitInstructionRequestDto body);
-
-    // New methods for RemitaController
-    Task<SalaryHistoryResponse?> GetSalaryHistoryByBvnAsync(SalaryHistoryRequestDto request);
-    Task<AccountVerificationResponseDto?> VerifyAccountAsync(AccountVerificationRequestDto request);
-    Task<CreateMandateResponseDto?> CreateLoanMandateAsync(Guid loanId, CreateMandateRequestDto request, string? userId);
-    Task<DisbursementResponseDto?> ProcessLoanDisbursementAsync(Guid loanId, RemitaDisbursementRequestDto request, string? userId);
-    Task<RepaymentCollectionResponseDto?> CollectRepaymentAsync(Guid loanId, RepaymentCollectionRequestDto request, string? userId);
-    Task<TransactionStatusResponseDto?> GetTransactionStatusAsync(string transactionRef);
+    Task<RemitaSalaryHistoryResponseDto?> GetSalaryHistoryAsync(string accountNumber, string bankCode, string bvn, string email, string firstName = "", string lastName = "", string middleName = "", string? authorisationCode = null);
+    Task<RemitaCreateMandateResponseDto?> CreateMandateAsync(string customerId, string phoneNumber, string accountNumber, string loanAmount, string collectionAmount, string dateOfDisbursement, string dateOfCollection, string totalCollectionAmount, string numberOfRepayments, string bankCode, string? authorisationCode = null);
+    Task<RemitaStopMandateResponseDto?> StopMandateAsync(string customerId, string mandateReference, string? authorisationCode = null);
+    Task<RemitaMandateHistoryResponseDto?> GetMandateHistoryAsync(string customerId, string mandateReference, string? authorisationCode = null);
     Task<BanksResponseDto?> GetBanksAsync();
-    Task<StopMandateResponseDto?> StopMandate(Guid loanId);
-    Task<bool> ProcessWebhookNotificationAsync(RemitaWebhookNotificationDto notification);
-
-    // New method for borrower onboarding salary history
-    Task<RemitaSalaryHistoryResponseDto?> GetBorrowerSalaryHistoryAsync(string accountNumber, string bankCode, string bvn, string firstName = "", string lastName = "", string middleName = "", string authorisationCode = "", string authorisationChannel = "USSD");
-    
-    // Connect Gateway - Mandate Activation via Payment
-    Task<ActivateMandateViaPaymentResponseDto?> ActivateMandateViaPaymentAsync(Guid loanId, ActivateMandateViaPaymentRequestDto request, string? userId = null);
 }

@@ -385,10 +385,11 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         _logger.LogInformation("Starting salary history retrieval for application {ApplicationId} - Account:{Account}, Bank:{Bank}, BVN:{BVN}",
             application.Id, application.AccountNo, application.BankCode, application.BVN);
 
-        var salaryHistoryResponse = await _remitaService.GetBorrowerSalaryHistoryAsync(
+        var salaryHistoryResponse = await _remitaService.GetSalaryHistoryAsync(
             application.AccountNo,
             application.BankCode,
-            application.BVN);
+            application.BVN,
+            application.Email);
 
         if (salaryHistoryResponse == null)
         {

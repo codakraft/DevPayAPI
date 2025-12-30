@@ -9,9 +9,14 @@ public class RemitaSettings
     public string ApiKey { get; set; } = string.Empty;
     public string ApiToken { get; set; } = string.Empty;
     public string MerchantId { get; set; } = string.Empty;
-    public string Hash { get; set; } = string.Empty;
+    public string RequestId { get; set; } = string.Empty;
+    public string AuthorizationCode { get; set; } = string.Empty;
     public string ServiceTypeId { get; set; } = string.Empty;
     public string MandateUrl { get; set; } = string.Empty;
+    public string SalaryHistoryEndpoint { get; set; } = string.Empty;
+    public string CreateMandateEndpoint { get; set; } = string.Empty;
+    public string StopMandateEndpoint { get; set; } = string.Empty;
+    public string MandateHistoryEndpoint { get; set; } = string.Empty;
     
     // Connect Gateway settings for mandate activation via payment
     public string ConnectGatewayBaseUrl { get; set; } = string.Empty;

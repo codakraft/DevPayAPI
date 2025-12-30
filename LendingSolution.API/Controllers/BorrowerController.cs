@@ -14,11 +14,13 @@ namespace LendingSolution.API.Controllers;
 public class BorrowerController(
     IBorrowerOnboardingService borrowerOnboardingService,
     IBorrowerApplicationRepository borrowerApplicationRepository,
+    IRemitaService remitaService,
     ILogger<BorrowerController> logger
 ) : Controller
 {
     private readonly IBorrowerOnboardingService _borrowerOnboardingService = borrowerOnboardingService;
     private readonly IBorrowerApplicationRepository _borrowerApplicationRepository = borrowerApplicationRepository;
+    private readonly IRemitaService _remitaService = remitaService;
     private readonly ILogger<BorrowerController> _logger = logger;
 
     // Step 1: Initial borrower registration with basic info
@@ -300,10 +302,10 @@ public class BorrowerController(
         {
             var request = new BorrowerCurrentStepRequestDto { Email = emailOrId };
             var result = await _borrowerOnboardingService.GetCurrentStepAsync(request);
-            
-            _logger.LogInformation("Current step retrieved successfully for {EmailOrId}. Current step: {CurrentStep}", 
+
+            _logger.LogInformation("Current step retrieved successfully for {EmailOrId}. Current step: {CurrentStep}",
                 emailOrId, result.CurrentStep);
-            
+
             return Ok(ApiResponse.Ok("Current step retrieved successfully", result));
         }
         catch (AppException ex)
@@ -341,4 +343,134 @@ public class BorrowerController(
             return StatusCode(500, ApiResponse.Fail("Something went wrong"));
         }
     }
+
+    #region Remita Integration Endpoints
+
+    /// <summary>
+    /// Get borrower salary history from Remita
+    /// </summary>
+    [HttpPost("remita/salary-history")]
+    public async Task<IActionResult> GetSalaryHistory([FromBody] RemitaSalaryHistoryRequestDto request)
+    {
+        try
+        {
+            var result = await _remitaService.GetSalaryHistoryAsync(
+                request.AccountNumber,
+                request.BankCode,
+                request.Bvn,
+                request.Email,
+                request.FirstName,
+                request.LastName,
+                request.MiddleName,
+                string.IsNullOrWhiteSpace(request.AuthorisationCode) ? null : request.AuthorisationCode
+            );
+
+            if (result == null)
+            {
+                return BadRequest(ApiResponse.Fail("Failed to retrieve salary history"));
+            }
+
+            return Ok(ApiResponse.Ok("Salary history retrieved successfully", result.Data!));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving salary history for account {AccountNumber}", request.AccountNumber);
+            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
+        }
+    }
+
+    /// <summary>
+    /// Create a loan mandate in Remita
+    /// </summary>
+    [HttpPost("remita/create-mandate")]
+    public async Task<IActionResult> CreateMandate([FromBody] RemitaCreateMandateRequestDto request)
+    {
+        try
+        {
+            var result = await _remitaService.CreateMandateAsync(
+                request.CustomerId,
+                request.PhoneNumber,
+                request.AccountNumber,
+                request.LoanAmount,
+                request.CollectionAmount,
+                request.DateOfDisbursement,
+                request.DateOfCollection,
+                request.TotalCollectionAmount,
+                request.NumberOfRepayments,
+                request.BankCode,
+                string.IsNullOrWhiteSpace(request.AuthorisationCode) ? null : request.AuthorisationCode
+            );
+
+            if (result == null)
+            {
+                return BadRequest(ApiResponse.Fail("Failed to create mandate"));
+            }
+
+            return Ok(ApiResponse.Ok("Mandate created successfully", result.Data!));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating mandate for customer {CustomerId}", request.CustomerId);
+            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
+        }
+    }
+
+    /// <summary>
+    /// Stop an existing loan mandate in Remita
+    /// </summary>
+    [HttpPost("remita/stop-mandate")]
+    public async Task<IActionResult> StopMandate([FromBody] RemitaStopMandateRequestDto request)
+    {
+        try
+        {
+            var result = await _remitaService.StopMandateAsync(
+                request.CustomerId,
+                request.MandateReference,
+                request.AuthorisationCode
+            );
+
+            if (result == null)
+            {
+                return BadRequest(ApiResponse.Fail("Failed to stop mandate"));
+            }
+
+            return Ok(ApiResponse.Ok("Mandate stopped successfully", result.Data!));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error stopping mandate {MandateReference} for customer {CustomerId}",
+                request.MandateReference, request.CustomerId);
+            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
+        }
+    }
+
+    /// <summary>
+    /// Get mandate payment history from Remita
+    /// </summary>
+    [HttpPost("remita/mandate-history")]
+    public async Task<IActionResult> GetMandateHistory([FromBody] RemitaMandateHistoryRequestDto request)
+    {
+        try
+        {
+            var result = await _remitaService.GetMandateHistoryAsync(
+                request.CustomerId,
+                request.MandateReference,
+                request.AuthorisationCode
+            );
+
+            if (result == null)
+            {
+                return BadRequest(ApiResponse.Fail("Failed to retrieve mandate history"));
+            }
+
+            return Ok(ApiResponse.Ok("Mandate history retrieved successfully", result.Data!));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving mandate history for customer {CustomerId}", request.CustomerId);
+            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
+        }
+    }
+
+    #endregion
 }
