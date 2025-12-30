@@ -405,6 +405,110 @@ public class RemitaService : IRemitaService
         throw new NotImplementedException();
     }
 
+    /// <summary>
+    /// Processes and saves loan collection notification from Remita webhook
+    /// </summary>
+    public async Task<RemitaLoanCollectionNotification?> ProcessLoanCollectionNotificationAsync(RemitaLoanCollectionNotificationDto notification)
+    {
+        try
+        {
+            _logger.LogInformation("Processing Remita loan collection notification - ID: {RemitaId}, MandateRef: {MandateRef}, Amount: {Amount}, Status: {Status}",
+                notification.Id, notification.MandateRef, notification.Amount, notification.PaymentStatus);
+
+            // Check if this notification already exists to avoid duplicates
+            var existingNotification = await _db.RemitaLoanCollectionNotifications
+                .FirstOrDefaultAsync(n => n.RemitaId == notification.Id);
+
+            if (existingNotification != null)
+            {
+                _logger.LogWarning("Notification with RemitaId {RemitaId} already exists. Skipping duplicate.", notification.Id);
+                return existingNotification;
+            }
+
+            // Parse payment date - Remita sends in format "24-08-2021 14:56:53+0000"
+            DateTime? paymentDate = null;
+            if (!string.IsNullOrEmpty(notification.PaymentDate))
+            {
+                try
+                {
+                    // Try parsing the date string - handle different formats
+                    if (DateTime.TryParseExact(notification.PaymentDate, "dd-MM-yyyy HH:mm:sszzz", 
+                        System.Globalization.CultureInfo.InvariantCulture, 
+                        System.Globalization.DateTimeStyles.None, out DateTime parsedDate))
+                    {
+                        paymentDate = parsedDate;
+                    }
+                    else if (DateTime.TryParse(notification.PaymentDate, out DateTime parsedDate2))
+                    {
+                        paymentDate = parsedDate2;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to parse payment date: {PaymentDate}", notification.PaymentDate);
+                }
+            }
+
+            // Parse dateNotificationSent - format "2019-07-10"
+            DateTime? dateNotificationSent = null;
+            if (!string.IsNullOrEmpty(notification.DateNotificationSent))
+            {
+                if (DateTime.TryParse(notification.DateNotificationSent, out DateTime parsedDate))
+                {
+                    dateNotificationSent = parsedDate;
+                }
+            }
+
+            // Parse dateFirstNotificationSent
+            DateTime? dateFirstNotificationSent = null;
+            if (!string.IsNullOrEmpty(notification.DateFirstNotificationSent))
+            {
+                if (DateTime.TryParse(notification.DateFirstNotificationSent, out DateTime parsedDate))
+                {
+                    dateFirstNotificationSent = parsedDate;
+                }
+            }
+
+            // Create new notification entity
+            var loanCollectionNotification = new RemitaLoanCollectionNotification
+            {
+                RemitaId = notification.Id,
+                Amount = notification.Amount,
+                StatusCode = notification.StatusCode,
+                ModuleName = notification.ModuleName,
+                NotificationSent = notification.NotificationSent,
+                DateNotificationSent = dateNotificationSent,
+                FirstNotificationSent = notification.FirstNotificationSent,
+                DateFirstNotificationSent = dateFirstNotificationSent,
+                NetSalary = notification.NetSalary,
+                TotalCredit = notification.TotalCredit,
+                CustomerPhoneNumber = notification.CustomerPhoneNumber,
+                MandateRef = notification.MandateRef,
+                BalanceDue = notification.BalanceDue,
+                CustomerId = notification.CustomerId,
+                RequestId = notification.RequestId,
+                PaymentDate = paymentDate,
+                PaymentStatus = notification.PaymentStatus,
+                StatusReason = notification.StatusReason,
+                RawPayload = JsonSerializer.Serialize(notification)
+            };
+
+            _db.RemitaLoanCollectionNotifications.Add(loanCollectionNotification);
+            await _db.SaveChangesAsync();
+
+            _logger.LogInformation("Successfully saved Remita loan collection notification with ID: {Id}, MandateRef: {MandateRef}",
+                loanCollectionNotification.Id, loanCollectionNotification.MandateRef);
+
+            return loanCollectionNotification;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing loan collection notification for RemitaId: {RemitaId}, MandateRef: {MandateRef}",
+                notification.Id, notification.MandateRef);
+            throw;
+        }
+    }
+
     // Private Helper Methods
     private string GenerateRandomAuthorizationCode()
     {

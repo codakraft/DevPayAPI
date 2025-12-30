@@ -1,5 +1,6 @@
 using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Dtos.Response.Remita;
+using LendingSolution.Core.Models;
 
 namespace LendingSolution.Application.Services.Interfaces;
 
@@ -10,4 +11,5 @@ public interface IRemitaService
     Task<RemitaStopMandateResponseDto?> StopMandateAsync(string customerId, string mandateReference, string? authorisationCode = null);
     Task<RemitaMandateHistoryResponseDto?> GetMandateHistoryAsync(string customerId, string mandateReference, string? authorisationCode = null);
     Task<BanksResponseDto?> GetBanksAsync();
+    Task<RemitaLoanCollectionNotification?> ProcessLoanCollectionNotificationAsync(RemitaLoanCollectionNotificationDto notification);
 }
