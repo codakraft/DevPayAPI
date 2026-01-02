@@ -56,10 +56,28 @@ public class RemitaService : IRemitaService
     {
         try
         {
-            // Always generate new authorization code for each request
-            string finalAuthCode = GenerateRandomAuthorizationCode();
+            // Check if we should use live data or mock data
+            string finalAuthCode;
 
-            _logger.LogInformation("Processing salary history request for BorrowerApplicationId {BorrowerApplicationId} with new authorization code", borrowerApplicationId);
+            if (!_settings.UseLiveData)
+            {
+                // Use mock/hardcoded data
+                firstName = "Teresa";
+                lastName = "Stoker";
+                middleName = "R";
+                accountNumber = "5012284010";
+                bankCode = "023";
+                bvn = "22222222223";
+                finalAuthCode = GenerateRandomAuthorizationCode();
+
+                _logger.LogInformation("UseLiveData is false - using mock data for salary history request");
+            }
+            else
+            {
+                // Generate new authorization code for live requests
+                finalAuthCode = GenerateRandomAuthorizationCode();
+                _logger.LogInformation("Processing salary history request for BorrowerApplicationId {BorrowerApplicationId} with new authorization code", borrowerApplicationId);
+            }
 
             // Build payload
             var payload = new
@@ -103,10 +121,10 @@ public class RemitaService : IRemitaService
                 });
 
                 // Validate Remita response - check multiple indicators of failure
-                if (result == null || 
-                    result.Status?.ToLower() == "fail" || 
-                    result.ResponseCode != "00" || 
-                    !result.HasData || 
+                if (result == null ||
+                    result.Status?.ToLower() == "fail" ||
+                    result.ResponseCode != "00" ||
+                    !result.HasData ||
                     result.Data == null)
                 {
                     _logger.LogWarning("Remita returned failure for account {AccountNumber}. Status: {Status}, Code: {Code}, Message: {Message}, HasData: {HasData}",
@@ -116,7 +134,7 @@ public class RemitaService : IRemitaService
 
                 // Extract customerId from Remita response
                 var remitaCustomerId = result.Data.CustomerId;
-                
+
                 if (string.IsNullOrWhiteSpace(remitaCustomerId))
                 {
                     _logger.LogWarning("Remita response did not contain a CustomerId for BorrowerApplicationId {BorrowerApplicationId}", borrowerApplicationId);
@@ -132,7 +150,7 @@ public class RemitaService : IRemitaService
                         // Update existing record with new authorization code and customerId from Remita
                         _logger.LogInformation("Updating existing Remita customer for BorrowerApplicationId {BorrowerApplicationId} - OldCustomerId: {OldCustomerId}, NewCustomerId: {NewCustomerId}",
                             borrowerApplicationId, existingCustomer.CustomerId, remitaCustomerId);
-                        
+
                         existingCustomer.CustomerId = remitaCustomerId;
                         existingCustomer.AuthorisationCode = finalAuthCode;
                         existingCustomer.LastUsedAt = DateTime.UtcNow;
@@ -158,7 +176,7 @@ public class RemitaService : IRemitaService
                     await _db.SaveChangesAsync();
                 }
 
-                _logger.LogInformation("Successfully retrieved salary history for account: {AccountNumber}, CustomerId: {CustomerId}", 
+                _logger.LogInformation("Successfully retrieved salary history for account: {AccountNumber}, CustomerId: {CustomerId}",
                     accountNumber, remitaCustomerId);
                 return result;
             }
@@ -242,10 +260,10 @@ public class RemitaService : IRemitaService
                 });
 
                 // Validate Remita response - check multiple indicators of failure
-                if (result == null || 
-                    result.Status?.ToLower() == "fail" || 
-                    result.ResponseCode != "00" || 
-                    !result.HasData || 
+                if (result == null ||
+                    result.Status?.ToLower() == "fail" ||
+                    result.ResponseCode != "00" ||
+                    !result.HasData ||
                     result.Data == null)
                 {
                     _logger.LogWarning("Remita returned failure for customer {CustomerId}. Status: {Status}, Code: {Code}, Message: {Message}, HasData: {HasData}",
@@ -314,8 +332,8 @@ public class RemitaService : IRemitaService
                 });
 
                 // Validate Remita response - check multiple indicators of failure
-                if (result == null || 
-                    result.Status?.ToLower() == "fail" || 
+                if (result == null ||
+                    result.Status?.ToLower() == "fail" ||
                     result.Data == null)
                 {
                     _logger.LogWarning("Remita returned failure for stopping mandate {MandateReference}. Status: {Status}, Message: {Message}",
@@ -383,8 +401,8 @@ public class RemitaService : IRemitaService
                 });
 
                 // Validate Remita response - check multiple indicators of failure
-                if (result == null || 
-                    result.Status?.ToLower() == "fail" || 
+                if (result == null ||
+                    result.Status?.ToLower() == "fail" ||
                     result.Data == null)
                 {
                     _logger.LogWarning("Remita returned failure for mandate history {MandateReference}. Status: {Status}",
@@ -441,8 +459,8 @@ public class RemitaService : IRemitaService
                 try
                 {
                     // Try parsing the date string - handle different formats
-                    if (DateTime.TryParseExact(notification.PaymentDate, "dd-MM-yyyy HH:mm:sszzz", 
-                        System.Globalization.CultureInfo.InvariantCulture, 
+                    if (DateTime.TryParseExact(notification.PaymentDate, "dd-MM-yyyy HH:mm:sszzz",
+                        System.Globalization.CultureInfo.InvariantCulture,
                         System.Globalization.DateTimeStyles.None, out DateTime parsedDate))
                     {
                         paymentDate = parsedDate;

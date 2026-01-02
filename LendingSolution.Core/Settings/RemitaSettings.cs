@@ -22,7 +22,7 @@ public class RemitaSettings
     public string ConnectGatewayBaseUrl { get; set; } = string.Empty;
     public string SecretKey { get; set; } = string.Empty;
     
-    // When true the service will contact the live Remita API. When false it will return mocked data.
-    // Default to false so services run in mock mode when the setting is not present in configuration.
-    public bool UseLiveData { get; set; } = false;
+    // When true the service will contact the live Remita API. When false it will use mock data.
+    // Default to true for backward compatibility
+    public bool UseLiveData { get; set; } = true;
 }
