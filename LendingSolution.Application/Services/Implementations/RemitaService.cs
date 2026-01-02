@@ -47,7 +47,7 @@ public class RemitaService : IRemitaService
         string accountNumber,
         string bankCode,
         string bvn,
-        string email,
+        Guid borrowerApplicationId,
         string firstName = "",
         string lastName = "",
         string middleName = "",
@@ -56,46 +56,10 @@ public class RemitaService : IRemitaService
     {
         try
         {
-            // Handle authorization code based on mode and email
-            string finalAuthCode = authorisationCode ?? string.Empty;
+            // Always generate new authorization code for each request
+            string finalAuthCode = GenerateRandomAuthorizationCode();
 
-            if (string.IsNullOrWhiteSpace(finalAuthCode) && !string.IsNullOrWhiteSpace(email))
-            {
-                // Check if customer exists in RemitaCustomer table
-                var existingCustomer = await _db.RemitaCustomers
-                    .FirstOrDefaultAsync(rc => rc.Email.ToLower() == email.ToLower());
-
-                if (existingCustomer != null)
-                {
-                    _logger.LogInformation("Found existing Remita customer for email {Email}, using stored authorization code", email);
-                    finalAuthCode = existingCustomer.AuthorisationCode;
-                    
-                    // Update last used timestamp
-                    existingCustomer.LastUsedAt = DateTime.UtcNow;
-                    existingCustomer.UpdatedAt = DateTime.UtcNow;
-                    await _db.SaveChangesAsync();
-                }
-                else
-                {
-                    // Generate new authorization code and customer ID
-                    finalAuthCode = GenerateRandomAuthorizationCode();
-                    var customerId = GenerateCustomerId();
-
-                    _logger.LogInformation("Creating new Remita customer for email {Email} with CustomerId {CustomerId}", email, customerId);
-
-                    // Create new RemitaCustomer record
-                    var newCustomer = new RemitaCustomer
-                    {
-                        Email = email,
-                        CustomerId = customerId,
-                        AuthorisationCode = finalAuthCode,
-                        LastUsedAt = DateTime.UtcNow
-                    };
-
-                    _db.RemitaCustomers.Add(newCustomer);
-                    await _db.SaveChangesAsync();
-                }
-            }
+            _logger.LogInformation("Processing salary history request for BorrowerApplicationId {BorrowerApplicationId} with new authorization code", borrowerApplicationId);
 
             // Build payload
             var payload = new
@@ -150,7 +114,52 @@ public class RemitaService : IRemitaService
                     return null;
                 }
 
-                _logger.LogInformation("Successfully retrieved salary history for account: {AccountNumber}", accountNumber);
+                // Extract customerId from Remita response
+                var remitaCustomerId = result.Data.CustomerId;
+                
+                if (string.IsNullOrWhiteSpace(remitaCustomerId))
+                {
+                    _logger.LogWarning("Remita response did not contain a CustomerId for BorrowerApplicationId {BorrowerApplicationId}", borrowerApplicationId);
+                }
+                else
+                {
+                    // Check if RemitaCustomer record exists for this borrower application
+                    var existingCustomer = await _db.RemitaCustomers
+                        .FirstOrDefaultAsync(rc => rc.BorrowerApplicationId == borrowerApplicationId);
+
+                    if (existingCustomer != null)
+                    {
+                        // Update existing record with new authorization code and customerId from Remita
+                        _logger.LogInformation("Updating existing Remita customer for BorrowerApplicationId {BorrowerApplicationId} - OldCustomerId: {OldCustomerId}, NewCustomerId: {NewCustomerId}",
+                            borrowerApplicationId, existingCustomer.CustomerId, remitaCustomerId);
+                        
+                        existingCustomer.CustomerId = remitaCustomerId;
+                        existingCustomer.AuthorisationCode = finalAuthCode;
+                        existingCustomer.LastUsedAt = DateTime.UtcNow;
+                        existingCustomer.UpdatedAt = DateTime.UtcNow;
+                    }
+                    else
+                    {
+                        // Create new RemitaCustomer record
+                        _logger.LogInformation("Creating new Remita customer for BorrowerApplicationId {BorrowerApplicationId} with CustomerId {CustomerId}",
+                            borrowerApplicationId, remitaCustomerId);
+
+                        var newCustomer = new RemitaCustomer
+                        {
+                            BorrowerApplicationId = borrowerApplicationId,
+                            CustomerId = remitaCustomerId,
+                            AuthorisationCode = finalAuthCode,
+                            LastUsedAt = DateTime.UtcNow
+                        };
+
+                        _db.RemitaCustomers.Add(newCustomer);
+                    }
+
+                    await _db.SaveChangesAsync();
+                }
+
+                _logger.LogInformation("Successfully retrieved salary history for account: {AccountNumber}, CustomerId: {CustomerId}", 
+                    accountNumber, remitaCustomerId);
                 return result;
             }
             else

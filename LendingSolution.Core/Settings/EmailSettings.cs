@@ -12,4 +12,10 @@ public class EmailSettings
     public string FromEmail { get; set; } = string.Empty;
     public string FromName { get; set; } = "LendingSolution";
     public bool EnableSsl { get; set; } = true;
+    
+    /// <summary>
+    /// When true, allows email simulation (logging only) if SMTP sending fails.
+    /// Useful for development/demo environments.
+    /// </summary>
+    public bool AllowEmailSimulationOnFailure { get; set; } = false;
 }

@@ -11,7 +11,7 @@ public class RemitaSalaryHistoryRequestDto
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
     public string MiddleName { get; set; } = string.Empty;
-    public string Email { get; set; } = string.Empty;
+    public Guid BorrowerApplicationId { get; set; }
     public string AuthorisationCode { get; set; } = string.Empty;
     public string AuthorisationChannel { get; set; } = "USSD";
 }

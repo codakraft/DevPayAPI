@@ -32,12 +32,12 @@ public class EmailService : IEmailService
 
     public async Task<bool> SendEmailAsync(string emailAddress, string subject, string body, string? senderName = null, string? senderEmail = null)
     {
+        // Use provided sender info or fall back to configured defaults (declare outside try for scope)
+        var fromEmail = senderEmail ?? _emailSettings.FromEmail;
+        var fromName = senderName ?? _emailSettings.FromName;
+
         try
         {
-            // Use provided sender info or fall back to configured defaults
-            var fromEmail = senderEmail ?? _emailSettings.FromEmail;
-            var fromName = senderName ?? _emailSettings.FromName;
-
             // Check if email service is properly configured
             if (string.IsNullOrEmpty(_emailSettings.SmtpHost) || 
                 _emailSettings.SmtpHost.Contains("dummy") ||
@@ -52,6 +52,7 @@ public class EmailService : IEmailService
             client.EnableSsl = _emailSettings.EnableSsl;
             client.UseDefaultCredentials = false;
             client.Credentials = new NetworkCredential(_emailSettings.SmtpUser, _emailSettings.SmtpPassword);
+            client.Timeout = 10000; // 10 seconds timeout to prevent hanging
 
             var mailMessage = new MailMessage
             {
@@ -70,6 +71,15 @@ public class EmailService : IEmailService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send email to {EmailAddress}", emailAddress);
+            
+            // If email simulation on failure is enabled, simulate the send instead of failing
+            if (_emailSettings.AllowEmailSimulationOnFailure)
+            {
+                _logger.LogWarning("Email sending failed but AllowEmailSimulationOnFailure is enabled - simulating email send to {EmailAddress}", emailAddress);
+                _logger.LogInformation("EMAIL SIMULATION (FALLBACK) - To: {EmailAddress}, Subject: {Subject}, From: {FromName} <{FromEmail}>", emailAddress, subject, fromName, fromEmail);
+                return true; // Simulate successful send
+            }
+            
             return false;
         }
     }

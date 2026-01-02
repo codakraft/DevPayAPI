@@ -358,7 +358,7 @@ public class BorrowerController(
                 request.AccountNumber,
                 request.BankCode,
                 request.Bvn,
-                request.Email,
+                request.BorrowerApplicationId,
                 request.FirstName,
                 request.LastName,
                 request.MiddleName,

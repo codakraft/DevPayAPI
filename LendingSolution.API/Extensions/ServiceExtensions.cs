@@ -301,7 +301,14 @@ public static class ServiceExtensions
 
     public static void ConfigureHttpClient(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddHttpClient();
+        services.AddHttpClient()
+            .ConfigureHttpClientDefaults(builder =>
+            {
+                builder.ConfigureHttpClient(client =>
+                {
+                    client.Timeout = TimeSpan.FromSeconds(30); // 30 seconds timeout
+                });
+            });
     }
 
     public static void ConfigureEndpointExplorer(this IServiceCollection services)

@@ -389,7 +389,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             application.AccountNo,
             application.BankCode,
             application.BVN,
-            application.Email);
+            application.Id); // Pass borrowerApplicationId instead of email
 
         if (salaryHistoryResponse == null)
         {
@@ -409,7 +409,6 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         // Save salary history to database
 
         await _salaryEligibilityService.SaveSalaryHistoryAsync(application.Id, salaryHistoryResponse);
-
 
         // Calculate eligibility based on salary history
         SalaryEligibilityDto eligibilityResult;
@@ -517,7 +516,6 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
         // Calculate repayment (mock calculation)
         var product = application.Product ?? await _loanProductRepository.GetLoanProductById(application.ProductId) ?? throw new AppException("Loan product not found", 404);
-
 
         var monthlyInterestRate = product.InterestRate / 100 / 12;
         var totalRepayment = request.LoanAmount * (1 + (monthlyInterestRate * request.Tenor));
