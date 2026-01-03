@@ -386,6 +386,7 @@ public class CompanyController(
     // [GET] /api/company/sa/all
     [HttpGet("sa/all")]
     [Authorize(Roles = "SuperAdmin")]
+    [Tags("SuperAdmin")]
     public async Task<IActionResult> GetAllCompanies([FromQuery] CompanyFilterDto filter)
     {
         try
@@ -408,13 +409,14 @@ public class CompanyController(
     }
 
     /// <summary>
-    /// Gets a specific company by ID for SuperAdmin
+    /// Gets a specific company by ID with detailed analytics (SuperAdmin only)
     /// </summary>
-    /// <param name="companyId">The ID of the company to retrieve</param>
-    /// <returns>Company details with analytics</returns>
-    // [GET] /api/company/sa/{companyId}
-    [HttpGet("sa/{companyId}")]
+    /// <param name="companyId">The unique identifier of the company to retrieve</param>
+    /// <returns>Comprehensive company details including loan statistics, user counts, and company information</returns>
+    // [GET] /api/company/{companyId}
+    [HttpGet("{companyId}")]
     [Authorize(Roles = "SuperAdmin")]
+    [Tags("SuperAdmin")]
     public async Task<IActionResult> GetCompanyById(Guid companyId)
     {
         try
@@ -538,9 +540,16 @@ public class CompanyController(
         }
     }
 
-    // SuperAdmin can update any company logo
+    /// <summary>
+    /// Updates a company's logo (SuperAdmin only)
+    /// </summary>
+    /// <param name="companyId">The unique identifier of the company</param>
+    /// <param name="body">The logo document ID to update</param>
+    /// <returns>Updated company information with new logo</returns>
+    // [PATCH] /api/company/{companyId}/logo
+    [HttpPatch("{companyId}/logo")]
     [Authorize(Roles = "SuperAdmin")]
-    [HttpPatch("sa/{companyId}/logo")]
+    [Tags("SuperAdmin")]
     public async Task<IActionResult> UpdateCompanyLogoByAdmin(Guid companyId, [FromBody] UpdateCompanyLogoDto body)
     {
         try

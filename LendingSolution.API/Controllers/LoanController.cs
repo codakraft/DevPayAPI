@@ -23,6 +23,10 @@ public class LoanController(
     private readonly ISalaryHistoryViewService _salaryHistoryViewService = salaryHistoryViewService;
     private readonly ILogger<LoanController> _logger = logger;
 
+    /// <summary>
+    /// Gets all loans across the system
+    /// </summary>
+    /// <returns>A list of all loans with borrower and company details</returns>
     [HttpGet]
     [Route("/")]
     [Authorize(Roles = "Admin")]
@@ -46,6 +50,11 @@ public class LoanController(
         }
     }
 
+    /// <summary>
+    /// Gets all loans filtered by a specific status
+    /// </summary>
+    /// <param name="status">The loan status to filter by (e.g., Pending, Approved, Disbursed, Rejected)</param>
+    /// <returns>A list of loans matching the specified status</returns>
     [HttpGet("status/{status}")]
     [Authorize(Roles = "Admin,SuperAdmin")]
     public async Task<IActionResult> GetLoansByStatus(LoanStatus status)
@@ -68,6 +77,12 @@ public class LoanController(
         }
     }
 
+    /// <summary>
+    /// Approves a pending loan application
+    /// </summary>
+    /// <param name="id">The unique identifier of the loan to approve</param>
+    /// <param name="request">The approval details including optional reason</param>
+    /// <returns>Updated loan details with approved status and approval timestamp</returns>
     [HttpPost("{id:guid}/approve")]
     [Authorize(Roles = "Admin,SuperAdmin")]
     public async Task<IActionResult> ApproveLoan(Guid id, [FromBody] LoanApprovalRequestDto request)
@@ -92,6 +107,12 @@ public class LoanController(
         }
     }
 
+    /// <summary>
+    /// Rejects a pending loan application
+    /// </summary>
+    /// <param name="id">The unique identifier of the loan to reject</param>
+    /// <param name="request">The rejection details including the reason for rejection</param>
+    /// <returns>Updated loan details with rejected status and rejection reason</returns>
     [HttpPost("{id:guid}/reject")]
     [Authorize(Roles = "Admin,SuperAdmin")]
     public async Task<IActionResult> RejectLoan(Guid id, [FromBody] LoanRejectionRequestDto request)
@@ -116,6 +137,12 @@ public class LoanController(
         }
     }
 
+    /// <summary>
+    /// Processes a loan application with specified action (approve or reject)
+    /// </summary>
+    /// <param name="id">The unique identifier of the loan to process</param>
+    /// <param name="request">The processing action and reason</param>
+    /// <returns>Updated loan details with new status based on the action taken</returns>
     [HttpPost("{id:guid}/process")]
     [Authorize(Roles = "Admin,SuperAdmin")]
     public async Task<IActionResult> ProcessLoan(Guid id, [FromBody] ProcessLoanRequestDto request)
@@ -142,8 +169,10 @@ public class LoanController(
     }
 
     /// <summary>
-    /// Get salary history for borrower applications in the company (Admin access)
+    /// Gets salary history for all borrower applications in the admin's company
     /// </summary>
+    /// <param name="filters">Filter and pagination parameters for salary history records</param>
+    /// <returns>Paginated list of salary history records for the company's borrowers with detailed payment information</returns>
     [HttpGet("salary-history")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> GetCompanySalaryHistory([FromQuery] SalaryHistoryFilterRequestDto filters)
@@ -176,8 +205,10 @@ public class LoanController(
     }
 
     /// <summary>
-    /// Get detailed salary history by ID (Admin access - only for their company's records)
+    /// Gets detailed salary history information for a specific record (Admin can only access their company's records)
     /// </summary>
+    /// <param name="salaryHistoryId">The unique identifier of the salary history record</param>
+    /// <returns>Detailed salary history information including payment dates, amounts, and employer details</returns>
     [HttpGet("salary-history/{salaryHistoryId}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> GetSalaryHistoryDetails(Guid salaryHistoryId)
@@ -216,10 +247,13 @@ public class LoanController(
     }
 
     /// <summary>
-    /// Get all salary history records across all companies (SuperAdmin access)
+    /// Gets all salary history records across all companies (SuperAdmin only)
     /// </summary>
+    /// <param name="filters">Filter and pagination parameters for searching salary history records</param>
+    /// <returns>Paginated list of all salary history records system-wide with borrower and company information</returns>
     [HttpGet("salary-history/all")]
     [Authorize(Roles = "SuperAdmin")]
+    [Tags("SuperAdmin")]
     public async Task<IActionResult> GetAllSalaryHistory([FromQuery] SalaryHistoryFilterRequestDto filters)
     {
         try
@@ -244,10 +278,13 @@ public class LoanController(
     }
 
     /// <summary>
-    /// Get detailed salary history by ID (SuperAdmin access - can access any record)
+    /// Gets detailed salary history information for any record across all companies (SuperAdmin only)
     /// </summary>
+    /// <param name="salaryHistoryId">The unique identifier of the salary history record</param>
+    /// <returns>Comprehensive salary history details including all payment transactions and employment information</returns>
     [HttpGet("salary-history/details/{salaryHistoryId}")]
     [Authorize(Roles = "SuperAdmin")]
+    [Tags("SuperAdmin")]
     public async Task<IActionResult> GetAnySalaryHistoryDetails(Guid salaryHistoryId)
     {
         try
@@ -273,8 +310,10 @@ public class LoanController(
     #region Offer Letter and Disbursement Endpoints
     
     /// <summary>
-    /// Get offer letter details for a loan
+    /// Gets offer letter details and URL for a specific loan
     /// </summary>
+    /// <param name="id">The unique identifier of the loan</param>
+    /// <returns>Offer letter details including document URL, loan terms, repayment schedule, and status</returns>
     [HttpGet("{id:guid}/offer-letter")]
     [Authorize]
     public async Task<IActionResult> GetOfferLetterDetails(Guid id)
@@ -300,8 +339,10 @@ public class LoanController(
     }
     
     /// <summary>
-    /// Send or resend offer letter for an approved loan
+    /// Sends or resends the offer letter email to the borrower for an approved loan
     /// </summary>
+    /// <param name="id">The unique identifier of the approved loan</param>
+    /// <returns>Confirmation with offer letter details and email delivery status</returns>
     [HttpPost("{id:guid}/send-offer-letter")]
     [Authorize(Roles = "Admin,SuperAdmin")]
     public async Task<IActionResult> SendOfferLetter(Guid id)
@@ -327,37 +368,12 @@ public class LoanController(
         }
     }
     
-    /// <summary>
-    /// Upload signed offer letter (PDF only)
-    /// </summary>
-    [HttpPost("{id:guid}/upload-signed-offer-letter")]
-    [Authorize]
-    public async Task<IActionResult> UploadSignedOfferLetter(Guid id, [FromBody] SignedOfferLetterUploadDto dto)
-    {
-        try
-        {
-            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "anonymous";
-            var result = await _loanService.UploadSignedOfferLetterAsync(id, dto, userId);
-            
-            _logger.LogInformation("Signed offer letter uploaded for loan {LoanId} by user {UserId}", id, userId);
-            
-            return Ok(ApiResponse.Ok("Signed offer letter uploaded successfully", result));
-        }
-        catch (AppException ex)
-        {
-            _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error occurred while uploading signed offer letter for loan {LoanId}", id);
-            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
-        }
-    }
     
     /// <summary>
-    /// Disburse loan after signed offer letter is received
+    /// Disburses loan funds to the borrower's account after signed offer letter is received
     /// </summary>
+    /// <param name="id">The unique identifier of the loan with signed offer letter</param>
+    /// <returns>Disbursement confirmation with transaction reference, amount disbursed, and due date</returns>
     [HttpPost("{id:guid}/disburse")]
     [Authorize(Roles = "Admin,SuperAdmin")]
     public async Task<IActionResult> DisburseLoan(Guid id)

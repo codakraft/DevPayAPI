@@ -156,7 +156,7 @@ LendingSolution.Infrastructure/ # Data Access & External Services
 - Duration range: `minDuration`, `maxDuration`
 - Date ranges: `startDate`, `endDate`, `approvedAfter`, `approvedBefore`
 - Product filter: `productId`
-- Mandate status: `isMandateGenerated`
+- Mandate status: `IsMandateCreated`
 - Pagination: `page`, `pageSize`
 - Sorting: `sortBy`, `sortOrder` (amount, duration, status, username, companyname, createdat, etc.)
 

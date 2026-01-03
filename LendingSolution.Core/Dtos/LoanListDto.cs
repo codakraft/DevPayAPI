@@ -36,6 +36,12 @@ public class LoanListDto
     public bool IsMandateGenerated { get; set; }
     public string MandateId { get; set; } = string.Empty;
     
+    // Document/Image Information
+    public string? DocumentIds { get; set; } // Comma-separated document IDs from BorrowerApplication
+    public Guid? OfferLetterDocumentId { get; set; }
+    public string? OfferLetterUrl { get; set; }
+    public Guid? SignedOfferLetterDocumentId { get; set; }
+    
     // Salary History Information
     public SalaryHistoryInfoDto? SalaryHistory { get; set; }
 }

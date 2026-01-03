@@ -50,7 +50,8 @@ public class Loan : Base
     public DateTime? MandateActivationDate { get; set; }
     public DateTime? MandateStoppedDate { get; set; }
     public string? FailureReason { get; set; }
-    
+    public bool IsLoanDisbursed { get; set; } = false;
+ 
     // Offer Letter properties
     public Guid? OfferLetterDocumentId { get; set; }
     public string? OfferLetterUrl { get; set; }

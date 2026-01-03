@@ -5,6 +5,8 @@ using LendingSolution.Core.Dtos.Response;
 using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 using LendingSolution.Application.Exceptions;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 
 namespace LendingSolution.API.Controllers;
 
@@ -15,15 +17,21 @@ public class BorrowerController(
     IBorrowerOnboardingService borrowerOnboardingService,
     IBorrowerApplicationRepository borrowerApplicationRepository,
     IRemitaService remitaService,
+    ILoanService loanService,
     ILogger<BorrowerController> logger
 ) : Controller
 {
     private readonly IBorrowerOnboardingService _borrowerOnboardingService = borrowerOnboardingService;
     private readonly IBorrowerApplicationRepository _borrowerApplicationRepository = borrowerApplicationRepository;
     private readonly IRemitaService _remitaService = remitaService;
+    private readonly ILoanService _loanService = loanService;
     private readonly ILogger<BorrowerController> _logger = logger;
 
-    // Step 1: Initial borrower registration with basic info
+    /// <summary>
+    /// Step 1: Initial borrower registration with basic information and company selection
+    /// </summary>
+    /// <param name="request">Borrower's basic details including name, email, phone, and company ID</param>
+    /// <returns>Loan ID for the created application and confirmation message</returns>
     [HttpPost("step1")]
     public async Task<IActionResult> Step1([FromBody] BorrowerStep1RequestDto request)
     {
@@ -44,7 +52,11 @@ public class BorrowerController(
         }
     }
 
-    // Step 1B: Email OTP validation
+    /// <summary>
+    /// Step 1B: Validates email OTP sent during Step 1
+    /// </summary>
+    /// <param name="request">Loan ID and OTP code for verification</param>
+    /// <returns>Confirmation of email verification and loan ID</returns>
     [HttpPost("step1b")]
     public async Task<IActionResult> Step1B([FromBody] BorrowerStep1BRequestDto request)
     {
@@ -65,7 +77,11 @@ public class BorrowerController(
         }
     }
 
-    // Step 2: Bank and BVN information
+    /// <summary>
+    /// Step 2: Collects bank account details and BVN for verification
+    /// </summary>
+    /// <param name="request">Bank account number, bank code, BVN, and loan ID</param>
+    /// <returns>Confirmation message and loan ID after initiating BVN verification</returns>
     [HttpPost("step2")]
     public async Task<IActionResult> Step2([FromBody] BorrowerStep2RequestDto request)
     {
@@ -86,7 +102,11 @@ public class BorrowerController(
         }
     }
 
-    // Step 2B: BVN OTP validation
+    /// <summary>
+    /// Step 2B: Validates BVN OTP for bank verification
+    /// </summary>
+    /// <param name="request">Loan ID and BVN OTP code for verification</param>
+    /// <returns>Confirmation of BVN verification and loan ID</returns>
     [HttpPost("step2b")]
     public async Task<IActionResult> Step2B([FromBody] BorrowerStep2BRequestDto request)
     {
@@ -107,7 +127,11 @@ public class BorrowerController(
         }
     }
 
-    // Step 3: Address and document upload
+    /// <summary>
+    /// Step 3: Collects address and uploads identity documents (ID card, selfie, utility bill)
+    /// </summary>
+    /// <param name="request">Address details, document URLs/IDs, and loan ID</param>
+    /// <returns>Loan eligibility details including min/max loan amount and tenor ranges</returns>
     [HttpPost("step3")]
     public async Task<IActionResult> Step3([FromBody] BorrowerStep3RequestDto request)
     {
@@ -135,7 +159,11 @@ public class BorrowerController(
         }
     }
 
-    // Step 4: Final loan submission
+    /// <summary>
+    /// Step 4: Final loan submission with selected amount and tenor
+    /// </summary>
+    /// <param name="request">Requested loan amount, tenor (duration in months), and loan ID</param>
+    /// <returns>Repayment details including total repayment amount and monthly installment</returns>
     [HttpPost("step4")]
     public async Task<IActionResult> Step4([FromBody] BorrowerStep4RequestDto request)
     {
@@ -162,9 +190,13 @@ public class BorrowerController(
         }
     }
 
-    // Standalone OTP endpoints
+    #region OTP Management Endpoints
 
-    // Resend email OTP for Step 1 (when original expires)
+    /// <summary>
+    /// Resends email OTP for Step 1 verification when the original OTP expires or is not received
+    /// </summary>
+    /// <param name="request">Loan ID for which to resend the OTP</param>
+    /// <returns>Confirmation that a new OTP has been sent to the registered email</returns>
     [HttpPost("resend-step1-email-otp")]
     public async Task<IActionResult> ResendStep1EmailOtp([FromBody] ResendStep1EmailOtpRequestDto request)
     {
@@ -185,7 +217,11 @@ public class BorrowerController(
         }
     }
 
-    // Generate email OTP
+    /// <summary>
+    /// Generates a new email OTP for verification purposes
+    /// </summary>
+    /// <param name="request">Email address to send the OTP to</param>
+    /// <returns>Confirmation that OTP has been generated and sent</returns>
     [HttpPost("generate-email-otp")]
     public async Task<IActionResult> GenerateEmailOtp([FromBody] GenerateEmailOtpRequestDto request)
     {
@@ -206,7 +242,11 @@ public class BorrowerController(
         }
     }
 
-    // Validate email OTP
+    /// <summary>
+    /// Validates an email OTP code entered by the user
+    /// </summary>
+    /// <param name="request">Email address and OTP code to validate</param>
+    /// <returns>Confirmation of successful OTP verification</returns>
     [HttpPost("validate-email-otp")]
     public async Task<IActionResult> ValidateEmailOtp([FromBody] ValidateEmailOtpRequestDto request)
     {
@@ -227,7 +267,11 @@ public class BorrowerController(
         }
     }
 
-    // Generate BVN OTP
+    /// <summary>
+    /// Generates a BVN OTP for bank account verification
+    /// </summary>
+    /// <param name="request">BVN number to generate OTP for</param>
+    /// <returns>Confirmation that BVN OTP has been sent to the registered phone number</returns>
     [HttpPost("generate-bvn-otp")]
     public async Task<IActionResult> GenerateBvnOtp([FromBody] GenerateBvnOtpRequestDto request)
     {
@@ -248,7 +292,11 @@ public class BorrowerController(
         }
     }
 
-    // Validate BVN OTP
+    /// <summary>
+    /// Validates a BVN OTP code for bank verification
+    /// </summary>
+    /// <param name="request">BVN number and OTP code to validate</param>
+    /// <returns>Confirmation of successful BVN verification</returns>
     [HttpPost("validate-bvn-otp")]
     public async Task<IActionResult> ValidateBvnOtp([FromBody] ValidateBvnOtpRequestDto request)
     {
@@ -269,7 +317,15 @@ public class BorrowerController(
         }
     }
 
-    // Get current step status for borrower application
+    #endregion
+
+    #region Application Status Endpoints
+
+    /// <summary>
+    /// Gets the current onboarding step status for a borrower application
+    /// </summary>
+    /// <param name="request">Email address or application ID to check status for</param>
+    /// <returns>Current step number, completion status, and next required actions</returns>
     [HttpPost("current-step")]
     public async Task<IActionResult> GetCurrentStep([FromBody] BorrowerCurrentStepRequestDto request)
     {
@@ -291,10 +347,10 @@ public class BorrowerController(
     }
 
     /// <summary>
-    /// Get current step status for borrower application (RESTful GET endpoint)
+    /// Gets the current onboarding step status by email or application ID (RESTful GET method)
     /// </summary>
-    /// <param name="emailOrId">The borrower's email address or application ID</param>
-    /// <returns>Current step information including progress, eligibility, and required actions</returns>
+    /// <param name="emailOrId">The borrower's email address or unique application ID</param>
+    /// <returns>Detailed step information including progress percentage, loan eligibility, and next actions</returns>
     [HttpGet("{emailOrId}")]
     public async Task<IActionResult> GetCurrentStepByEmail(string emailOrId)
     {
@@ -320,10 +376,15 @@ public class BorrowerController(
         }
     }
 
+    #endregion
+
+    #region Document Management Endpoints
+
     /// <summary>
-    /// Update/Re-add document images for loan application
-    /// Can be used regardless of loan completion status
+    /// Updates or re-uploads identity documents for a loan application
     /// </summary>
+    /// <param name="request">Loan ID and updated document URLs/IDs (ID card, selfie, utility bill)</param>
+    /// <returns>Confirmation that documents have been updated successfully</returns>
     [HttpPut("update-documents")]
     public async Task<IActionResult> UpdateDocuments([FromBody] UpdateDocumentsRequestDto request)
     {
@@ -344,131 +405,164 @@ public class BorrowerController(
         }
     }
 
+    #endregion
+
     #region Remita Integration Endpoints
 
+    ///// <summary>
+    ///// Get borrower salary history from Remita
+    ///// </summary>
+    //[HttpPost("remita/salary-history")]
+    //public async Task<IActionResult> GetSalaryHistory([FromBody] RemitaSalaryHistoryRequestDto request)
+    //{
+    //    try
+    //    {
+    //        var result = await _remitaService.GetSalaryHistoryAsync(
+    //            request.AccountNumber,
+    //            request.BankCode,
+    //            request.Bvn,
+    //            request.BorrowerApplicationId,
+    //            request.FirstName,
+    //            request.LastName,
+    //            request.MiddleName,
+    //            string.IsNullOrWhiteSpace(request.AuthorisationCode) ? null : request.AuthorisationCode
+    //        );
+
+    //        if (result == null)
+    //        {
+    //            return BadRequest(ApiResponse.Fail("Failed to retrieve salary history"));
+    //        }
+
+    //        return Ok(ApiResponse.Ok("Salary history retrieved successfully", result.Data!));
+    //    }
+    //    catch (Exception ex)
+    //    {
+    //        _logger.LogError(ex, "Error retrieving salary history for account {AccountNumber}", request.AccountNumber);
+    //        return StatusCode(500, ApiResponse.Fail("Something went wrong"));
+    //    }
+    //}
+
+    ///// <summary>
+    ///// Create a loan mandate in Remita
+    ///// </summary>
+    //[HttpPost("remita/create-mandate")]
+    //public async Task<IActionResult> CreateMandate([FromBody] RemitaCreateMandateRequestDto request)
+    //{
+    //    try
+    //    {
+    //        var result = await _remitaService.CreateMandateAsync(
+    //            request.CustomerId,
+    //            request.PhoneNumber,
+    //            request.AccountNumber,
+    //            request.LoanAmount,
+    //            request.CollectionAmount,
+    //            request.DateOfDisbursement,
+    //            request.DateOfCollection,
+    //            request.TotalCollectionAmount,
+    //            request.NumberOfRepayments,
+    //            request.BankCode,
+    //            string.IsNullOrWhiteSpace(request.AuthorisationCode) ? null : request.AuthorisationCode
+    //        );
+
+    //        if (result == null)
+    //        {
+    //            return BadRequest(ApiResponse.Fail("Failed to create mandate"));
+    //        }
+
+    //        return Ok(ApiResponse.Ok("Mandate created successfully", result.Data!));
+    //    }
+    //    catch (Exception ex)
+    //    {
+    //        _logger.LogError(ex, "Error creating mandate for customer {CustomerId}", request.CustomerId);
+    //        return StatusCode(500, ApiResponse.Fail("Something went wrong"));
+    //    }
+    //}
+
+    ///// <summary>
+    ///// Stop an existing loan mandate in Remita
+    ///// </summary>
+    //[HttpPost("remita/stop-mandate")]
+    //public async Task<IActionResult> StopMandate([FromBody] RemitaStopMandateRequestDto request)
+    //{
+    //    try
+    //    {
+    //        var result = await _remitaService.StopMandateAsync(
+    //            request.CustomerId,
+    //            request.MandateReference,
+    //            request.AuthorisationCode
+    //        );
+
+    //        if (result == null)
+    //        {
+    //            return BadRequest(ApiResponse.Fail("Failed to stop mandate"));
+    //        }
+
+    //        return Ok(ApiResponse.Ok("Mandate stopped successfully", result.Data!));
+    //    }
+    //    catch (Exception ex)
+    //    {
+    //        _logger.LogError(ex, "Error stopping mandate {MandateReference} for customer {CustomerId}",
+    //            request.MandateReference, request.CustomerId);
+    //        return StatusCode(500, ApiResponse.Fail("Something went wrong"));
+    //    }
+    //}
+
+    ///// <summary>
+    ///// Get mandate payment history from Remita
+    ///// </summary>
+    //[HttpPost("remita/mandate-history")]
+    //public async Task<IActionResult> GetMandateHistory([FromBody] RemitaMandateHistoryRequestDto request)
+    //{
+    //    try
+    //    {
+    //        var result = await _remitaService.GetMandateHistoryAsync(
+    //            request.CustomerId,
+    //            request.MandateReference,
+    //            request.AuthorisationCode
+    //        );
+
+    //        if (result == null)
+    //        {
+    //            return BadRequest(ApiResponse.Fail("Failed to retrieve mandate history"));
+    //        }
+
+    //        return Ok(ApiResponse.Ok("Mandate history retrieved successfully", result.Data!));
+    //    }
+    //    catch (Exception ex)
+    //    {
+    //        _logger.LogError(ex, "Error retrieving mandate history for customer {CustomerId}", request.CustomerId);
+    //        return StatusCode(500, ApiResponse.Fail("Something went wrong"));
+    //    }
+    //}
+
     /// <summary>
-    /// Get borrower salary history from Remita
+    /// Uploads the signed offer letter document for a loan (PDF format only)
     /// </summary>
-    [HttpPost("remita/salary-history")]
-    public async Task<IActionResult> GetSalaryHistory([FromBody] RemitaSalaryHistoryRequestDto request)
+    /// <param name="id">The unique loan ID</param>
+    /// <param name="dto">Document ID or URL of the signed offer letter PDF</param>
+    /// <returns>Confirmation of upload with updated loan status</returns>
+    [HttpPost("{id:guid}/upload-signed-offer-letter")]
+    // [Authorize]
+    public async Task<IActionResult> UploadSignedOfferLetter(Guid id, [FromBody] SignedOfferLetterUploadDto dto)
     {
         try
         {
-            var result = await _remitaService.GetSalaryHistoryAsync(
-                request.AccountNumber,
-                request.BankCode,
-                request.Bvn,
-                request.BorrowerApplicationId,
-                request.FirstName,
-                request.LastName,
-                request.MiddleName,
-                string.IsNullOrWhiteSpace(request.AuthorisationCode) ? null : request.AuthorisationCode
-            );
-
-            if (result == null)
-            {
-                return BadRequest(ApiResponse.Fail("Failed to retrieve salary history"));
-            }
-
-            return Ok(ApiResponse.Ok("Salary history retrieved successfully", result.Data!));
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "anonymous";
+            var result = await _loanService.UploadSignedOfferLetterAsync(id, dto, userId);
+            
+            _logger.LogInformation("Signed offer letter uploaded for loan {LoanId} by user {UserId}", id, userId);
+            
+            return Ok(ApiResponse.Ok("Signed offer letter uploaded successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving salary history for account {AccountNumber}", request.AccountNumber);
-            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
-        }
-    }
-
-    /// <summary>
-    /// Create a loan mandate in Remita
-    /// </summary>
-    [HttpPost("remita/create-mandate")]
-    public async Task<IActionResult> CreateMandate([FromBody] RemitaCreateMandateRequestDto request)
-    {
-        try
-        {
-            var result = await _remitaService.CreateMandateAsync(
-                request.CustomerId,
-                request.PhoneNumber,
-                request.AccountNumber,
-                request.LoanAmount,
-                request.CollectionAmount,
-                request.DateOfDisbursement,
-                request.DateOfCollection,
-                request.TotalCollectionAmount,
-                request.NumberOfRepayments,
-                request.BankCode,
-                string.IsNullOrWhiteSpace(request.AuthorisationCode) ? null : request.AuthorisationCode
-            );
-
-            if (result == null)
-            {
-                return BadRequest(ApiResponse.Fail("Failed to create mandate"));
-            }
-
-            return Ok(ApiResponse.Ok("Mandate created successfully", result.Data!));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating mandate for customer {CustomerId}", request.CustomerId);
-            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
-        }
-    }
-
-    /// <summary>
-    /// Stop an existing loan mandate in Remita
-    /// </summary>
-    [HttpPost("remita/stop-mandate")]
-    public async Task<IActionResult> StopMandate([FromBody] RemitaStopMandateRequestDto request)
-    {
-        try
-        {
-            var result = await _remitaService.StopMandateAsync(
-                request.CustomerId,
-                request.MandateReference,
-                request.AuthorisationCode
-            );
-
-            if (result == null)
-            {
-                return BadRequest(ApiResponse.Fail("Failed to stop mandate"));
-            }
-
-            return Ok(ApiResponse.Ok("Mandate stopped successfully", result.Data!));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error stopping mandate {MandateReference} for customer {CustomerId}",
-                request.MandateReference, request.CustomerId);
-            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
-        }
-    }
-
-    /// <summary>
-    /// Get mandate payment history from Remita
-    /// </summary>
-    [HttpPost("remita/mandate-history")]
-    public async Task<IActionResult> GetMandateHistory([FromBody] RemitaMandateHistoryRequestDto request)
-    {
-        try
-        {
-            var result = await _remitaService.GetMandateHistoryAsync(
-                request.CustomerId,
-                request.MandateReference,
-                request.AuthorisationCode
-            );
-
-            if (result == null)
-            {
-                return BadRequest(ApiResponse.Fail("Failed to retrieve mandate history"));
-            }
-
-            return Ok(ApiResponse.Ok("Mandate history retrieved successfully", result.Data!));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving mandate history for customer {CustomerId}", request.CustomerId);
-            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
+            _logger.LogError(ex, "Error occurred while uploading signed offer letter for loan {LoanId}", id);
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
 
