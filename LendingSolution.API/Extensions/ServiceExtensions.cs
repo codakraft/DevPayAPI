@@ -36,6 +36,14 @@ public static class ServiceExtensions
                 }
             });
             
+            // Enable XML comments for Swagger documentation
+            var xmlFilename = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+            var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFilename);
+            if (File.Exists(xmlPath))
+            {
+                opt.IncludeXmlComments(xmlPath);
+            }
+            
             opt.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
             {
                 Name = "Authorization",

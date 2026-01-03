@@ -25,7 +25,9 @@ public interface IEmailService
     /// <param name="body">Email body (HTML or plain text)</param>
     /// <param name="senderName">Optional sender name (defaults to configured value)</param>
     /// <param name="senderEmail">Optional sender email (defaults to configured value)</param>
-    Task<bool> SendEmailAsync(string emailAddress, string subject, string body, string? senderName = null, string? senderEmail = null);
+    /// <param name="attachmentBytes">Optional PDF attachment as byte array</param>
+    /// <param name="attachmentFileName">Optional attachment file name</param>
+    Task<bool> SendEmailAsync(string emailAddress, string subject, string body, string? senderName = null, string? senderEmail = null, byte[]? attachmentBytes = null, string? attachmentFileName = null);
     
     /// <summary>
     /// Send loan offer letter via email with PDF attachment link

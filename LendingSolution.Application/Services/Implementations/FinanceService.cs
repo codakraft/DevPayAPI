@@ -41,6 +41,40 @@ public class FinanceService(
         return disbursementDtos;
     }
 
+    public async Task<List<DisbursementDto>> GetCompanyDisbursementsAsync(Guid companyId)
+    {
+        var disbursements = await _disbursementRepository.GetAllDisbursements();
+        
+        // Filter disbursements by company through loan relationship
+        var companyDisbursements = new List<DisbursementDto>();
+        
+        foreach (var d in disbursements)
+        {
+            if (Guid.TryParse(d.LoanId, out var loanId))
+            {
+                var loan = await _loanRepository.GetLoanById(loanId);
+                if (loan != null && loan.CompanyId == companyId)
+                {
+                    companyDisbursements.Add(new DisbursementDto
+                    {
+                        Id = d.Id.ToString(),
+                        LoanId = d.LoanId,
+                        Amount = d.Amount,
+                        Status = d.Status,
+                        AccountDetails = d.AccountDetails,
+                        DisbursementMethod = d.DisbursementMethod,
+                        RequestedAt = d.RequestedAt,
+                        ProcessedAt = d.ProcessedAt,
+                        ProcessedBy = d.ProcessedBy,
+                        Notes = d.Notes
+                    });
+                }
+            }
+        }
+
+        return companyDisbursements;
+    }
+
     public async Task<List<RepaymentDto>> GetAllRepaymentsAsync()
     {
         var repayments = await _repaymentRepository.GetAllRepayments();

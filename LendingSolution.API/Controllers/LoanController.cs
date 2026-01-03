@@ -16,11 +16,13 @@ namespace LendingSolution.API.Controllers;
 public class LoanController(
     ILoanService loanService,
     ISalaryHistoryViewService salaryHistoryViewService,
+    IFinanceService financeService,
     ILogger<LoanController> logger
 ) : Controller
 {
     private readonly ILoanService _loanService = loanService;
     private readonly ISalaryHistoryViewService _salaryHistoryViewService = salaryHistoryViewService;
+    private readonly IFinanceService _financeService = financeService;
     private readonly ILogger<LoanController> _logger = logger;
 
     /// <summary>
@@ -395,6 +397,80 @@ public class LoanController(
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error occurred while disbursing loan {LoanId}", id);
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+    
+    /// <summary>
+    /// Gets disbursements filtered by company or all disbursements based on user role
+    /// </summary>
+    /// <param name="companyId">Optional company ID to filter disbursements (SuperAdmin only). If not provided, SuperAdmin sees all disbursements, Admin sees only their company's disbursements.</param>
+    /// <returns>List of disbursements with loan details, amounts, and processing status</returns>
+    /// <response code="200">Returns the list of disbursements successfully</response>
+    /// <response code="400">Bad request - Invalid company ID format or Admin user attempting to filter by companyId</response>
+    /// <response code="401">Unauthorized - User not authenticated</response>
+    /// <response code="403">Forbidden - User does not have required role (Admin or SuperAdmin)</response>
+    /// <response code="500">Internal server error - An unexpected error occurred</response>
+    [HttpGet("disbursements")]
+    [Authorize(Roles = "Admin,SuperAdmin")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ApiResponse<List<DisbursementDto>>))]
+    [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ApiResponse<object>))]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden, Type = typeof(ApiResponse<object>))]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ApiResponse<object>))]
+    public async Task<IActionResult> GetDisbursements([FromQuery] Guid? companyId = null)
+    {
+        try
+        {
+            var userRoles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
+            var isSuperAdmin = userRoles.Contains("SuperAdmin");
+            
+            // If companyId is provided in query, only SuperAdmin can use it
+            if (companyId.HasValue && !isSuperAdmin)
+            {
+                return StatusCode(403, ApiResponse.Fail("Only SuperAdmin can filter disbursements by company ID"));
+            }
+            
+            List<DisbursementDto> result;
+            
+            if (isSuperAdmin)
+            {
+                if (companyId.HasValue)
+                {
+                    // SuperAdmin filtering by specific company
+                    result = await _financeService.GetCompanyDisbursementsAsync(companyId.Value);
+                    _logger.LogInformation("SuperAdmin fetched disbursements for company {CompanyId}", companyId.Value);
+                }
+                else
+                {
+                    // SuperAdmin viewing all disbursements
+                    result = await _financeService.GetAllDisbursementsAsync();
+                    _logger.LogInformation("SuperAdmin fetched all disbursements");
+                }
+            }
+            else
+            {
+                // Admin can only see their own company's disbursements
+                var companyIdClaim = User.FindFirstValue("CompanyId");
+                if (string.IsNullOrEmpty(companyIdClaim) || !Guid.TryParse(companyIdClaim, out var adminCompanyId))
+                {
+                    return BadRequest(ApiResponse.Fail("Company ID not found in token"));
+                }
+                
+                result = await _financeService.GetCompanyDisbursementsAsync(adminCompanyId);
+                _logger.LogInformation("Admin fetched disbursements for their company {CompanyId}", adminCompanyId);
+            }
+            
+            return Ok(ApiResponse.Ok("Disbursements fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while fetching disbursements.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }

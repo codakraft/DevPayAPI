@@ -3,8 +3,12 @@ using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Settings;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Configuration;
 using System.Net;
 using System.Net.Mail;
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
 
 namespace LendingSolution.Application.Services.Implementations;
 
@@ -15,11 +19,16 @@ public class EmailService : IEmailService
 {
     private readonly EmailSettings _emailSettings;
     private readonly ILogger<EmailService> _logger;
+    private readonly IConfiguration _configuration;
 
-    public EmailService(IOptions<EmailSettings> emailSettings, ILogger<EmailService> logger)
+    public EmailService(IOptions<EmailSettings> emailSettings, ILogger<EmailService> logger, IConfiguration configuration)
     {
         _emailSettings = emailSettings.Value;
         _logger = logger;
+        _configuration = configuration;
+        
+        // Configure QuestPDF license (Community license for free usage)
+        QuestPDF.Settings.License = LicenseType.Community;
     }
 
     public async Task<bool> SendOtpEmailAsync(string emailAddress, string otp, string purpose = "Email Verification", string? senderName = null, string? senderEmail = null)
@@ -30,7 +39,7 @@ public class EmailService : IEmailService
         return await SendEmailAsync(emailAddress, subject, body, senderName, senderEmail);
     }
 
-    public async Task<bool> SendEmailAsync(string emailAddress, string subject, string body, string? senderName = null, string? senderEmail = null)
+    public async Task<bool> SendEmailAsync(string emailAddress, string subject, string body, string? senderName = null, string? senderEmail = null, byte[]? attachmentBytes = null, string? attachmentFileName = null)
     {
         // Use provided sender info or fall back to configured defaults (declare outside try for scope)
         var fromEmail = senderEmail ?? _emailSettings.FromEmail;
@@ -63,6 +72,14 @@ public class EmailService : IEmailService
             };
 
             mailMessage.To.Add(emailAddress);
+
+            // Add attachment if provided
+            if (attachmentBytes != null && !string.IsNullOrEmpty(attachmentFileName))
+            {
+                var stream = new MemoryStream(attachmentBytes);
+                var attachment = new Attachment(stream, attachmentFileName, "application/pdf");
+                mailMessage.Attachments.Add(attachment);
+            }
 
             await client.SendMailAsync(mailMessage);
             _logger.LogInformation("Email sent successfully to {EmailAddress} from {FromName} <{FromEmail}>", emailAddress, fromName, fromEmail);
@@ -306,9 +323,49 @@ public class EmailService : IEmailService
     public async Task<bool> SendOfferLetterEmailAsync(OfferLetterDto offerLetter)
     {
         var subject = $"Loan Offer Letter - {offerLetter.CompanyName}";
-        var body = GenerateOfferLetterEmailTemplate(offerLetter);
+        var htmlBody = GenerateOfferLetterEmailTemplate(offerLetter);
+        var pdfBytes = GenerateOfferLetterPdf(offerLetter);
+        var fileName = $"Offer_Letter_{offerLetter.LoanId}.pdf";
         
-        return await SendEmailAsync(offerLetter.BorrowerEmail, subject, body);
+        // Create a simple email body that references the attachment
+        var emailBody = $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+        .header {{ background-color: #007bff; color: white; padding: 30px; text-align: center; }}
+        .content {{ padding: 30px; background-color: #ffffff; }}
+        .cta-button {{ display: inline-block; background-color: #28a745; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; margin: 20px 0; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <div class='header'>
+            <h1>{offerLetter.CompanyName}</h1>
+            <p>Loan Offer Letter</p>
+        </div>
+        <div class='content'>
+            <p>Dear {offerLetter.BorrowerName},</p>
+            <p>Congratulations! Your loan application has been approved. Please find your offer letter attached to this email as a PDF document.</p>
+            <p><strong>Next Steps:</strong></p>
+            <ol>
+                <li>Download and review the attached offer letter carefully</li>
+                <li>Sign the offer letter (digitally or by hand)</li>
+                <li>Upload the signed copy using the link below</li>
+            </ol>
+            <div style='text-align: center; margin: 30px 0;'>
+                <a href='https://lendingdevweb.vercel.app/upload-offer-letter?loan_id={offerLetter.LoanId}' class='cta-button'>Upload Signed Offer Letter</a>
+            </div>
+            <p>If you have any questions, please don't hesitate to contact our support team.</p>
+            <p>Best regards,<br/>{offerLetter.CompanyName}</p>
+        </div>
+    </div>
+</body>
+</html>";
+        
+        return await SendEmailAsync(offerLetter.BorrowerEmail, subject, emailBody, attachmentBytes: pdfBytes, attachmentFileName: fileName);
     }
     
     public async Task<bool> SendDisbursementNotificationAsync(string emailAddress, string borrowerName, decimal amount, string disbursementReference)
@@ -337,6 +394,9 @@ public class EmailService : IEmailService
     
     private string GenerateOfferLetterEmailTemplate(OfferLetterDto offer)
     {
+        var frontendBaseUrl = _configuration["FrontendBaseUrl"] ?? "https://lendingdevweb.vercel.app";
+        var uploadUrl = $"{frontendBaseUrl}/upload-offer-letter?loan_id={offer.LoanId}";
+        
         return $@"
 <!DOCTYPE html>
 <html>
@@ -443,8 +503,15 @@ public class EmailService : IEmailService
                 </div>
                 
                 <p style='text-align: center; margin-top: 20px;'>
-                    <strong>Please print this document, sign it, and upload the signed copy to complete your loan application.</strong>
+                    <strong>Please sign this document and upload the signed copy to complete your loan application.</strong>
                 </p>
+                
+                <div style='text-align: center; margin-top: 30px;'>
+                    <a href='{uploadUrl}' class='cta-button' style='display: inline-block; background-color: #28a745; color: white; padding: 15px 40px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px;'>
+                        📤 Upload Signed Offer Letter
+                    </a>
+                    <p style='margin-top: 15px; color: #666; font-size: 14px;'>Click the button above or copy this link:<br/><a href='{uploadUrl}' style='color: #007bff;'>{uploadUrl}</a></p>
+                </div>
             </div>
             
             <div class='warning'>
@@ -791,6 +858,252 @@ public class EmailService : IEmailService
     </div>
 </body>
 </html>";
+    }
+
+    private byte[] GenerateOfferLetterPdf(OfferLetterDto offer)
+    {
+        try
+        {
+            return Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4);
+                    page.Margin(1.5f, Unit.Centimetre);
+                    page.PageColor(Colors.White);
+                    page.DefaultTextStyle(x => x.FontSize(10));
+
+                    // Header
+                    page.Header().Background(Colors.Blue.Medium).Padding(20).Column(column =>
+                    {
+                        column.Item().Text(offer.CompanyName)
+                            .FontSize(24).Bold().FontColor(Colors.White);
+                        column.Item().Text("Loan Offer Letter")
+                            .FontSize(14).FontColor(Colors.White);
+                    });
+
+                    // Content
+                    page.Content().PaddingVertical(10).Column(column =>
+                    {
+                        column.Spacing(12);
+
+                        // Title
+                        column.Item().AlignCenter().Text("LOAN OFFER LETTER")
+                            .FontSize(18).Bold().FontColor(Colors.Blue.Medium);
+
+                        column.Item().LineHorizontal(1).LineColor(Colors.Blue.Medium);
+
+                        // Date and Reference
+                        column.Item().Row(row =>
+                        {
+                            row.RelativeItem().Text(text =>
+                            {
+                                text.Span("Date: ").Bold();
+                                text.Span(offer.OfferDate.ToString("MMMM dd, yyyy"));
+                            });
+                            row.RelativeItem().AlignRight().Text(text =>
+                            {
+                                text.Span("Reference: ").Bold();
+                                text.Span($"LOL-{offer.LoanId.ToString()[..8].ToUpper()}");
+                            });
+                        });
+
+                        // Borrower Details Section
+                        column.Item().PaddingTop(10).Column(section =>
+                        {
+                            section.Item().Text("BORROWER DETAILS")
+                                .FontSize(12).Bold().FontColor(Colors.Blue.Medium);
+                            section.Item().PaddingTop(5).LineHorizontal(1).LineColor(Colors.Grey.Lighten2);
+                            
+                            section.Item().PaddingTop(5).Table(table =>
+                            {
+                                table.ColumnsDefinition(columns =>
+                                {
+                                    columns.ConstantColumn(120);
+                                    columns.RelativeColumn();
+                                });
+
+                                table.Cell().Text("Name:").SemiBold();
+                                table.Cell().Text(offer.BorrowerName);
+                                
+                                table.Cell().Text("Email:").SemiBold();
+                                table.Cell().Text(offer.BorrowerEmail);
+                                
+                                table.Cell().Text("Address:").SemiBold();
+                                table.Cell().Text(offer.BorrowerAddress);
+                            });
+                        });
+
+                        // Loan Details Section
+                        column.Item().PaddingTop(15).Column(section =>
+                        {
+                            section.Item().Text("LOAN DETAILS")
+                                .FontSize(12).Bold().FontColor(Colors.Blue.Medium);
+                            section.Item().PaddingTop(5).LineHorizontal(1).LineColor(Colors.Grey.Lighten2);
+                            
+                            // Highlighted Amount
+                            section.Item().PaddingVertical(10).AlignCenter()
+                                .Background(Colors.Green.Lighten4)
+                                .Border(1).BorderColor(Colors.Green.Medium)
+                                .Padding(15)
+                                .Text($"₦{offer.LoanAmount:N2}")
+                                .FontSize(22).Bold().FontColor(Colors.Green.Darken2);
+
+                            section.Item().PaddingTop(10).Table(table =>
+                            {
+                                table.ColumnsDefinition(columns =>
+                                {
+                                    columns.ConstantColumn(150);
+                                    columns.RelativeColumn();
+                                });
+
+                                table.Cell().Text("Loan Product:").SemiBold();
+                                table.Cell().Text(offer.ProductName);
+                                
+                                table.Cell().Text("Purpose:").SemiBold();
+                                table.Cell().Text(offer.Purpose);
+                                
+                                table.Cell().Text("Loan Tenure:").SemiBold();
+                                table.Cell().Text($"{offer.DurationInMonths} Month(s)");
+                                
+                                table.Cell().Text("Interest Rate:").SemiBold();
+                                table.Cell().Text($"{offer.InterestRate}% ({offer.InterestComputationBasis})");
+                                
+                                table.Cell().Text("Total Interest:").SemiBold();
+                                table.Cell().Text($"₦{offer.TotalInterest:N2}");
+                                
+                                table.Cell().Text("Total Repayment:").SemiBold();
+                                table.Cell().Text($"₦{offer.TotalRepayment:N2}").Bold();
+                                
+                                table.Cell().Text("Monthly Repayment:").SemiBold();
+                                table.Cell().Text($"₦{offer.MonthlyRepayment:N2}").Bold();
+                            });
+                        });
+
+                        // Important Dates Section
+                        column.Item().PaddingTop(15).Column(section =>
+                        {
+                            section.Item().Text("IMPORTANT DATES")
+                                .FontSize(12).Bold().FontColor(Colors.Blue.Medium);
+                            section.Item().PaddingTop(5).LineHorizontal(1).LineColor(Colors.Grey.Lighten2);
+                            
+                            section.Item().PaddingTop(5).Table(table =>
+                            {
+                                table.ColumnsDefinition(columns =>
+                                {
+                                    columns.ConstantColumn(180);
+                                    columns.RelativeColumn();
+                                });
+
+                                table.Cell().Text("Offer Valid Until:").SemiBold();
+                                table.Cell().Text(offer.ExpiryDate.ToString("MMMM dd, yyyy"));
+                                
+                                table.Cell().Text("Expected Disbursement:").SemiBold();
+                                table.Cell().Text(offer.ExpectedDisbursementDate.ToString("MMMM dd, yyyy"));
+                                
+                                table.Cell().Text("Maturity Date:").SemiBold();
+                                table.Cell().Text(offer.ExpectedMaturityDate.ToString("MMMM dd, yyyy"));
+                                
+                                table.Cell().Text("Grace Period:").SemiBold();
+                                table.Cell().Text($"{offer.MoratoriumDays} days");
+                            });
+                        });
+
+                        // Penalty Notice
+                        column.Item().PaddingTop(10)
+                            .Background(Colors.Grey.Lighten3)
+                            .Border(1).BorderColor(Colors.Blue.Medium)
+                            .Padding(10)
+                            .Text(text =>
+                            {
+                                text.Span("Penalty for Default: ").Bold();
+                                text.Span($"A penalty rate of {offer.PenaltyRate}% will be applied on outstanding principal for late payments.");
+                            });
+
+                        // Terms and Conditions
+                        column.Item().PageBreak();
+                        column.Item().Text("TERMS AND CONDITIONS")
+                            .FontSize(12).Bold().FontColor(Colors.Blue.Medium);
+                        column.Item().LineHorizontal(1).LineColor(Colors.Grey.Lighten2);
+                        
+                        var terms = new[]
+                        {
+                            "This offer is valid for 7 days from the date of issue.",
+                            "The borrower agrees to repay the loan amount plus interest according to the repayment schedule.",
+                            "Late payments will attract a penalty as specified above.",
+                            "The borrower authorizes deduction of loan repayments from their salary account.",
+                            "The borrower confirms that all information provided is accurate and complete.",
+                            "This loan is subject to the successful setup of a direct debit mandate.",
+                            "The lender reserves the right to modify the terms with prior notice.",
+                            "This agreement is governed by the laws of the Federal Republic of Nigeria."
+                        };
+
+                        for (int i = 0; i < terms.Length; i++)
+                        {
+                            column.Item().PaddingTop(3).Row(row =>
+                            {
+                                row.ConstantItem(20).Text($"{i + 1}.");
+                                row.RelativeItem().Text(terms[i]);
+                            });
+                        }
+
+                        // Signature Section
+                        column.Item().PaddingTop(20).Column(section =>
+                        {
+                            section.Item().Text("ACCEPTANCE OF OFFER")
+                                .FontSize(12).Bold();
+                            
+                            section.Item().PaddingTop(5).Text(
+                                $"I, {offer.BorrowerName}, hereby accept the loan offer as detailed above and agree to abide by all terms and conditions.");
+                            
+                            section.Item().PaddingTop(15)
+                                .Border(2).BorderColor(Colors.Grey.Medium)
+                                .Background(Colors.Grey.Lighten4)
+                                .Padding(30)
+                                .Column(sigBox =>
+                                {
+                                    sigBox.Item().AlignCenter().Text("BORROWER'S SIGNATURE")
+                                        .FontSize(11).Bold();
+                                    sigBox.Item().PaddingTop(40).AlignCenter().Text("_________________________________");
+                                    sigBox.Item().PaddingTop(5).AlignCenter().Text("Signature & Date")
+                                        .FontSize(9);
+                                });
+
+                            section.Item().PaddingTop(10).AlignCenter().Text(
+                                "Please sign this document and upload the signed copy to complete your loan application.")
+                                .FontSize(9).Bold();
+                        });
+
+                        // Warning
+                        column.Item().PaddingTop(10)
+                            .Background(Colors.Orange.Lighten4)
+                            .Border(1).BorderColor(Colors.Orange.Medium)
+                            .Padding(10)
+                            .Text(text =>
+                            {
+                                text.Span("⚠️ Important: ").Bold();
+                                text.Span("Please review all terms carefully before signing. By signing this document, you are entering into a legally binding agreement.");
+                            });
+                    });
+
+                    // Footer
+                    page.Footer().Background(Colors.Grey.Lighten3).Padding(10).Column(footer =>
+                    {
+                        footer.Item().AlignCenter().Text($"This is an official loan offer from {offer.CompanyName}")
+                            .FontSize(9);
+                        footer.Item().AlignCenter().Text(offer.CompanyAddress)
+                            .FontSize(8);
+                        footer.Item().AlignCenter().Text($"© {DateTime.UtcNow.Year} {offer.CompanyName}. All rights reserved.")
+                            .FontSize(8);
+                    });
+                });
+            }).GeneratePdf();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating PDF");
+            throw;
+        }
     }
 
     private string GenerateImageReuploadRequestTemplate(string borrowerName, string reason, string reuploadUrl)
