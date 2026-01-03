@@ -626,11 +626,7 @@ public class LoanService(
 
     public async Task<SignedOfferLetterResponseDto> UploadSignedOfferLetterAsync(Guid loanId, SignedOfferLetterUploadDto dto, string uploadedBy)
     {
-        var loan = await _loanRepository.GetLoanByIdWithIncludes(loanId);
-        if (loan == null)
-        {
-            throw new AppException("Loan not found", 404);
-        }
+        var loan = await _loanRepository.GetLoanByIdWithIncludes(loanId) ?? throw new AppException("Loan not found", 404);
 
         // Only allow upload for OfferLetterSent status
         if (loan.Status != LoanStatus.OfferLetterSent && loan.Status != LoanStatus.OfferLetterSigned)
@@ -639,20 +635,15 @@ public class LoanService(
         }
 
         // Validate document exists and has completed upload
-        var document = await _documentService.GetDocumentByIdAsync(dto.SignedOfferLetterDocumentId);
-        if (document == null)
-        {
-            throw new AppException("Signed offer letter document not found. Please upload the document first.", 404);
-        }
+        var document = await _documentService.GetDocumentByIdAsync(dto.SignedOfferLetterDocumentId) ?? throw new AppException("Signed offer letter document not found. Please upload the document first.", 404);
         if (document.Status != Core.Enum.DocumentStatus.Completed)
         {
             throw new AppException($"Signed offer letter document upload is {document.Status}. Please wait for upload to complete or retry upload.", 400);
         }
 
         // Validate that document is a PDF
-        var pdfExtension = ".pdf";
-        var documentExtension = document.FileExtension?.ToLowerInvariant();
-        if (string.IsNullOrEmpty(documentExtension) || documentExtension != pdfExtension)
+        var documentType = document.DocumentType?.ToLower() ?? string.Empty;
+        if (string.IsNullOrEmpty(documentType) || documentType != "pdf")
         {
             throw new AppException("Signed offer letter must be a PDF file.", 400);
         }
