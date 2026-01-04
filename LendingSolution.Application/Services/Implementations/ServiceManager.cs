@@ -31,12 +31,14 @@ public class ServiceManager(
     IOptions<RemitaSettings> remitaOptions,
     IHttpClientFactory httpClientFactory,
     ILogger<RemitaService> logger,
+    ILogger<LoanService> loanServiceLogger,
     ICombinedRepository cRepo,
     IRefreshTokenRepository refreshTokenRepository,
     IDisbursementRepository disbursementRepository,
     IRepaymentRepository repaymentRepository,
     ISupportTicketRepository supportTicketRepository,
     IBorrowerApplicationRepository borrowerApplicationRepository,
+    IRemitaSalaryHistoryRepository remitaSalaryHistoryRepository,
     IWalletService walletService,
     IEmailService emailService,
     IDocumentService documentService,
@@ -68,10 +70,13 @@ public class ServiceManager(
                     loanRepository,
                     companyRepository,
                     borrowerApplicationRepository,
+                    remitaSalaryHistoryRepository,
                     configuration,
                     emailService,
                     documentService,
-                    providusDisbursementService
+                    providusDisbursementService,
+                    db,
+                    loanServiceLogger
                 ));
     private readonly Lazy<IRemitaService> _remitaService = new Lazy<IRemitaService>(() =>
                 new RemitaService(

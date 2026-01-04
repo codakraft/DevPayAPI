@@ -304,7 +304,7 @@ public class SupportService : ISupportService
             var repayments = await _repaymentRepository.GetRepaymentsByLoanId(loan.Id.ToString());
 
             var totalDisbursed = disbursements.Where(d => d.Status == "Disbursed").Sum(d => d.Amount);
-            var totalRepaid = repayments.Where(r => r.Status == "Verified").Sum(r => r.Amount);
+            var totalRepaid = repayments.Sum(r => r.TotalRepaid);
 
             loanSupportDtos.Add(new LoanSupportDto
             {
@@ -338,7 +338,7 @@ public class SupportService : ISupportService
         var repayments = await _repaymentRepository.GetRepaymentsByLoanId(loanId);
 
         var totalDisbursed = disbursements.Where(d => d.Status == "Disbursed").Sum(d => d.Amount);
-        var totalRepaid = repayments.Where(r => r.Status == "Verified").Sum(r => r.Amount);
+        var totalRepaid = repayments.Sum(r => r.TotalRepaid);
 
         return new LoanSupportDto
         {
@@ -812,7 +812,7 @@ public class SupportService : ISupportService
 
         var totalDisbursed = disbursements.Sum(d => d.Amount);
         var totalRequested = loans.Sum(l => l.Amount);
-        var totalRepaid = repayments.Sum(r => r.Amount);
+        var totalRepaid = repayments.Sum(r => r.TotalRepaid);
         var outstandingBalance = totalDisbursed - totalRepaid;
         
         var approvedLoans = loans.Count(l => l.Status == LoanStatus.Approved);

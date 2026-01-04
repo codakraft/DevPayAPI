@@ -19,6 +19,10 @@ public class BorrowerStep1RequestDto
     public required string Email { get; set; }
 
     [Required]
+    [Phone]
+    public required string PhoneNumber { get; set; }
+
+    [Required]
     public Guid ProductId { get; set; }
 }
 

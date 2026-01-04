@@ -33,14 +33,14 @@ public class CombinedRepository(ApplicationDbContext db) : ICombinedRepository
     {
         return await _db.Loans.Include(l => l.Product)
             .Include(l => l.User)
-            .FirstOrDefaultAsync(l => l.MandateId == mandateId);
+            .FirstOrDefaultAsync(l => l.MandateRef == mandateId);
     }
 
     public async Task<Loan?> GetLoanByTransactionRefAsync(string transactionRef)
     {
         return await _db.Loans.Include(l => l.Product)
             .Include(l => l.User)
-            .FirstOrDefaultAsync(l => l.DisbursementReference == transactionRef || l.RemitaTransRef == transactionRef);
+            .FirstOrDefaultAsync(l => l.DisbursementReference == transactionRef);
     }
 
     public async Task<bool> CreateRepaymentAsync(Repayment repayment)

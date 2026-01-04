@@ -97,6 +97,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             FirstName = request.FirstName,
             LastName = request.LastName,
             Employer = request.Employer,
+            PhoneNumber = request.PhoneNumber,
             CompanyId = product.CompanyId, // Get CompanyId from the product
             ProductId = request.ProductId,
             CurrentStep = BorrowerOnboardingStep.Step1_EmailSent
@@ -518,14 +519,16 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         var product = application.Product ?? await _loanProductRepository.GetLoanProductById(application.ProductId) ?? throw new AppException("Loan product not found", 404);
 
         var monthlyInterestRate = product.InterestRate / 100 / 12;
-        var totalRepayment = request.LoanAmount * (1 + (monthlyInterestRate * request.Tenor));
-        var monthlyRepayment = totalRepayment / request.Tenor;
+        var totalRepayment = Math.Round(request.LoanAmount * (1 + (monthlyInterestRate * request.Tenor)), 2);
+        var monthlyRepayment = Math.Round(totalRepayment / request.Tenor, 2);
 
         // Create actual loan record
         var loan = new Loan
         {
             Amount = request.LoanAmount,
             DurationInMonths = request.Tenor,
+            TotalRepayment = totalRepayment,
+            MonthlyRepayment = monthlyRepayment,
             Status = LoanStatus.Pending,
             CompanyId = application.CompanyId,
             ProductId = application.ProductId

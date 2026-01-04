@@ -19,7 +19,6 @@ public class RemitaSalaryHistoryRepository : IRemitaSalaryHistoryRepository
     {
         return await _context.RemitaSalaryHistories
             .Include(rsh => rsh.SalaryPayments)
-            .Include(rsh => rsh.LoanHistories)
             .Include(rsh => rsh.BorrowerApplication)
             .FirstOrDefaultAsync(rsh => rsh.BorrowerApplicationId == borrowerApplicationId);
     }
@@ -58,7 +57,6 @@ public class RemitaSalaryHistoryRepository : IRemitaSalaryHistoryRepository
     {
         return await _context.RemitaSalaryHistories
             .Include(rsh => rsh.SalaryPayments)
-            .Include(rsh => rsh.LoanHistories)
             .Include(rsh => rsh.BorrowerApplication)
                 .ThenInclude(ba => ba!.Company)
             .FirstOrDefaultAsync(rsh => rsh.BVN == bvn);
@@ -68,7 +66,6 @@ public class RemitaSalaryHistoryRepository : IRemitaSalaryHistoryRepository
     {
         var baseQuery = _context.RemitaSalaryHistories
             .Include(rsh => rsh.SalaryPayments)
-            .Include(rsh => rsh.LoanHistories)
             .Include(rsh => rsh.BorrowerApplication)
                 .ThenInclude(ba => ba!.Company)
             .Where(rsh => rsh.BorrowerApplication!.CompanyId == companyId);
@@ -82,7 +79,6 @@ public class RemitaSalaryHistoryRepository : IRemitaSalaryHistoryRepository
     {
         var baseQuery = _context.RemitaSalaryHistories
             .Include(rsh => rsh.SalaryPayments)
-            .Include(rsh => rsh.LoanHistories)
             .Include(rsh => rsh.BorrowerApplication)
                 .ThenInclude(ba => ba!.Company);
 
@@ -95,7 +91,6 @@ public class RemitaSalaryHistoryRepository : IRemitaSalaryHistoryRepository
     {
         var salaryHistory = await _context.RemitaSalaryHistories
             .Include(rsh => rsh.SalaryPayments)
-            .Include(rsh => rsh.LoanHistories)
             .Include(rsh => rsh.BorrowerApplication)
                 .ThenInclude(ba => ba!.Company)
             .FirstOrDefaultAsync(rsh => rsh.Id == salaryHistoryId);
@@ -218,9 +213,9 @@ public class RemitaSalaryHistoryRepository : IRemitaSalaryHistoryRepository
             LastPaymentDate = salaryHistory.LatestPaymentDate ?? DateTime.MinValue,
             AverageMonthlySalary = salaryHistory.AverageMonthlySalary,
             LastSalaryAmount = salaryHistory.LatestSalaryAmount,
-            HasOutstandingLoans = salaryHistory.HasOutstandingLoans,
-            TotalOutstandingAmount = salaryHistory.TotalOutstandingAmount,
-            OutstandingLoanCount = salaryHistory.LoanHistories.Count,
+            HasOutstandingLoans = false,
+            TotalOutstandingAmount = 0,
+            OutstandingLoanCount = 0,
             CreatedAt = salaryHistory.CreatedAt,
             SalaryPayments = salaryHistory.SalaryPayments.Select(sp => new SalaryPaymentViewDto
             {
@@ -229,15 +224,7 @@ public class RemitaSalaryHistoryRepository : IRemitaSalaryHistoryRepository
                 PaymentReference = sp.AccountNumber, // Using account number as reference
                 Narration = $"Salary payment to {sp.AccountNumber}"
             }).OrderByDescending(sp => sp.PaymentDate).ToList(),
-            OutstandingLoans = salaryHistory.LoanHistories.Select(lh => new RemitaLoanViewDto
-            {
-                LoanAmount = lh.LoanAmount,
-                OutstandingBalance = lh.OutstandingAmount,
-                MonthlyDeduction = lh.RepaymentAmount,
-                LoanDate = lh.LoanDisbursementDate ?? DateTime.MinValue,
-                LoanReference = lh.Id.ToString(), // Using ID as reference
-                LenderName = lh.LoanProvider ?? "Unknown Lender"
-            }).OrderByDescending(lh => lh.LoanDate).ToList()
+            OutstandingLoans = new List<RemitaLoanViewDto>()
         };
     }
 }

@@ -139,9 +139,6 @@ public class RemitaSalaryHistory
 
     // Collection for salary payment details
     public virtual ICollection<RemitaSalaryPayment> SalaryPayments { get; set; } = new List<RemitaSalaryPayment>();
-
-    // Collection for loan history details
-    public virtual ICollection<RemitaLoanHistory> LoanHistories { get; set; } = new List<RemitaLoanHistory>();
 }
 
 /// <summary>
@@ -195,67 +192,8 @@ public class RemitaSalaryPayment
     public virtual RemitaSalaryHistory? RemitaSalaryHistory { get; set; }
 }
 
-/// <summary>
-/// Loan history from Remita
-/// </summary>
-[Table("RemitaLoanHistories")]
-public class RemitaLoanHistory
-{
-    [Key]
-    public Guid Id { get; set; } = Guid.NewGuid();
 
-    /// <summary>
-    /// Reference to the salary history record
-    /// </summary>
-    [Required]
-    public Guid RemitaSalaryHistoryId { get; set; }
 
     /// <summary>
     /// Loan provider name
     /// </summary>
-    [MaxLength(200)]
-    public string? LoanProvider { get; set; }
-
-    /// <summary>
-    /// Original loan amount
-    /// </summary>
-    [Column(TypeName = "decimal(18,2)")]
-    public decimal LoanAmount { get; set; }
-
-    /// <summary>
-    /// Outstanding amount
-    /// </summary>
-    [Column(TypeName = "decimal(18,2)")]
-    public decimal OutstandingAmount { get; set; }
-
-    /// <summary>
-    /// Loan disbursement date
-    /// </summary>
-    public DateTime? LoanDisbursementDate { get; set; }
-
-    /// <summary>
-    /// Loan status
-    /// </summary>
-    [MaxLength(50)]
-    public string? Status { get; set; }
-
-    /// <summary>
-    /// Repayment amount
-    /// </summary>
-    [Column(TypeName = "decimal(18,2)")]
-    public decimal RepaymentAmount { get; set; }
-
-    /// <summary>
-    /// Repayment frequency
-    /// </summary>
-    [MaxLength(50)]
-    public string? RepaymentFreq { get; set; }
-
-    /// <summary>
-    /// When this record was created
-    /// </summary>
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-
-    // Navigation property
-    public virtual RemitaSalaryHistory? RemitaSalaryHistory { get; set; }
-}

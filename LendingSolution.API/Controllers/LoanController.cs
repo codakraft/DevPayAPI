@@ -17,12 +17,14 @@ public class LoanController(
     ILoanService loanService,
     ISalaryHistoryViewService salaryHistoryViewService,
     IFinanceService financeService,
+    IRemitaService remitaService,
     ILogger<LoanController> logger
 ) : Controller
 {
     private readonly ILoanService _loanService = loanService;
     private readonly ISalaryHistoryViewService _salaryHistoryViewService = salaryHistoryViewService;
     private readonly IFinanceService _financeService = financeService;
+    private readonly IRemitaService _remitaService = remitaService;
     private readonly ILogger<LoanController> _logger = logger;
 
     /// <summary>
@@ -471,6 +473,66 @@ public class LoanController(
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error occurred while fetching disbursements.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+    
+    /// <summary>
+    /// Stops Remita mandate collection for a loan
+    /// </summary>
+    /// <param name="loanId">The unique identifier of the loan to stop collection for</param>
+    /// <returns>Result of the stop mandate operation</returns>
+    [HttpPost("{loanId:guid}/stop-collection")]
+    [Authorize(Roles = "Admin,SuperAdmin")]
+    public async Task<IActionResult> StopLoanCollection(Guid loanId)
+    {
+        try
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var result = await _loanService.StopLoanCollectionAsync(loanId, userId);
+            
+            _logger.LogInformation("Loan collection stopped successfully for loan {LoanId} by user {UserId}", loanId, userId);
+            return Ok(ApiResponse.Ok("Loan collection stopped successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while stopping loan collection for {LoanId}.", loanId);
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    /// <summary>
+    /// Performs hybrid reconciliation of loan collection by comparing local records with Remita mandate history
+    /// </summary>
+    /// <param name="loanId">The unique identifier of the loan to reconcile</param>
+    /// <returns>Reconciliation result with comparison details</returns>
+    [HttpPost("{loanId:guid}/reconcile")]
+    [Authorize(Roles = "Admin,SuperAdmin")]
+    public async Task<IActionResult> ReconcileLoanCollection(Guid loanId)
+    {
+        try
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var result = await _loanService.ReconcileLoanCollectionAsync(loanId, userId);
+            
+            _logger.LogInformation("Loan reconciliation completed for loan {LoanId} by user {UserId}. IsReconciled: {IsReconciled}", 
+                loanId, userId, result.IsReconciled);
+            
+            return Ok(ApiResponse.Ok(result.Message, result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while reconciling loan {LoanId}.", loanId);
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }

@@ -29,7 +29,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<BorrowerApplication> BorrowerApplications { get; set; }
     public DbSet<RemitaSalaryHistory> RemitaSalaryHistories { get; set; }
     public DbSet<RemitaSalaryPayment> RemitaSalaryPayments { get; set; }
-    public DbSet<RemitaLoanHistory> RemitaLoanHistories { get; set; }
     public DbSet<RemitaCustomer> RemitaCustomers { get; set; }
     public DbSet<RemitaLoanCollectionNotification> RemitaLoanCollectionNotifications { get; set; }
     public DbSet<MonoMandateReference> MonoMandateReferences { get; set; }
@@ -153,7 +152,15 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             .HasColumnType("decimal(18,2)");
 
         modelBuilder.Entity<Repayment>()
-            .Property(r => r.Amount)
+            .Property(r => r.TotalDue)
+            .HasColumnType("decimal(18,2)");
+
+        modelBuilder.Entity<Repayment>()
+            .Property(r => r.TotalRepaid)
+            .HasColumnType("decimal(18,2)");
+
+        modelBuilder.Entity<Repayment>()
+            .Property(r => r.AmountUnpaid)
             .HasColumnType("decimal(18,2)");
 
         modelBuilder.Entity<Disbursement>()
@@ -338,12 +345,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             .HasForeignKey(rsp => rsp.RemitaSalaryHistoryId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        modelBuilder.Entity<RemitaLoanHistory>()
-            .HasOne(rlh => rlh.RemitaSalaryHistory)
-            .WithMany(rsh => rsh.LoanHistories)
-            .HasForeignKey(rlh => rlh.RemitaSalaryHistoryId)
-            .OnDelete(DeleteBehavior.Cascade);
-
         // Add indexes for RemitaSalaryHistory
         modelBuilder.Entity<RemitaSalaryHistory>()
             .HasIndex(rsh => rsh.BorrowerApplicationId);
@@ -359,9 +360,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 
         modelBuilder.Entity<RemitaSalaryPayment>()
             .HasIndex(rsp => rsp.PaymentDate);
-
-        modelBuilder.Entity<RemitaLoanHistory>()
-            .HasIndex(rlh => rlh.RemitaSalaryHistoryId);
 
         // Configure MonoMandateReference foreign key relationships with NO ACTION to avoid cascade cycles
         modelBuilder.Entity<MonoMandateReference>()

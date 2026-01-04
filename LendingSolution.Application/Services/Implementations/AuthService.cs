@@ -515,14 +515,14 @@ public class AuthService(
     {
         var totalRequested = loans.Sum(l => l.Amount);
         var totalDisbursed = disbursements.Sum(d => d.Amount);
-        var totalRepayments = repayments.Sum(r => r.Amount);
+        var totalRepayments = repayments.Sum(r => r.TotalRepaid);
         var outstandingAmount = totalDisbursed - totalRepayments;
 
         var monthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
         var yearStart = new DateTime(DateTime.UtcNow.Year, 1, 1);
 
         var monthlyDisbursements = disbursements.Where(d => d.CreatedAt >= monthStart).Sum(d => d.Amount);
-        var monthlyRepayments = repayments.Where(r => r.CreatedAt >= monthStart).Sum(r => r.Amount);
+        var monthlyRepayments = repayments.Where(r => r.CreatedAt >= monthStart).Sum(r => r.TotalRepaid);
 
         var totalProcessedLoans = loans.Count(l => l.Status == LoanStatus.Approved || l.Status == LoanStatus.Rejected);
         var defaultedLoans = loans.Count(l => l.Status == LoanStatus.Overdue);

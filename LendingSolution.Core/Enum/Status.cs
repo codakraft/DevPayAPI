@@ -45,3 +45,10 @@ public enum DocumentStatus
     Completed = 1,
     Failed = 2
 }
+
+public enum RepaymentStatus
+{
+    Active = 0,
+    Overdue = 1,
+    Completed = 2
+}

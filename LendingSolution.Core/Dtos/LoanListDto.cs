@@ -33,8 +33,8 @@ public class LoanListDto
     
     // Additional Info
     public string Message { get; set; } = string.Empty;
-    public bool IsMandateGenerated { get; set; }
-    public string MandateId { get; set; } = string.Empty;
+    public bool IsMandateCreated { get; set; }
+    public string MandateRef { get; set; } = string.Empty;
     
     // Document/Image Information
     public string? DocumentIds { get; set; } // Comma-separated document IDs from BorrowerApplication
@@ -80,7 +80,7 @@ public class LoanFilterDto
     public DateTime? ApprovedAfter { get; set; }
     public DateTime? ApprovedBefore { get; set; }
     public Guid? ProductId { get; set; }
-    public bool? IsMandateGenerated { get; set; }
+    public bool? IsMandateCreated { get; set; }
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 20;
     public string? SortBy { get; set; } = "CreatedAt";

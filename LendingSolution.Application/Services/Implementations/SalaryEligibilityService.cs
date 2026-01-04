@@ -65,24 +65,11 @@ public class SalaryEligibilityService : ISalaryEligibilityService
         eligibility.LatestSalaryAmount = amounts.First(); // Assuming first is latest
         eligibility.ConsistentMonths = amounts.Count;
 
-        // Check for outstanding loans
-        var loanHistories = salaryData.Data.LoanHistoryDetails ?? new List<RemitaLoanHistoryDto>();
-        eligibility.HasOutstandingLoans = loanHistories.Any(l => l.OutstandingAmount > 0);
-        eligibility.TotalOutstandingAmount = loanHistories.Sum(l => l.OutstandingAmount);
-
         // Calculate eligibility based on salary
-        var salaryMultiplier = GetSalaryMultiplier(eligibility.ConsistentMonths, eligibility.HasOutstandingLoans);
+        var salaryMultiplier = GetSalaryMultiplier(eligibility.ConsistentMonths, false);
         
         // Base calculation: percentage of average monthly salary * number of months
         var baseEligibleAmount = eligibility.AverageMonthlySalary * salaryMultiplier;
-
-        // Adjust for outstanding loans (reduce eligible amount)
-        if (eligibility.HasOutstandingLoans)
-        {
-            var monthlyDebtService = eligibility.TotalOutstandingAmount / 12; // Assume 12 months repayment
-            var adjustedSalary = eligibility.AverageMonthlySalary - monthlyDebtService;
-            baseEligibleAmount = Math.Max(0, adjustedSalary * salaryMultiplier * 0.8m); // 80% of adjusted capacity
-        }
 
         eligibility.CalculatedMinEligible = Math.Max(product.MinAmount, baseEligibleAmount * 0.3m); // 30% of calculated
         eligibility.CalculatedMaxEligible = Math.Min(product.MaxAmount, baseEligibleAmount); // Full calculated amount but capped by product
@@ -206,7 +193,6 @@ public class SalaryEligibilityService : ISalaryEligibilityService
     {
         var data = salaryData.Data!;
         var payments = data.SalaryPaymentDetails ?? new List<RemitaSalaryPaymentDto>();
-        var loans = data.LoanHistoryDetails ?? new List<RemitaLoanHistoryDto>();
 
         var amounts = new List<decimal>();
         foreach (var payment in payments)
@@ -235,8 +221,8 @@ public class SalaryEligibilityService : ISalaryEligibilityService
             MinSalaryAmount = amounts.Any() ? amounts.Min() : 0,
             MaxSalaryAmount = amounts.Any() ? amounts.Max() : 0,
             ConsistentMonths = amounts.Count,
-            HasOutstandingLoans = loans.Any(l => l.OutstandingAmount > 0),
-            TotalOutstandingAmount = loans.Sum(l => l.OutstandingAmount),
+            HasOutstandingLoans = false,
+            TotalOutstandingAmount = 0,
             RawRemitaResponse = JsonSerializer.Serialize(salaryData)
         };
 
@@ -255,21 +241,6 @@ public class SalaryEligibilityService : ISalaryEligibilityService
             }
         }
 
-        // Add loan histories
-        foreach (var loan in loans)
-        {
-            salaryHistory.LoanHistories.Add(new RemitaLoanHistory
-            {
-                LoanProvider = loan.LoanProvider,
-                LoanAmount = loan.LoanAmount,
-                OutstandingAmount = loan.OutstandingAmount,
-                LoanDisbursementDate = ParseRemitaDate(loan.LoanDisbursementDate),
-                Status = loan.Status,
-                RepaymentAmount = loan.RepaymentAmount,
-                RepaymentFreq = loan.RepaymentFreq
-            });
-        }
-
         return salaryHistory;
     }
 
@@ -277,7 +248,6 @@ public class SalaryEligibilityService : ISalaryEligibilityService
     {
         var data = salaryData.Data!;
         var payments = data.SalaryPaymentDetails ?? new List<RemitaSalaryPaymentDto>();
-        var loans = data.LoanHistoryDetails ?? new List<RemitaLoanHistoryDto>();
 
         var amounts = new List<decimal>();
         foreach (var payment in payments)
@@ -301,8 +271,8 @@ public class SalaryEligibilityService : ISalaryEligibilityService
         existingHistory.MinSalaryAmount = amounts.Any() ? amounts.Min() : 0;
         existingHistory.MaxSalaryAmount = amounts.Any() ? amounts.Max() : 0;
         existingHistory.ConsistentMonths = amounts.Count;
-        existingHistory.HasOutstandingLoans = loans.Any(l => l.OutstandingAmount > 0);
-        existingHistory.TotalOutstandingAmount = loans.Sum(l => l.OutstandingAmount);
+        existingHistory.HasOutstandingLoans = false;
+        existingHistory.TotalOutstandingAmount = 0;
         existingHistory.RawRemitaResponse = JsonSerializer.Serialize(salaryData);
 
         // Add new salary payments
@@ -318,21 +288,6 @@ public class SalaryEligibilityService : ISalaryEligibilityService
                     BankCode = payment.BankCode
                 });
             }
-        }
-
-        // Add new loan histories
-        foreach (var loan in loans)
-        {
-            existingHistory.LoanHistories.Add(new RemitaLoanHistory
-            {
-                LoanProvider = loan.LoanProvider,
-                LoanAmount = loan.LoanAmount,
-                OutstandingAmount = loan.OutstandingAmount,
-                LoanDisbursementDate = ParseRemitaDate(loan.LoanDisbursementDate),
-                Status = loan.Status,
-                RepaymentAmount = loan.RepaymentAmount,
-                RepaymentFreq = loan.RepaymentFreq
-            });
         }
     }
 }

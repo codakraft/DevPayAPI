@@ -195,6 +195,7 @@ public static class ServiceExtensions
             var remitaSettings = provider.GetRequiredService<IOptions<RemitaSettings>>();
             var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
             var logger = provider.GetRequiredService<ILogger<RemitaService>>();
+            var loanServiceLogger = provider.GetRequiredService<ILogger<LoanService>>();
             var combinedRepository = provider.GetRequiredService<ICombinedRepository>();
             var roleManager = provider.GetRequiredService<RoleManager<IdentityRole>>();
             var refreshTokenRepository = provider.GetRequiredService<IRefreshTokenRepository>();
@@ -202,6 +203,7 @@ public static class ServiceExtensions
             var repaymentRepository = provider.GetRequiredService<IRepaymentRepository>();
             var supportTicketRepository = provider.GetRequiredService<ISupportTicketRepository>();
             var borrowerApplicationRepository = provider.GetRequiredService<IBorrowerApplicationRepository>();
+            var remitaSalaryHistoryRepository = provider.GetRequiredService<IRemitaSalaryHistoryRepository>();
             var walletService = provider.GetRequiredService<IWalletService>();
             var emailService = provider.GetRequiredService<IEmailService>();
             var documentService = provider.GetRequiredService<IDocumentService>();
@@ -224,12 +226,14 @@ public static class ServiceExtensions
                 remitaSettings,
                 httpClientFactory,
                 logger,
+                loanServiceLogger,
                 combinedRepository,
                 refreshTokenRepository,
                 disbursementRepository,
                 repaymentRepository,
                 supportTicketRepository,
                 borrowerApplicationRepository,
+                remitaSalaryHistoryRepository,
                 walletService,
                 emailService,
                 documentService,

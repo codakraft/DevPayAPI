@@ -124,14 +124,15 @@ public class MonoService : IMonoService
             if (result?.Data != null)
             {
                 // Update loan with Mono mandate information
-                loan.MandateId = result.Data.Id;
-                loan.MandateStatus = result.Data.Status;
+                loan.MandateRef = result.Data.Id;
+                loan.IsMandateCreated = true;
+                loan.MandateCreatedAt = DateTime.UtcNow;
                 await _cRepo.UpdateLoanAsync(loan);
 
                 // Save mandate reference to database
                 await SaveMandateReferenceAsync(loan.CompanyId, loanId, result.Data);
 
-                _logger.LogInformation("Successfully created Mono mandate for loan {LoanId}: {MandateId}",
+                _logger.LogInformation("Successfully created Mono mandate for loan {LoanId}: {MandateRef}",
                     loanId, result.Data.Id);
             }
 

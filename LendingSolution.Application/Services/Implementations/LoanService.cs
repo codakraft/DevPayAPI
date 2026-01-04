@@ -9,6 +9,7 @@ using System.Text.Json;
 using LendingSolution.Core.Enum;
 using LendingSolution.Core.Dtos.Response;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using LendingSolution.Application.Repositories.Interfaces;
 using LendingSolution.Application.Exceptions;
 
@@ -20,10 +21,13 @@ public class LoanService(
     ILoanRepository loanRepository,
     ICompanyRepository companyRepository,
     IBorrowerApplicationRepository borrowerApplicationRepository,
+    IRemitaSalaryHistoryRepository remitaSalaryHistoryRepository,
     IConfiguration configuration,
     IEmailService emailService,
     IDocumentService documentService,
-    IProvidusDisbursementService providusDisbursementService
+    IProvidusDisbursementService providusDisbursementService,
+    ApplicationDbContext db,
+    ILogger<LoanService> logger
 ) : ILoanService
 {
     private readonly UserManager<ApplicationUser> _userManager = userManager;
@@ -32,9 +36,12 @@ public class LoanService(
     private readonly ICompanyRepository _companyRepository = companyRepository;
     private readonly ILoanRepository _loanRepository = loanRepository;
     private readonly IBorrowerApplicationRepository _borrowerApplicationRepository = borrowerApplicationRepository;
+    private readonly IRemitaSalaryHistoryRepository _remitaSalaryHistoryRepository = remitaSalaryHistoryRepository;
     private readonly IEmailService _emailService = emailService;
     private readonly IDocumentService _documentService = documentService;
     private readonly IProvidusDisbursementService _providusDisbursementService = providusDisbursementService;
+    private readonly ApplicationDbContext _db = db;
+    private readonly ILogger<LoanService> _logger = logger;
 
     public async Task<String> Register(RegisterRequestDto body)
     {
@@ -165,7 +172,7 @@ public class LoanService(
         loan.Status = LoanStatus.Approved;
         loan.ApprovedAt = DateTime.UtcNow;
         loan.ApprovedBy = approvedBy;
-        loan.ProcessingReason = reason;
+        loan.Reason = reason;
         loan.DueDate = DateTime.UtcNow.AddMonths(loan.DurationInMonths);
 
         var updateResult = await _loanRepository.UpdateLoan(loan);
@@ -215,7 +222,7 @@ public class LoanService(
         loan.Status = LoanStatus.Rejected;
         loan.RejectedAt = DateTime.UtcNow;
         loan.RejectedBy = rejectedBy;
-        loan.ProcessingReason = reason;
+        loan.Reason = reason;
 
         var updateResult = await _loanRepository.UpdateLoan(loan);
         if (!updateResult)
@@ -437,9 +444,9 @@ public class LoanService(
         }
 
         // Mandate filter
-        if (filter.IsMandateGenerated.HasValue)
+        if (filter.IsMandateCreated.HasValue)
         {
-            query = query.Where(l => l.IsMandateGenerated == filter.IsMandateGenerated.Value);
+            query = query.Where(l => l.IsMandateCreated == filter.IsMandateCreated.Value);
         }
 
         return query;
@@ -532,8 +539,8 @@ public class LoanService(
             ProductName = loan.Product.Name,
             ProductInterestRate = loan.Product.InterestRate,
             Message = loan.Message,
-            IsMandateGenerated = loan.IsMandateGenerated,
-            MandateId = loan.MandateId,
+            IsMandateCreated = loan.IsMandateCreated,
+            MandateRef = loan.MandateRef,
             DocumentIds = loan.BorrowerApplication?.DocumentIds,
             OfferLetterDocumentId = loan.OfferLetterDocumentId,
             OfferLetterUrl = loan.OfferLetterUrl,
@@ -672,11 +679,7 @@ public class LoanService(
 
     public async Task<LoanDisbursementResponseDto> DisburseLoanAsync(Guid loanId, string? disbursedBy = null)
     {
-        var loan = await _loanRepository.GetLoanByIdWithIncludes(loanId);
-        if (loan == null)
-        {
-            throw new AppException("Loan not found", 404);
-        }
+        var loan = await _loanRepository.GetLoanByIdWithIncludes(loanId) ?? throw new AppException("Loan not found", 404);
 
         // Only allow disbursement for OfferLetterSigned status
         if (loan.Status != LoanStatus.OfferLetterSigned)
@@ -703,13 +706,6 @@ public class LoanService(
             accountNumber = loan.BorrowerApplication.AccountNo;
             bankCode = loan.BorrowerApplication.BankCode;
         }
-        else if (loan.User != null)
-        {
-            borrowerEmail = loan.User.Email ?? string.Empty;
-            borrowerName = $"{loan.User.FirstName} {loan.User.LastName}";
-            // Note: ApplicationUser doesn't have account details - must be provided via loan or separate lookup
-            // For now, account details must come from BorrowerApplication
-        }
         else
         {
             throw new AppException("Borrower information not found", 400);
@@ -721,12 +717,79 @@ public class LoanService(
             throw new AppException("Borrower account number not found. Cannot process disbursement.", 400);
         }
 
+        if (string.IsNullOrEmpty(bankCode))
+        {
+            throw new AppException("Borrower bank code not found. Cannot process disbursement.", 400);
+        }
+
+        // Get repayment amounts from loan (already calculated and saved during loan application)
+        if (!loan.TotalRepayment.HasValue || !loan.MonthlyRepayment.HasValue)
+        {
+            throw new AppException("Loan repayment amounts not found. Cannot process disbursement.", 400);
+        }
+
+        var totalRepayment = loan.TotalRepayment.Value;
+        var monthlyRepayment = loan.MonthlyRepayment.Value;
+
+        // Get phone number for mandate
+        var phoneNumber = loan.BorrowerApplication?.PhoneNumber;
+        if (string.IsNullOrEmpty(phoneNumber))
+        {
+            throw new AppException("Borrower BVN not found. Cannot create mandate.", 400);
+        }
+
+        // Get CustomerId from RemitaSalaryHistory table
+        if (loan.BorrowerApplication == null)
+        {
+            throw new AppException("Borrower application not found. Cannot retrieve salary history.", 400);
+        }
+        
+        var salaryHistory = await _remitaSalaryHistoryRepository.GetByBorrowerApplicationIdAsync(loan.BorrowerApplication.Id);
+        if (salaryHistory == null || string.IsNullOrEmpty(salaryHistory.CustomerId))
+        {
+            throw new AppException("Customer ID not found in salary history. Cannot create mandate.", 400);
+        }
+
+        // Create Remita mandate before disbursement
+        var customerId = salaryHistory.CustomerId;
+        var disbursementDate = DateTime.UtcNow.ToString("dd/MM/yyyy");
+        var firstCollectionDate = DateTime.UtcNow.AddMonths(1).ToString("dd/MM/yyyy");
+        
+        _logger.LogInformation("Creating Remita mandate for loan {LoanId} before disbursement", loanId);
+        
+        var mandateResult = await _remitaService.CreateMandateAsync(
+            customerId: customerId,
+            phoneNumber: phoneNumber,
+            accountNumber: accountNumber,
+            loanAmount: loan.Amount.ToString("F2"),
+            collectionAmount: monthlyRepayment.ToString("F2"),
+            dateOfDisbursement: disbursementDate,
+            dateOfCollection: firstCollectionDate,
+            totalCollectionAmount: totalRepayment.ToString("F2"),
+            numberOfRepayments: loan.DurationInMonths.ToString(),
+            bankCode: bankCode
+        );
+
+        if (mandateResult == null || mandateResult.ResponseCode != "00")
+        {
+            var errorMessage = mandateResult?.ResponseMsg ?? "Failed to create Remita mandate";
+            _logger.LogError("Mandate creation failed for loan {LoanId}: {Error}", loanId, errorMessage);
+            throw new AppException($"Cannot disburse loan. Mandate creation failed: {errorMessage}", 400);
+        }
+
+        // Store mandate reference in loan
+        loan.MandateRef = mandateResult.Data?.MandateReference ?? string.Empty;
+        loan.IsMandateCreated = true;
+        loan.MandateCreatedAt = DateTime.UtcNow;
+        _logger.LogInformation("Mandate created successfully for loan {LoanId}. MandateReference: {MandateReference}", 
+            loanId, loan.MandateRef);
+
         // Initiate fund transfer via Providus
         var disbursementRequest = new ProvidusDisbursementInternalRequestDto
         {
             LoanId = loanId,
             DestinationAccountNumber = accountNumber,
-            DestinationBankCode = bankCode ?? string.Empty,
+            DestinationBankCode = bankCode,
             Amount = loan.Amount,
             Narration = $"Loan Disbursement for {borrowerName} - Loan ID: {loanId.ToString()[..8]}",
             BeneficiaryName = borrowerName
@@ -751,6 +814,23 @@ public class LoanService(
             // Log critical: money was transferred but loan status update failed
             throw new AppException("CRITICAL: Disbursement successful but failed to update loan status. Reference: " + disbursementResult.DisbursementReference, 500);
         }
+
+        // Create repayment record
+        var repayment = new Repayment
+        {
+            LoanId = loanId,
+            TotalDue = loan.TotalRepayment ?? totalRepayment,
+            TotalRepaid = 0,
+            AmountUnpaid = loan.TotalRepayment ?? totalRepayment,
+            Status = RepaymentStatus.Active,
+            LastPaymentAt = null
+        };
+
+        _db.Repayments.Add(repayment);
+        await _db.SaveChangesAsync();
+
+        _logger.LogInformation("Created repayment record for loan {LoanId} with TotalDue: {TotalDue}", 
+            loanId, repayment.TotalDue);
 
         // Send disbursement notification email
         if (!string.IsNullOrEmpty(borrowerEmail))
@@ -848,6 +928,416 @@ public class LoanService(
             ExpectedMaturityDate = DateTime.UtcNow.AddMonths(loan.DurationInMonths),
             OfferLetterUrl = loan.OfferLetterUrl
         };
+    }
+
+    /// <summary>
+    /// Stops Remita mandate collection for a loan
+    /// </summary>
+    public async Task<RemitaStopMandateResponseDto> StopLoanCollectionAsync(Guid loanId, string? stoppedBy = null)
+    {
+        _logger.LogInformation("Attempting to stop loan collection for loan {LoanId}", loanId);
+
+        // Get the loan with necessary includes
+        var loan = await _loanRepository.GetLoanByIdWithIncludes(loanId);
+        if (loan == null)
+        {
+            _logger.LogWarning("Loan not found: {LoanId}", loanId);
+            throw new AppException("Loan not found", 404);
+        }
+
+        // Verify loan has a mandate
+        if (string.IsNullOrEmpty(loan.MandateRef))
+        {
+            _logger.LogWarning("Loan {LoanId} does not have a mandate reference", loanId);
+            throw new AppException("Loan does not have an active mandate", 400);
+        }
+
+        if (!loan.IsMandateCreated)
+        {
+            _logger.LogWarning("Loan {LoanId} mandate was not created", loanId);
+            throw new AppException("Loan mandate was not successfully created", 400);
+        }
+
+        // Get borrower application to retrieve Remita customer details
+        var borrowerApplication = await _borrowerApplicationRepository.GetByLoanIdAsync(loanId);
+        if (borrowerApplication == null)
+        {
+            _logger.LogWarning("Borrower application not found for loan {LoanId}", loanId);
+            throw new AppException("Borrower application not found", 404);
+        }
+
+        // Get the Remita customer ID and authorization code
+        var remitaCustomer = await _db.RemitaCustomers
+            .FirstOrDefaultAsync(rc => rc.BorrowerApplicationId == borrowerApplication.Id);
+        
+        if (remitaCustomer == null || string.IsNullOrEmpty(remitaCustomer.CustomerId))
+        {
+            _logger.LogWarning("Remita customer details not found for loan {LoanId}", loanId);
+            throw new AppException("Remita customer details not found", 404);
+        }
+
+        // Call Remita to stop the mandate
+        var result = await _remitaService.StopMandateAsync(
+            remitaCustomer.CustomerId,
+            loan.MandateRef,
+            remitaCustomer.AuthorisationCode
+        );
+
+        if (result == null || result.Status?.ToLower() == "fail")
+        {
+            _logger.LogError("Failed to stop mandate for loan {LoanId}. Remita response: {@Result}", loanId, result);
+            throw new AppException("Failed to stop loan collection in Remita", 500);
+        }
+
+        // Update loan status to indicate mandate is stopped
+        loan.IsMandateCreated = false;
+        loan.MandateStoppedAt = DateTime.UtcNow;
+        loan.MandateStoppedBy = stoppedBy;
+        
+        await _loanRepository.UpdateLoan(loan);
+
+        _logger.LogInformation("Successfully stopped mandate for loan {LoanId}, MandateRef: {MandateRef}",
+            loanId, loan.MandateRef);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Processes loan collection notifications from Remita webhook
+    /// </summary>
+    /// <param name="notification">The notification DTO from Remita</param>
+    /// <param name="payload">Optional raw JSON payload</param>
+    /// <returns>The created RemitaLoanCollectionNotification entity</returns>
+    public async Task<RemitaLoanCollectionNotification?> ProcessLoanCollectionNotificationAsync(RemitaLoanCollectionNotificationDto notification, string? payload = null)
+    {
+        try
+        {
+            _logger.LogInformation("Processing Remita loan collection notification - ID: {RemitaId}, MandateRef: {MandateRef}, Amount: {Amount}, Status: {Status}",
+                notification.Id, notification.MandateRef, notification.Amount, notification.PaymentStatus);
+
+            // Check if this notification already exists to avoid duplicates
+            var existingNotification = await _db.RemitaLoanCollectionNotifications
+                .FirstOrDefaultAsync(n => n.RemitaId == notification.Id);
+
+            if (existingNotification != null)
+            {
+                _logger.LogWarning("Notification with RemitaId {RemitaId} already exists. Skipping duplicate.", notification.Id);
+                return existingNotification;
+            }
+
+            // Parse payment date - Remita sends in format "24-08-2021 14:56:53+0000"
+            DateTime? paymentDate = null;
+            if (!string.IsNullOrEmpty(notification.PaymentDate))
+            {
+                try
+                {
+                    // Try parsing the date string - handle different formats
+                    if (DateTime.TryParseExact(notification.PaymentDate, "dd-MM-yyyy HH:mm:sszzz",
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.None, out DateTime parsedDate))
+                    {
+                        paymentDate = parsedDate;
+                    }
+                    else if (DateTime.TryParse(notification.PaymentDate, out DateTime parsedDate2))
+                    {
+                        paymentDate = parsedDate2;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to parse payment date: {PaymentDate}", notification.PaymentDate);
+                }
+            }
+
+            // Create new notification entity
+            var loanCollectionNotification = new RemitaLoanCollectionNotification
+            {
+                RemitaId = notification.Id,
+                Amount = notification.Amount,
+                ModuleName = notification.ModuleName,
+                NotificationSent = notification.NotificationSent,
+                NetSalary = notification.NetSalary,
+                TotalCredit = notification.TotalCredit,
+                MandateRef = notification.MandateRef,
+                BalanceDue = notification.BalanceDue,
+                CustomerId = notification.CustomerId,
+                PaymentDate = paymentDate,
+                PaymentStatus = notification.PaymentStatus,
+                RawPayload = JsonSerializer.Serialize(notification),
+                Payload = payload ?? JsonSerializer.Serialize(notification)
+            };
+
+            _db.RemitaLoanCollectionNotifications.Add(loanCollectionNotification);
+            await _db.SaveChangesAsync();
+
+            _logger.LogInformation("Successfully saved Remita loan collection notification with ID: {Id}, MandateRef: {MandateRef}",
+                loanCollectionNotification.Id, loanCollectionNotification.MandateRef);
+
+            // Update repayment record if payment was successful
+            if (!string.IsNullOrEmpty(notification.PaymentStatus) && 
+                notification.PaymentStatus.Equals("successful", StringComparison.OrdinalIgnoreCase) &&
+                notification.Amount > 0)
+            {
+                await UpdateRepaymentFromNotificationAsync(notification.MandateRef, notification.Amount, paymentDate);
+            }
+
+            return loanCollectionNotification;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing loan collection notification for RemitaId: {RemitaId}, MandateRef: {MandateRef}",
+                notification.Id, notification.MandateRef);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Updates repayment record when a successful payment notification is received
+    /// </summary>
+    private async Task UpdateRepaymentFromNotificationAsync(string mandateRef, decimal amount, DateTime? paymentDate)
+    {
+        try
+        {
+            // Find loan by mandate reference
+            var loan = await _db.Loans
+                .Include(l => l.BorrowerApplication)
+                .FirstOrDefaultAsync(l => l.MandateRef == mandateRef);
+
+            if (loan == null)
+            {
+                _logger.LogWarning("Loan not found for MandateRef: {MandateRef}. Cannot update repayment.", mandateRef);
+                return;
+            }
+
+            // Find repayment record for this loan
+            var repayment = await _db.Repayments
+                .FirstOrDefaultAsync(r => r.LoanId == loan.Id);
+
+            if (repayment == null)
+            {
+                _logger.LogWarning("Repayment record not found for LoanId: {LoanId}. Cannot update repayment.", loan.Id);
+                return;
+            }
+
+            // Update repayment totals
+            repayment.TotalRepaid += amount;
+            repayment.AmountUnpaid = repayment.TotalDue - repayment.TotalRepaid;
+            repayment.LastPaymentAt = paymentDate ?? DateTime.UtcNow;
+
+            // Update status based on repayment progress
+            if (repayment.AmountUnpaid <= 0)
+            {
+                repayment.Status = RepaymentStatus.Completed;
+                repayment.AmountUnpaid = 0; // Ensure no negative values
+                
+                // Update loan status to Repaid
+                loan.Status = LoanStatus.Repaid;
+                _db.Loans.Update(loan);
+                
+                _logger.LogInformation("Loan {LoanId} fully repaid. Total repaid: {TotalRepaid}", loan.Id, repayment.TotalRepaid);
+            }
+            else
+            {
+                // Check if overdue
+                if (loan.DueDate.HasValue && DateTime.UtcNow > loan.DueDate.Value && repayment.AmountUnpaid > 0)
+                {
+                    repayment.Status = RepaymentStatus.Overdue;
+                    loan.Status = LoanStatus.Overdue;
+                    _db.Loans.Update(loan);
+                }
+                else
+                {
+                    repayment.Status = RepaymentStatus.Active;
+                }
+            }
+
+            _db.Repayments.Update(repayment);
+            await _db.SaveChangesAsync();
+
+            _logger.LogInformation("Updated repayment for LoanId: {LoanId}. Amount: {Amount}, TotalRepaid: {TotalRepaid}, AmountUnpaid: {AmountUnpaid}, Status: {Status}",
+                loan.Id, amount, repayment.TotalRepaid, repayment.AmountUnpaid, repayment.Status);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating repayment for MandateRef: {MandateRef}", mandateRef);
+            // Don't throw - we don't want to fail the notification processing
+        }
+    }
+
+    /// <summary>
+    /// Hybrid Reconciliation: Fetches mandate history from Remita and reconciles with local records
+    /// Combines webhook notifications with API polling for comprehensive reconciliation
+    /// </summary>
+    /// <param name="loanId">The loan ID to reconcile</param>
+    /// <param name="reconciledBy">User performing the reconciliation</param>
+    /// <returns>Reconciliation result with details</returns>
+    public async Task<LoanReconciliationResponseDto> ReconcileLoanCollectionAsync(Guid loanId, string? reconciledBy = null)
+    {
+        try
+        {
+            _logger.LogInformation("Starting hybrid reconciliation for loan {LoanId}", loanId);
+
+            // Get loan with related data
+            var loan = await _loanRepository.GetLoanByIdWithIncludes(loanId) ?? throw new AppException("Loan not found", 404);
+            if (string.IsNullOrEmpty(loan.MandateRef))
+            {
+                throw new AppException("Loan does not have a mandate reference. Cannot reconcile.", 400);
+            }
+
+            if (!loan.IsMandateCreated)
+            {
+                throw new AppException("Mandate has not been created for this loan. Cannot reconcile.", 400);
+            }
+
+            // Get borrower application for Remita customer details
+            var borrowerApplication = loan.BorrowerApplication ?? throw new AppException("Borrower application not found", 404);
+
+            // Get Remita customer
+            var remitaCustomer = await _db.RemitaCustomers
+                .FirstOrDefaultAsync(rc => rc.BorrowerApplicationId == borrowerApplication.Id) ?? throw new AppException("Remita customer record not found. Cannot reconcile.", 404);
+
+            // Fetch mandate history from Remita API
+            _logger.LogInformation("Fetching mandate history from Remita for MandateRef: {MandateRef}", loan.MandateRef);
+            var mandateHistory = await _remitaService.GetMandateHistoryAsync(
+                remitaCustomer.CustomerId,
+                loan.MandateRef,
+                remitaCustomer.AuthorisationCode
+            );
+
+            if (mandateHistory == null || mandateHistory.Status?.ToLower() != "success")
+            {
+                var errorMessage = mandateHistory?.ResponseMsg ?? "Failed to fetch mandate history from Remita";
+                _logger.LogError("Mandate history fetch failed for loan {LoanId}: {Error}", loanId, errorMessage);
+                throw new AppException($"Reconciliation failed: {errorMessage}", 400);
+            }
+
+            // Get local repayment record
+            var repayment = await _db.Repayments
+                .FirstOrDefaultAsync(r => r.LoanId == loanId) ?? throw new AppException("Repayment record not found for this loan", 404);
+
+            // Get all local webhook notifications for this mandate
+            var localNotifications = await _db.RemitaLoanCollectionNotifications
+                .Where(n => n.MandateRef == loan.MandateRef)
+                .OrderBy(n => n.PaymentDate)
+                .ToListAsync();
+
+            // Calculate totals from Remita mandate history
+            decimal remitaTotalCollected = 0;
+            int remitaPaymentCount = 0;
+
+            if (mandateHistory.Data != null)
+            {
+                // Try to get total collected from the response
+                try
+                {
+                    var dataJson = JsonSerializer.Serialize(mandateHistory.Data);
+                    var dataDict = JsonSerializer.Deserialize<Dictionary<string, object>>(dataJson);
+                    
+                    if (dataDict != null && dataDict.ContainsKey("totalAmountCollected"))
+                    {
+                        remitaTotalCollected = Convert.ToDecimal(dataDict["totalAmountCollected"]);
+                    }
+                    
+                    if (dataDict != null && dataDict.ContainsKey("paymentDetails"))
+                    {
+                        var paymentsJson = dataDict["paymentDetails"].ToString();
+                        var payments = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(paymentsJson ?? "[]");
+                        remitaPaymentCount = payments?.Count ?? 0;
+                        
+                        // If total not provided, calculate from payment details
+                        if (remitaTotalCollected == 0 && payments != null)
+                        {
+                            foreach (var payment in payments)
+                            {
+                                if (payment.ContainsKey("amount"))
+                                {
+                                    remitaTotalCollected += Convert.ToDecimal(payment["amount"]);
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error parsing mandate history data for loan {LoanId}", loanId);
+                }
+            }
+
+            // Calculate local totals
+            var localTotalFromNotifications = localNotifications
+                .Where(n => n.PaymentStatus?.Equals("successful", StringComparison.OrdinalIgnoreCase) == true)
+                .Sum(n => n.Amount);
+            var localPaymentCount = localNotifications.Count(n => n.PaymentStatus?.Equals("successful", StringComparison.OrdinalIgnoreCase) == true);
+
+            // Compare and identify discrepancies
+            var discrepancy = remitaTotalCollected - repayment.TotalRepaid;
+            var isReconciled = Math.Abs(discrepancy) < 0.01m; // Allow for minor rounding differences
+
+            _logger.LogInformation("Reconciliation comparison for loan {LoanId}: Remita={RemitaTotal}, Local={LocalTotal}, Discrepancy={Discrepancy}",
+                loanId, remitaTotalCollected, repayment.TotalRepaid, discrepancy);
+
+            // If there's a discrepancy, update local record to match Remita (source of truth)
+            if (!isReconciled && discrepancy > 0)
+            {
+                _logger.LogInformation("Updating local repayment record to match Remita for loan {LoanId}", loanId);
+                
+                var oldTotalRepaid = repayment.TotalRepaid;
+                repayment.TotalRepaid = remitaTotalCollected;
+                repayment.AmountUnpaid = repayment.TotalDue - repayment.TotalRepaid;
+                repayment.LastPaymentAt = DateTime.UtcNow;
+
+                // Update status
+                if (repayment.AmountUnpaid <= 0)
+                {
+                    repayment.Status = RepaymentStatus.Completed;
+                    repayment.AmountUnpaid = 0;
+                    loan.Status = LoanStatus.Repaid;
+                    _db.Loans.Update(loan);
+                }
+                else if (loan.DueDate.HasValue && DateTime.UtcNow > loan.DueDate.Value)
+                {
+                    repayment.Status = RepaymentStatus.Overdue;
+                    loan.Status = LoanStatus.Overdue;
+                    _db.Loans.Update(loan);
+                }
+                else
+                {
+                    repayment.Status = RepaymentStatus.Active;
+                }
+
+                _db.Repayments.Update(repayment);
+                await _db.SaveChangesAsync();
+
+                _logger.LogInformation("Reconciliation complete for loan {LoanId}. Updated TotalRepaid from {OldTotal} to {NewTotal}",
+                    loanId, oldTotalRepaid, repayment.TotalRepaid);
+            }
+
+            return new LoanReconciliationResponseDto
+            {
+                LoanId = loanId,
+                MandateRef = loan.MandateRef,
+                IsReconciled = isReconciled,
+                RemitaTotalCollected = remitaTotalCollected,
+                LocalTotalRepaid = repayment.TotalRepaid,
+                Discrepancy = Math.Abs(discrepancy),
+                RemitaPaymentCount = remitaPaymentCount,
+                LocalPaymentCount = localPaymentCount,
+                TotalDue = repayment.TotalDue,
+                AmountUnpaid = repayment.AmountUnpaid,
+                RepaymentStatus = repayment.Status.ToString(),
+                LoanStatus = loan.Status.ToString(),
+                ReconciledAt = DateTime.UtcNow,
+                ReconciledBy = reconciledBy,
+                Message = isReconciled 
+                    ? "Loan repayment is fully reconciled with Remita records."
+                    : $"Reconciliation completed. {(discrepancy > 0 ? "Local record updated to match Remita." : "Discrepancy identified but no action taken.")}"
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during hybrid reconciliation for loan {LoanId}", loanId);
+            throw;
+        }
     }
 
     #endregion

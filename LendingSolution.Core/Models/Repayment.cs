@@ -1,22 +1,15 @@
-using LendingSolution.Core.Models;
+using LendingSolution.Core.Enum;
 
 namespace LendingSolution.Core.Models;
 
 public class Repayment : Base
 {
-    public required string LoanId { get; set; }
-    // public Loan Loan { get; set; } = default!; // Temporarily commented out due to type mismatch
+    public Guid LoanId { get; set; }
+    public Loan? Loan { get; set; }
     
-    public decimal Amount { get; set; }
-    public string PaymentMethod { get; set; } = "BankTransfer";
-    public string Status { get; set; } = "Pending"; // Pending, Verified, Failed
-    public string? PaymentReference { get; set; }
-    
-    public DateTime? ProcessedAt { get; set; }
-    public string? ProcessedBy { get; set; }
-    public string? Notes { get; set; }
-    
-    // Additional properties for Remita integration
-    public DateTime? RepaymentDate { get; set; }
-    public string? TransactionReference { get; set; }
+    public decimal TotalDue { get; set; }
+    public decimal TotalRepaid { get; set; } = 0;
+    public DateTime? LastPaymentAt { get; set; }
+    public decimal AmountUnpaid { get; set; }
+    public RepaymentStatus Status { get; set; } = RepaymentStatus.Active;
 }

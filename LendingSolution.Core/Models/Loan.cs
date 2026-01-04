@@ -12,7 +12,7 @@ public class Loan : Base
     public ApplicationUser? User { get; set; }
     public decimal Amount { get; set; }
     public int DurationInMonths { get; set; }
-    public string Purpose { get; set; } = "Personal Loan"; // Default purpose
+    public string Purpose { get; set; } = "Salary Loan"; // Default purpose
     public LoanStatus Status { get; set; }
     public DateTime? ApprovedAt { get; set; }
     public DateTime? DueDate { get; set; }
@@ -25,7 +25,7 @@ public class Loan : Base
     
     [JsonIgnore]
     public ApplicationUser? RejectedByUser { get; set; } // Navigation property
-    public string? ProcessingReason { get; set; } // Reason for approval/rejection
+    public string? Reason { get; set; } // Reason for approval/rejection/failure
     public DateTime? MandateCreatedAt { get; set; }
     public Guid CompanyId { get; set; }
     
@@ -36,9 +36,8 @@ public class Loan : Base
     
     [JsonIgnore]
     public LoanProduct Product { get; set; } = default!;
-    public bool IsMandateGenerated { get; set; } = false;
-    public string MandateId { get; set; } = string.Empty;
-    public string RemitaTransRef { get; set; } = string.Empty;
+    public bool IsMandateCreated { get; set; } = false;
+    public string MandateRef { get; set; } = string.Empty;
     
     // Navigation property to BorrowerApplication
     public BorrowerApplication? BorrowerApplication { get; set; }
@@ -46,11 +45,9 @@ public class Loan : Base
     // Additional properties for Remita integration
     public DateTime? DisbursementDate { get; set; }
     public string? DisbursementReference { get; set; }
-    public string? MandateStatus { get; set; }
-    public DateTime? MandateActivationDate { get; set; }
     public DateTime? MandateStoppedDate { get; set; }
-    public string? FailureReason { get; set; }
-    public bool IsLoanDisbursed { get; set; } = false;
+    public DateTime? MandateStoppedAt { get; set; }
+    public string? MandateStoppedBy { get; set; }
  
     // Offer Letter properties
     public Guid? OfferLetterDocumentId { get; set; }
@@ -58,4 +55,8 @@ public class Loan : Base
     public DateTime? OfferLetterSentAt { get; set; }
     public Guid? SignedOfferLetterDocumentId { get; set; }
     public DateTime? SignedOfferLetterUploadedAt { get; set; }
+    
+    // Repayment calculation properties
+    public decimal? TotalRepayment { get; set; }
+    public decimal? MonthlyRepayment { get; set; }
 }

@@ -31,7 +31,7 @@ public class RepaymentRepository : IRepaymentRepository
     public async Task<List<Repayment>> GetRepaymentsByLoanId(string loanId)
     {
         return await _db.Repayments
-            .Where(r => r.LoanId == loanId)
+            .Where(r => r.LoanId == Guid.Parse(loanId))
             .OrderByDescending(r => r.CreatedAt)
             .ToListAsync();
     }
@@ -51,8 +51,9 @@ public class RepaymentRepository : IRepaymentRepository
 
     public async Task<List<Repayment>> GetRepaymentsByStatus(string status)
     {
+        var statusEnum = Enum.Parse<Core.Enum.RepaymentStatus>(status, true);
         return await _db.Repayments
-            .Where(r => r.Status == status)
+            .Where(r => r.Status == statusEnum)
             .OrderByDescending(r => r.CreatedAt)
             .ToListAsync();
     }
@@ -67,8 +68,8 @@ public class RepaymentRepository : IRepaymentRepository
 
     public async Task<decimal> GetTotalRepaymentsByLoanId(string loanId)
     {
-        return await _db.Repayments
-            .Where(r => r.LoanId == loanId && r.Status == "Verified")
-            .SumAsync(r => r.Amount);
+        var repayment = await _db.Repayments
+            .FirstOrDefaultAsync(r => r.LoanId == Guid.Parse(loanId));
+        return repayment?.TotalRepaid ?? 0;
     }
 }

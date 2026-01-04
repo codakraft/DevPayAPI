@@ -11,29 +11,38 @@ namespace LendingSolution.API.Controllers;
 [Route("api/v{version:apiVersion}/webhooks")]
 public class WebhookController : Controller
 {
-    private readonly IRemitaService _remitaService;
+    private readonly ILoanService _loanService;
     private readonly ILogger<WebhookController> _logger;
 
     public WebhookController(
-        IRemitaService remitaService,
+        ILoanService loanService,
         ILogger<WebhookController> logger)
     {
-        _remitaService = remitaService;
+        _loanService = loanService;
         _logger = logger;
     }
 
     /// <summary>
     /// Webhook endpoint for Remita loan collection notifications
     /// </summary>
-    /// <param name="notification">The loan collection notification payload from Remita</param>
+    /// <param name="rawPayload">The raw JSON payload from Remita webhook</param>
     /// <returns>Success response if notification is processed successfully</returns>
     [HttpPost("remita/collection")]
-    public async Task<IActionResult> RemitaLoanCollectionNotification([FromBody] RemitaLoanCollectionNotificationDto notification)
+    public async Task<IActionResult> RemitaLoanCollectionNotification([FromBody] System.Text.Json.JsonElement rawPayload)
     {
         try
         {
+            // Capture raw JSON payload
+            var payloadString = rawPayload.GetRawText();
+
+            // Deserialize to DTO
+            var notification = System.Text.Json.JsonSerializer.Deserialize<RemitaLoanCollectionNotificationDto>(payloadString, new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
             _logger.LogInformation("Received Remita loan collection webhook notification - RemitaId: {RemitaId}, MandateRef: {MandateRef}, Amount: {Amount}",
-                notification.Id, notification.MandateRef, notification.Amount);
+                notification?.Id, notification?.MandateRef, notification?.Amount);
 
             // Validate the notification
             if (notification == null)
@@ -49,7 +58,7 @@ public class WebhookController : Controller
             }
 
             // Process the notification using the service
-            var result = await _remitaService.ProcessLoanCollectionNotificationAsync(notification);
+            var result = await _loanService.ProcessLoanCollectionNotificationAsync(notification, payloadString);
 
             if (result == null)
             {

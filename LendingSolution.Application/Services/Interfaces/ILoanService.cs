@@ -26,6 +26,9 @@ public interface ILoanService
     Task<SignedOfferLetterResponseDto> UploadSignedOfferLetterAsync(Guid loanId, SignedOfferLetterUploadDto dto, string uploadedBy);
     Task<LoanDisbursementResponseDto> DisburseLoanAsync(Guid loanId, string? disbursedBy = null);
     Task<OfferLetterDto> GetOfferLetterDetailsAsync(Guid loanId);
+    Task<RemitaStopMandateResponseDto> StopLoanCollectionAsync(Guid loanId, string? stoppedBy = null);
+    Task<RemitaLoanCollectionNotification?> ProcessLoanCollectionNotificationAsync(RemitaLoanCollectionNotificationDto notification, string? payload = null);
+    Task<LoanReconciliationResponseDto> ReconcileLoanCollectionAsync(Guid loanId, string? reconciledBy = null);
     
     // ApiResponse GetLoanBreakdown(LoanBreakdownRequestDto body);
     // Task<ApiResponse> SubmitLoan(Guid loanId, SubmitRequestDto body);
