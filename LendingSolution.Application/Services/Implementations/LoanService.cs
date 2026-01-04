@@ -738,20 +738,21 @@ public class LoanService(
             throw new AppException("Borrower BVN not found. Cannot create mandate.", 400);
         }
 
-        // Get CustomerId from RemitaSalaryHistory table
+        // Get CustomerId and AuthorisationCode from RemitaSalaryHistory table
         if (loan.BorrowerApplication == null)
         {
             throw new AppException("Borrower application not found. Cannot retrieve salary history.", 400);
         }
         
         var salaryHistory = await _remitaSalaryHistoryRepository.GetByBorrowerApplicationIdAsync(loan.BorrowerApplication.Id);
-        if (salaryHistory == null || string.IsNullOrEmpty(salaryHistory.CustomerId))
+        if (salaryHistory == null || string.IsNullOrEmpty(salaryHistory.CustomerId) || string.IsNullOrEmpty(salaryHistory.AuthorisationCode))
         {
-            throw new AppException("Customer ID not found in salary history. Cannot create mandate.", 400);
+            throw new AppException("Customer ID or authorization code not found in salary history. Cannot create mandate.", 400);
         }
 
-        // Create Remita mandate before disbursement
+        // Create Remita mandate before disbursement using the same authorization code from salary history
         var customerId = salaryHistory.CustomerId;
+        var authorisationCode = salaryHistory.AuthorisationCode;
         var disbursementDate = DateTime.UtcNow.ToString("dd/MM/yyyy");
         var firstCollectionDate = DateTime.UtcNow.AddMonths(1).ToString("dd/MM/yyyy");
         
@@ -767,7 +768,8 @@ public class LoanService(
             dateOfCollection: firstCollectionDate,
             totalCollectionAmount: totalRepayment.ToString("F2"),
             numberOfRepayments: loan.DurationInMonths.ToString(),
-            bankCode: bankCode
+            bankCode: bankCode,
+            authorisationCode
         );
 
         if (mandateResult == null || mandateResult.ResponseCode != "00")
@@ -966,21 +968,19 @@ public class LoanService(
             throw new AppException("Borrower application not found", 404);
         }
 
-        // Get the Remita customer ID and authorization code
-        var remitaCustomer = await _db.RemitaCustomers
-            .FirstOrDefaultAsync(rc => rc.BorrowerApplicationId == borrowerApplication.Id);
-        
-        if (remitaCustomer == null || string.IsNullOrEmpty(remitaCustomer.CustomerId))
+        // Get RemitaSalaryHistory to retrieve CustomerId and AuthorisationCode
+        var salaryHistory = await _remitaSalaryHistoryRepository.GetByBorrowerApplicationIdAsync(borrowerApplication.Id);
+        if (salaryHistory == null || string.IsNullOrEmpty(salaryHistory.CustomerId) || string.IsNullOrEmpty(salaryHistory.AuthorisationCode))
         {
-            _logger.LogWarning("Remita customer details not found for loan {LoanId}", loanId);
-            throw new AppException("Remita customer details not found", 404);
+            _logger.LogWarning("Remita salary history or authorization code not found for loan {LoanId}", loanId);
+            throw new AppException("Remita customer information not found. Cannot stop mandate.", 404);
         }
 
-        // Call Remita to stop the mandate
+        // Call Remita to stop the mandate using the same authorization code from salary history
         var result = await _remitaService.StopMandateAsync(
-            remitaCustomer.CustomerId,
+            salaryHistory.CustomerId,
             loan.MandateRef,
-            remitaCustomer.AuthorisationCode
+            salaryHistory.AuthorisationCode
         );
 
         if (result == null || result.Status?.ToLower() == "fail")
@@ -1189,19 +1189,23 @@ public class LoanService(
                 throw new AppException("Mandate has not been created for this loan. Cannot reconcile.", 400);
             }
 
-            // Get borrower application for Remita customer details
+            // Get borrower application for validation
             var borrowerApplication = loan.BorrowerApplication ?? throw new AppException("Borrower application not found", 404);
 
-            // Get Remita customer
-            var remitaCustomer = await _db.RemitaCustomers
-                .FirstOrDefaultAsync(rc => rc.BorrowerApplicationId == borrowerApplication.Id) ?? throw new AppException("Remita customer record not found. Cannot reconcile.", 404);
+            // Get RemitaSalaryHistory to retrieve CustomerId and AuthorisationCode
+            var salaryHistory = await _remitaSalaryHistoryRepository.GetByBorrowerApplicationIdAsync(borrowerApplication.Id);
+            if (salaryHistory == null || string.IsNullOrEmpty(salaryHistory.CustomerId) || string.IsNullOrEmpty(salaryHistory.AuthorisationCode))
+            {
+                _logger.LogWarning("Remita salary history or authorization code not found for loan {LoanId}", loanId);
+                throw new AppException("Remita customer information not found. Cannot reconcile.", 404);
+            }
 
-            // Fetch mandate history from Remita API
+            // Fetch mandate history from Remita API using the same authorization code from salary history
             _logger.LogInformation("Fetching mandate history from Remita for MandateRef: {MandateRef}", loan.MandateRef);
             var mandateHistory = await _remitaService.GetMandateHistoryAsync(
-                remitaCustomer.CustomerId,
+                salaryHistory.CustomerId,
                 loan.MandateRef,
-                remitaCustomer.AuthorisationCode
+                salaryHistory.AuthorisationCode
             );
 
             if (mandateHistory == null || mandateHistory.Status?.ToLower() != "success")

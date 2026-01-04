@@ -26,6 +26,12 @@ public class RemitaSalaryHistory
     public string CustomerId { get; set; } = string.Empty;
 
     /// <summary>
+    /// Authorization code used for Remita requests (generated during salary history retrieval)
+    /// </summary>
+    [MaxLength(20)]
+    public string? AuthorisationCode { get; set; }
+
+    /// <summary>
     /// Account number
     /// </summary>
     [Required]

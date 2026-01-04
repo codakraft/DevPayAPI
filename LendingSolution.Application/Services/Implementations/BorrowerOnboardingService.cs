@@ -24,6 +24,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     private readonly IRemitaService _remitaService;
     private readonly IMonoService _monoService;
     private readonly ISalaryEligibilityService _salaryEligibilityService;
+    private readonly IRemitaSalaryHistoryRepository _remitaSalaryHistoryRepository;
     private readonly IConfiguration _configuration;
     private readonly ILogger<BorrowerOnboardingService> _logger;
 
@@ -40,6 +41,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         IRemitaService remitaService,
         IMonoService monoService,
         ISalaryEligibilityService salaryEligibilityService,
+        IRemitaSalaryHistoryRepository remitaSalaryHistoryRepository,
         IConfiguration configuration,
         ILogger<BorrowerOnboardingService> logger)
     {
@@ -55,6 +57,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         _remitaService = remitaService;
         _monoService = monoService;
         _salaryEligibilityService = salaryEligibilityService;
+        _remitaSalaryHistoryRepository = remitaSalaryHistoryRepository;
         _configuration = configuration;
         _logger = logger;
     }
@@ -522,7 +525,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         var totalRepayment = Math.Round(request.LoanAmount * (1 + (monthlyInterestRate * request.Tenor)), 2);
         var monthlyRepayment = Math.Round(totalRepayment / request.Tenor, 2);
 
-        // Create actual loan record
+        // Create actual loan record (RemitaCustomerId and AuthorizationCode are now stored in RemitaSalaryHistory)
         var loan = new Loan
         {
             Amount = request.LoanAmount,

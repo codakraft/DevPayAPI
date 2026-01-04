@@ -29,7 +29,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<BorrowerApplication> BorrowerApplications { get; set; }
     public DbSet<RemitaSalaryHistory> RemitaSalaryHistories { get; set; }
     public DbSet<RemitaSalaryPayment> RemitaSalaryPayments { get; set; }
-    public DbSet<RemitaCustomer> RemitaCustomers { get; set; }
     public DbSet<RemitaLoanCollectionNotification> RemitaLoanCollectionNotifications { get; set; }
     public DbSet<MonoMandateReference> MonoMandateReferences { get; set; }
     public DbSet<MonoBvnVerificationRecord> MonoBvnVerificationRecords { get; set; }

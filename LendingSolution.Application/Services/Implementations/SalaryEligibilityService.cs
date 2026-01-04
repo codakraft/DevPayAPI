@@ -102,9 +102,13 @@ public class SalaryEligibilityService : ISalaryEligibilityService
             await _salaryHistoryRepository.DeleteAsync(existingSalaryHistory.Id);
         }
 
-        // Create new salary history record
-        _logger.LogInformation("Creating new salary history for borrower application: {ApplicationId}", borrowerApplicationId);
+        // Create new salary history record with authorization code
+        _logger.LogInformation("Creating new salary history for borrower application: {ApplicationId} with authorization code", borrowerApplicationId);
         var salaryHistory = CreateSalaryHistoryFromResponse(borrowerApplicationId, salaryData);
+        
+        // Save the authorization code from the request
+        salaryHistory.AuthorisationCode = salaryData.AuthorisationCode;
+        
         return await _salaryHistoryRepository.CreateAsync(salaryHistory);
     }
 

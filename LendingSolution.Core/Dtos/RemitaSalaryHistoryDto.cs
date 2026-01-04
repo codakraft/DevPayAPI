@@ -13,6 +13,11 @@ public class RemitaSalaryHistoryResponseDto
     public string ResponseCode { get; set; } = string.Empty;
     public string ResponseMsg { get; set; } = string.Empty;
     public RemitaSalaryDataDto? Data { get; set; }
+    
+    /// <summary>
+    /// The authorization code that was used for this request (not from Remita response, but passed through)
+    /// </summary>
+    public string? AuthorisationCode { get; set; }
 }
 
 /// <summary>
