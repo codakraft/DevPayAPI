@@ -173,25 +173,104 @@ public class RemitaService : IRemitaService
     {
         try
         {
-            // Build payload
+            // Validate required parameters
+            if (string.IsNullOrWhiteSpace(customerId))
+            {
+                _logger.LogError("CreateMandateAsync: customerId is null or empty");
+                throw new ArgumentNullException(nameof(customerId), "Customer ID is required");
+            }
+
+            if (string.IsNullOrWhiteSpace(phoneNumber))
+            {
+                _logger.LogError("CreateMandateAsync: phoneNumber is null or empty");
+                throw new ArgumentNullException(nameof(phoneNumber), "Phone number is required");
+            }
+
+            if (string.IsNullOrWhiteSpace(accountNumber))
+            {
+                _logger.LogError("CreateMandateAsync: accountNumber is null or empty");
+                throw new ArgumentNullException(nameof(accountNumber), "Account number is required");
+            }
+
+            if (string.IsNullOrWhiteSpace(bankCode))
+            {
+                _logger.LogError("CreateMandateAsync: bankCode is null or empty");
+                throw new ArgumentNullException(nameof(bankCode), "Bank code is required");
+            }
+
+            if (string.IsNullOrWhiteSpace(authorisationCode))
+            {
+                _logger.LogError("CreateMandateAsync: authorisationCode is null or empty");
+                throw new ArgumentNullException(nameof(authorisationCode), "Authorisation code is required");
+            }
+
+            // Normalize phone number (remove +234, spaces, and ensure it starts with 0)
+            var normalizedPhoneNumber = NormalizePhoneNumber(phoneNumber);
+            _logger.LogInformation("Phone number normalized from {Original} to {Normalized}", phoneNumber, normalizedPhoneNumber);
+
+            // Validate and parse date formats - accepting Remita's expected format (+0000 without colon)
+            // Adjust timezone format for parsing: +0000 -> +00:00
+            var adjustedDisbursementDate = dateOfDisbursement.Replace("+0000", "+00:00").Replace("-0000", "-00:00");
+            if (!DateTime.TryParseExact(adjustedDisbursementDate, "dd-MM-yyyy HH:mm:sszzz", null, System.Globalization.DateTimeStyles.None, out var disbursementDate))
+            {
+                _logger.LogError("Invalid dateOfDisbursement format: {Date}", dateOfDisbursement);
+                throw new ArgumentException($"Invalid date format for disbursement: {dateOfDisbursement}. Expected dd-MM-yyyy HH:mm:ss+0000");
+            }
+
+            var adjustedCollectionDate = dateOfCollection.Replace("+0000", "+00:00").Replace("-0000", "-00:00");
+            if (!DateTime.TryParseExact(adjustedCollectionDate, "dd-MM-yyyy HH:mm:sszzz", null, System.Globalization.DateTimeStyles.None, out var collectionDate))
+            {
+                _logger.LogError("Invalid dateOfCollection format: {Date}", dateOfCollection);
+                throw new ArgumentException($"Invalid date format for collection: {dateOfCollection}. Expected dd-MM-yyyy HH:mm:ss+0000");
+            }
+
+            // Validate numeric values
+            if (!decimal.TryParse(loanAmount, out var loanAmountDecimal) || loanAmountDecimal <= 0)
+            {
+                _logger.LogError("Invalid loanAmount: {Amount}", loanAmount);
+                throw new ArgumentException($"Invalid loan amount: {loanAmount}");
+            }
+
+            if (!decimal.TryParse(collectionAmount, out var collectionAmountDecimal) || collectionAmountDecimal <= 0)
+            {
+                _logger.LogError("Invalid collectionAmount: {Amount}", collectionAmount);
+                throw new ArgumentException($"Invalid collection amount: {collectionAmount}");
+            }
+
+            if (!decimal.TryParse(totalCollectionAmount, out var totalCollectionAmountDecimal) || totalCollectionAmountDecimal <= 0)
+            {
+                _logger.LogError("Invalid totalCollectionAmount: {Amount}", totalCollectionAmount);
+                throw new ArgumentException($"Invalid total collection amount: {totalCollectionAmount}");
+            }
+
+            if (!int.TryParse(numberOfRepayments, out var numberOfRepaymentsInt) || numberOfRepaymentsInt <= 0)
+            {
+                _logger.LogError("Invalid numberOfRepayments: {Count}", numberOfRepayments);
+                throw new ArgumentException($"Invalid number of repayments: {numberOfRepayments}");
+            }
+
+            // Build payload with proper numeric types
+            // Parse the validated numeric strings to actual numbers for JSON serialization
             var payload = new
             {
                 customerId,
                 authorisationCode,
                 authorisationChannel = "USSD",
-                phoneNumber,
+                phoneNumber = normalizedPhoneNumber,
                 accountNumber,
                 currency = "NGN",
-                loanAmount,
-                collectionAmount,
+                loanAmount = loanAmountDecimal,
+                collectionAmount = collectionAmountDecimal,
                 dateOfDisbursement,
                 dateOfCollection,
-                totalCollectionAmount,
-                numberOfRepayments,
+                totalCollectionAmount = totalCollectionAmountDecimal,
+                numberOfRepayments = numberOfRepaymentsInt,
                 bankCode
             };
 
             _logger.LogInformation("Create Mandate Payload: {Payload}", JsonSerializer.Serialize(payload));
+            _logger.LogInformation("Create Mandate Details - CustomerId: {CustomerId}, Phone: {Phone}, Account: {Account}, Bank: {BankCode}, Loan: {LoanAmount}, Monthly: {CollectionAmount}, Total: {TotalAmount}, Tenor: {Tenor}",
+                customerId, normalizedPhoneNumber, accountNumber, bankCode, loanAmount, collectionAmount, totalCollectionAmount, numberOfRepayments);
 
             var endpoint = string.IsNullOrEmpty(_settings.CreateMandateEndpoint)
                 ? "/loansvc/data/api/v2/payday/post/loan"
@@ -204,13 +283,28 @@ public class RemitaService : IRemitaService
 
             AddRemitaHeaders(httpRequest);
 
+            _logger.LogInformation("=== CREATE MANDATE REQUEST DETAILS ===");
+            _logger.LogInformation("Request URL: {Url}", requestUrl);
+            _logger.LogInformation("Request Method: POST");
+            _logger.LogInformation("Request Headers: {Headers}", 
+                string.Join("; ", httpRequest.Headers.Select(h => $"{h.Key}=[{string.Join(",", h.Value)}]")));
+            _logger.LogInformation("Content Headers: {ContentHeaders}", 
+                string.Join("; ", httpRequest.Content.Headers.Select(h => $"{h.Key}=[{string.Join(",", h.Value)}]")));
+            _logger.LogInformation("Request Payload (JSON): {Payload}", JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
+            _logger.LogInformation("Request Payload (Raw JSON String): {RawPayload}", JsonSerializer.Serialize(payload));
             _logger.LogInformation("Sending create mandate request for customer: {CustomerId}", customerId);
 
             var response = await _httpClient.SendAsync(httpRequest);
             var responseContent = await response.Content.ReadAsStringAsync();
 
-            _logger.LogInformation("Create Mandate Response - Status: {StatusCode}, Content: {Response}",
-                response.StatusCode, responseContent);
+            _logger.LogInformation("=== CREATE MANDATE RESPONSE DETAILS ===");
+            var statusCodeInt = (int)response.StatusCode;
+            var statusCodeText = response.StatusCode.ToString();
+            _logger.LogInformation("Response Status Code: {StatusCodeText} ({StatusCodeInt})", statusCodeText, statusCodeInt);
+            _logger.LogInformation("Response Headers: {Headers}", 
+                string.Join("; ", response.Headers.Select(h => $"{h.Key}=[{string.Join(",", h.Value)}]")));
+            _logger.LogInformation("Response Content: {Response}", responseContent);
+            _logger.LogInformation("Response Content Length: {Length} bytes", responseContent?.Length ?? 0);
 
             if (response.IsSuccessStatusCode)
             {
@@ -226,25 +320,67 @@ public class RemitaService : IRemitaService
                     !result.HasData ||
                     result.Data == null)
                 {
-                    _logger.LogWarning("Remita returned failure for customer {CustomerId}. Status: {Status}, Code: {Code}, Message: {Message}, HasData: {HasData}",
-                        customerId, result?.Status, result?.ResponseCode, result?.ResponseMsg, result?.HasData);
+                    _logger.LogError("=== REMITA RETURNED FAILURE RESPONSE ===");
+                    _logger.LogError("Customer ID: {CustomerId}", customerId);
+                    _logger.LogError("Status: {Status}", result?.Status);
+                    _logger.LogError("Response Code: {Code}", result?.ResponseCode);
+                    _logger.LogError("Response Message: {Message}", result?.ResponseMsg);
+                    _logger.LogError("Has Data: {HasData}", result?.HasData);
+                    _logger.LogError("Full Response Object: {FullResponse}", JsonSerializer.Serialize(result));
                     return null;
                 }
 
-                _logger.LogInformation("Successfully created mandate for customer: {CustomerId}, MandateReference: {MandateReference}",
-                    customerId, result.Data?.MandateReference);
+                _logger.LogInformation("=== MANDATE CREATED SUCCESSFULLY ===");
+                _logger.LogInformation("Customer ID: {CustomerId}", customerId);
+                _logger.LogInformation("Mandate Reference: {MandateReference}", result.Data?.MandateReference);
                 return result;
             }
             else
             {
-                _logger.LogError("Failed to create mandate. Status: {StatusCode}, Response: {Response}",
-                    response.StatusCode, responseContent);
+                _logger.LogError("=== REMITA API REQUEST FAILED ===");
+                var errorStatusCodeInt = (int)response.StatusCode;
+                var errorStatusCodeText = response.StatusCode.ToString();
+                _logger.LogError("HTTP Status Code: {StatusCodeText} ({StatusCodeInt})", errorStatusCodeText, errorStatusCodeInt);
+                _logger.LogError("Reason Phrase: {ReasonPhrase}", response.ReasonPhrase);
+                _logger.LogError("Response Body: {Response}", responseContent);
+                
+                // Try to parse error response as JSON to get more details
+                try
+                {
+                    var errorResponse = JsonSerializer.Deserialize<Dictionary<string, object>>(responseContent);
+                    if (errorResponse != null)
+                    {
+                        _logger.LogError("Parsed Error Response: {ErrorDetails}", 
+                            string.Join(", ", errorResponse.Select(kvp => $"{kvp.Key}={kvp.Value}")));
+                    }
+                }
+                catch
+                {
+                    _logger.LogError("Could not parse error response as JSON. Raw response logged above.");
+                }
+                
                 return null;
             }
         }
+        catch (ArgumentException argEx)
+        {
+            _logger.LogError("=== VALIDATION ERROR ===");
+            _logger.LogError(argEx, "Parameter validation failed for customer: {CustomerId}. Error: {ErrorMessage}", 
+                customerId, argEx.Message);
+            throw; // Re-throw validation errors so they bubble up
+        }
+        catch (HttpRequestException httpEx)
+        {
+            _logger.LogError("=== HTTP REQUEST ERROR ===");
+            _logger.LogError(httpEx, "HTTP request failed for customer: {CustomerId}. Message: {Message}", 
+                customerId, httpEx.Message);
+            return null;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating mandate for customer: {CustomerId}", customerId);
+            _logger.LogError("=== UNEXPECTED ERROR ===");
+            _logger.LogError(ex, "Unexpected error creating mandate for customer: {CustomerId}. Type: {ExceptionType}, Message: {Message}", 
+                customerId, ex.GetType().Name, ex.Message);
             return null;
         }
     }
@@ -396,7 +532,7 @@ public class RemitaService : IRemitaService
     /// Processes and saves loan collection notification from Remita webhook
     /// </summary>
     // Private Helper Methods
-    private string GenerateRandomAuthorizationCode()
+    private static string GenerateRandomAuthorizationCode()
     {
         // Generate a random 5-digit authorization code
         var random = new Random();
@@ -464,5 +600,32 @@ public class RemitaService : IRemitaService
         var bytes = Encoding.UTF8.GetBytes(input);
         var hash = SHA512.HashData(bytes);
         return Convert.ToHexStringLower(hash);
+    }
+
+    /// <summary>
+    /// Normalizes phone number to Nigerian format expected by Remita
+    /// Removes +234, spaces, dashes and ensures it starts with 0
+    /// </summary>
+    private static string NormalizePhoneNumber(string phoneNumber)
+    {
+        if (string.IsNullOrWhiteSpace(phoneNumber))
+            return phoneNumber;
+
+        // Remove all non-digit characters
+        var digitsOnly = new string(phoneNumber.Where(char.IsDigit).ToArray());
+
+        // Handle international format (+234 or 234)
+        if (digitsOnly.StartsWith("234"))
+        {
+            digitsOnly = "0" + digitsOnly.Substring(3);
+        }
+
+        // Ensure it starts with 0
+        if (!digitsOnly.StartsWith("0") && digitsOnly.Length == 10)
+        {
+            digitsOnly = "0" + digitsOnly;
+        }
+
+        return digitsOnly;
     }
 }
