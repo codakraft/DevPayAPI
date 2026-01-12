@@ -23,6 +23,13 @@ public class ApiResponse
         Success = false,
         Message = message
     };
+
+    public static ApiResponse Fail(string message, object data) => new()
+    {
+        Success = false,
+        Message = message,
+        Data = data
+    };
 }
 
 /// <summary>

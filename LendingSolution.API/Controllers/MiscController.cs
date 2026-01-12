@@ -17,13 +17,20 @@ public class MiscController : Controller
 {
     private readonly IAuthService _authService;
     private readonly IRemitaService _remitaService;
+    private readonly IProvidusDisbursementService _providusDisbursementService;
     private readonly ILogger<MiscController> _logger;
     private readonly RemitaSettings _remitaSettings;
 
-    public MiscController(IAuthService authService, IRemitaService remitaService, ILogger<MiscController> logger, IOptions<RemitaSettings> remitaSettings)
+    public MiscController(
+        IAuthService authService, 
+        IRemitaService remitaService, 
+        IProvidusDisbursementService providusDisbursementService,
+        ILogger<MiscController> logger, 
+        IOptions<RemitaSettings> remitaSettings)
     {
         _authService = authService;
         _remitaService = remitaService;
+        _providusDisbursementService = providusDisbursementService;
         _logger = logger;
         _remitaSettings = remitaSettings.Value;
     }
@@ -252,6 +259,90 @@ public class MiscController : Controller
         {
             _logger.LogError(ex, "Error occurred while fetching roles.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    /// <summary>
+    /// Test endpoint for Providus disbursement - transfers funds to a specified account
+    /// </summary>
+    /// <param name="request">The disbursement request details</param>
+    /// <returns>The disbursement result</returns>
+    [HttpPost("test-disbursement")]
+    public async Task<IActionResult> TestDisbursement([FromBody] TestDisbursementRequestDto request)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState.Values
+                    .SelectMany(v => v.Errors)
+                    .Select(e => e.ErrorMessage)
+                    .ToList();
+                return BadRequest(ApiResponse.Fail("Validation failed", errors));
+            }
+
+            _logger.LogInformation(
+                "Test disbursement requested - Account: {Account}, Bank: {Bank}, Amount: {Amount}",
+                request.AccountNumber, request.BankCode, request.Amount);
+
+            // Create internal request using a test loan ID
+            var internalRequest = new ProvidusDisbursementInternalRequestDto
+            {
+                LoanId = Guid.NewGuid(), // Test loan ID
+                DestinationAccountNumber = request.AccountNumber,
+                DestinationBankCode = request.BankCode,
+                Amount = request.Amount,
+                Narration = request.Narration ?? $"Test Disbursement - {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}",
+                BeneficiaryName = request.BeneficiaryName ?? "Test Beneficiary"
+            };
+
+            var result = await _providusDisbursementService.TransferFundsAsync(internalRequest);
+
+            if (result.IsSuccessful)
+            {
+                _logger.LogInformation(
+                    "Test disbursement successful - Reference: {Reference}, Mock: {IsMock}",
+                    result.DisbursementReference, result.IsMockTransaction);
+
+                var response = new
+                {
+                    result.IsSuccessful,
+                    result.Amount,
+                    result.DisbursementReference,
+                    result.ProviderReference,
+                    result.Message,
+                    result.ResponseCode,
+                    result.DisbursedAt,
+                    result.IsMockTransaction,
+                    MockMode = _providusDisbursementService.IsMockMode
+                };
+
+                return Ok(ApiResponse.Ok("Disbursement completed successfully", response));
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Test disbursement failed - Reference: {Reference}, Code: {Code}, Message: {Message}",
+                    result.DisbursementReference, result.ResponseCode, result.Message);
+
+                var errorResponse = new
+                {
+                    result.IsSuccessful,
+                    result.Amount,
+                    result.DisbursementReference,
+                    result.Message,
+                    result.ResponseCode,
+                    result.ErrorDetails,
+                    result.IsMockTransaction
+                };
+
+                return BadRequest(ApiResponse.Fail(result.Message, errorResponse));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred during test disbursement");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred during disbursement"));
         }
     }
 }

@@ -308,7 +308,7 @@ public class RemitaService : IRemitaService
 
             if (response.IsSuccessStatusCode)
             {
-                var result = JsonSerializer.Deserialize<RemitaCreateMandateResponseDto>(responseContent, new JsonSerializerOptions
+                var result = string.IsNullOrEmpty(responseContent) ? null : JsonSerializer.Deserialize<RemitaCreateMandateResponseDto>(responseContent, new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true
                 });
@@ -347,7 +347,7 @@ public class RemitaService : IRemitaService
                 // Try to parse error response as JSON to get more details
                 try
                 {
-                    var errorResponse = JsonSerializer.Deserialize<Dictionary<string, object>>(responseContent);
+                    var errorResponse = string.IsNullOrEmpty(responseContent) ? null : JsonSerializer.Deserialize<Dictionary<string, object>>(responseContent);
                     if (errorResponse != null)
                     {
                         _logger.LogError("Parsed Error Response: {ErrorDetails}", 

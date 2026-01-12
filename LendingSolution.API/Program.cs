@@ -33,24 +33,94 @@ CultureInfo.DefaultThreadCurrentUICulture = nigeriaCulture;
 
 var app = builder.Build();
 
+// Apply database migrations with error handling
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    db.Database.Migrate();
+    try
+    {
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        
+        logger.LogInformation("Attempting to apply database migrations...");
+        db.Database.Migrate();
+        logger.LogInformation("Database migrations applied successfully");
+    }
+    catch (Microsoft.Data.SqlClient.SqlException ex) when (ex.Number == 40615) // Firewall rule error
+    {
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        logger.LogError("==================== DATABASE CONNECTION BLOCKED ====================");
+        logger.LogError("Your IP address is not allowed to access the Azure SQL Server.");
+        logger.LogError("Current IP: Check your public IP at https://whatismyipaddress.com/");
+        logger.LogError("To fix this:");
+        logger.LogError("1. Go to Azure Portal > SQL Server 'lending-app' > Networking");
+        logger.LogError("2. Add your IP address to the firewall rules");
+        logger.LogError("3. Wait up to 5 minutes for changes to take effect");
+        logger.LogError("=====================================================================");
+        
+        if (app.Environment.IsDevelopment())
+        {
+            logger.LogWarning("Continuing in development mode without database migrations...");
+        }
+        else
+        {
+            throw;
+        }
+    }
+    catch (Exception ex)
+    {
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "An error occurred while applying database migrations");
+        
+        if (!app.Environment.IsDevelopment())
+        {
+            throw;
+        }
+        
+        logger.LogWarning("Continuing in development mode despite migration error...");
+    }
 }
 
 using (var scope = app.Services.CreateScope())
 {
-    var services = scope.ServiceProvider;
-    var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
-    var roles = new[] { "SuperAdmin", "Admin", "LoanOfficer", "CollectionsOfficer", "Underwriter", "SupportAgent", "Auditor", "Viewer" };
-
-    foreach (var role in roles)
+    try
     {
-        if (!await roleManager.RoleExistsAsync(role))
+        var services = scope.ServiceProvider;
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
+        var roles = new[] { "SuperAdmin", "Admin", "LoanOfficer", "CollectionsOfficer", "Underwriter", "SupportAgent", "Auditor", "Viewer" };
+
+        logger.LogInformation("Seeding roles...");
+        foreach (var role in roles)
         {
-            await roleManager.CreateAsync(new IdentityRole(role));
+            if (!await roleManager.RoleExistsAsync(role))
+            {
+                await roleManager.CreateAsync(new IdentityRole(role));
+                logger.LogInformation("Created role: {Role}", role);
+            }
         }
+        logger.LogInformation("Role seeding completed");
+    }
+    catch (Microsoft.Data.SqlClient.SqlException ex) when (ex.Number == 40615) // Firewall rule error
+    {
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        logger.LogWarning("Skipping role seeding due to database connection issues (firewall blocked)");
+        
+        if (!app.Environment.IsDevelopment())
+        {
+            throw;
+        }
+    }
+    catch (Exception ex)
+    {
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "An error occurred while seeding roles");
+        
+        if (!app.Environment.IsDevelopment())
+        {
+            throw;
+        }
+        
+        logger.LogWarning("Continuing in development mode despite role seeding error...");
     }
 }
 
@@ -58,14 +128,18 @@ app.UseCors(x => x.AllowAnyHeader().AllowAnyOrigin().AllowAnyMethod());
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.UseSwagger();
-app.UseSwaggerUI();
-app.UseReDoc(c =>
+// Only enable Swagger in Development environment
+if (app.Environment.IsDevelopment())
 {
-    c.RoutePrefix = "docs"; // ReDoc UI will be at /docs
-    c.DocumentTitle = "My API Docs";
-    c.SpecUrl("/swagger/v1/swagger.json");
-});
+    app.UseSwagger();
+    app.UseSwaggerUI();
+    app.UseReDoc(c =>
+    {
+        c.RoutePrefix = "docs"; // ReDoc UI will be at /docs
+        c.DocumentTitle = "My API Docs";
+        c.SpecUrl("/swagger/v1/swagger.json");
+    });
+}
 
 app.MapControllers();
 app.MapHealthChecks("/health");
