@@ -88,7 +88,7 @@ using (var scope = app.Services.CreateScope())
         var logger = services.GetRequiredService<ILogger<Program>>();
         var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
         var roles = new[] { "SuperAdmin", "Admin", "LoanOfficer", "CollectionsOfficer", "Underwriter", "SupportAgent", "Auditor", "Viewer" };
-
+        
         logger.LogInformation("Seeding roles...");
         foreach (var role in roles)
         {
@@ -128,8 +128,9 @@ app.UseCors(x => x.AllowAnyHeader().AllowAnyOrigin().AllowAnyMethod());
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Only enable Swagger in Development environment
-if (app.Environment.IsDevelopment())
+// Enable Swagger unless explicitly disabled in configuration
+var disableSwagger = app.Configuration.GetValue<bool>("DisableSwagger");
+if (!disableSwagger)
 {
     app.UseSwagger();
     app.UseSwaggerUI();
