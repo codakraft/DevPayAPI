@@ -10,11 +10,17 @@ public interface IBorrowerOnboardingService
     // Step 1B: Email OTP validation
     Task<BorrowerStep1BResponseDto> Step1B_ValidateEmailOtpAsync(BorrowerStep1BRequestDto request);
     
-    // Step 2: Bank info, Address and documents
-    Task<BorrowerStep2ResponseDto> Step2_SaveBankAddressDocumentsAsync(BorrowerStep2RequestDto request);
+    // Step 2: BVN submission
+    Task<BorrowerStep2ResponseDto> Step2_SaveBvnAsync(BorrowerStep2RequestDto request);
     
-    // Step 3: Loan application
-    Task<BorrowerStep3ResponseDto> Step3_SubmitLoanApplicationAsync(BorrowerStep3RequestDto request);
+    // Step 2B: BVN OTP validation
+    Task<BorrowerStep2BResponseDto> Step2B_ValidateBvnOtpAsync(BorrowerStep2BRequestDto request);
+    
+    // Step 3: Bank info, Address and documents
+    Task<BorrowerStep3ResponseDto> Step3_SaveBankAddressDocumentsAsync(BorrowerStep3RequestDto request);
+    
+    // Step 4: Loan application
+    Task<BorrowerStep4ResponseDto> Step4_SubmitLoanApplicationAsync(BorrowerStep4RequestDto request);
     
     // OTP services
     Task<GenerateEmailOtpResponseDto> GenerateEmailOtpAsync(GenerateEmailOtpRequestDto request);
@@ -22,6 +28,7 @@ public interface IBorrowerOnboardingService
     
     // Resend OTP services
     Task<ResendStep1EmailOtpResponseDto> ResendStep1EmailOtpAsync(ResendStep1EmailOtpRequestDto request);
+    Task<ResendStep2BvnOtpResponseDto> ResendStep2BvnOtpAsync(ResendStep2BvnOtpRequestDto request);
     
     // Current step tracking
     Task<BorrowerCurrentStepResponseDto> GetCurrentStepAsync(BorrowerCurrentStepRequestDto request);

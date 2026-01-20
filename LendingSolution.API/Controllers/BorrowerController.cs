@@ -78,24 +78,17 @@ public class BorrowerController(
     }
 
     /// <summary>
-    /// Step 2: Collects bank account details, address and uploads identity documents (ID card, selfie, utility bill)
+    /// Step 2: Submits BVN for verification and sends OTP to borrower's phone
     /// </summary>
-    /// <param name="request">Bank account number, bank code, address details, document URLs/IDs, and loan ID</param>
-    /// <returns>Loan eligibility details including min/max loan amount and tenor ranges</returns>
+    /// <param name="request">BVN and loan ID</param>
+    /// <returns>Confirmation that BVN OTP has been sent</returns>
     [HttpPost("step2")]
     public async Task<IActionResult> Step2([FromBody] BorrowerStep2RequestDto request)
     {
         try
         {
-            var result = await _borrowerOnboardingService.Step2_SaveBankAddressDocumentsAsync(request);
-            return Ok(ApiResponse.Ok(result.Message, new
-            {
-                loanId = request.LoanId,
-                maxLoanEligible = result.MaxLoanEligible,
-                minLoanEligible = result.MinLoanEligible,
-                maxTenor = result.MaxTenor,
-                minTenor = result.MinTenor
-            }));
+            var result = await _borrowerOnboardingService.Step2_SaveBvnAsync(request);
+            return Ok(ApiResponse.Ok(result.Message, new { loanId = request.LoanId }));
         }
         catch (AppException ex)
         {
@@ -110,22 +103,48 @@ public class BorrowerController(
     }
 
     /// <summary>
-    /// Step 3: Final loan submission with selected amount and tenor
+    /// Step 2B: Validates BVN OTP sent during Step 2
     /// </summary>
-    /// <param name="request">Requested loan amount, tenor (duration in months), and loan ID</param>
-    /// <returns>Repayment details including total repayment amount and monthly installment</returns>
+    /// <param name="request">Loan ID and OTP code for BVN verification</param>
+    /// <returns>Confirmation of BVN verification and loan ID</returns>
+    [HttpPost("step2b")]
+    public async Task<IActionResult> Step2B([FromBody] BorrowerStep2BRequestDto request)
+    {
+        try
+        {
+            var result = await _borrowerOnboardingService.Step2B_ValidateBvnOtpAsync(request);
+            return Ok(ApiResponse.Ok(result.Message, new { loanId = request.LoanId }));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error during Step 2B for borrower onboarding");
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error during Step 2B");
+            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
+        }
+    }
+
+    /// <summary>
+    /// Step 3: Collects bank account details, address and uploads identity documents (ID card, selfie, utility bill)
+    /// </summary>
+    /// <param name="request">Bank account number, bank code, address details, document URLs/IDs, and loan ID</param>
+    /// <returns>Loan eligibility details including min/max loan amount and tenor ranges</returns>
     [HttpPost("step3")]
     public async Task<IActionResult> Step3([FromBody] BorrowerStep3RequestDto request)
     {
         try
         {
-            var result = await _borrowerOnboardingService.Step3_SubmitLoanApplicationAsync(request);
+            var result = await _borrowerOnboardingService.Step3_SaveBankAddressDocumentsAsync(request);
             return Ok(ApiResponse.Ok(result.Message, new
             {
                 loanId = request.LoanId,
-                repaymentAmount = result.RepaymentAmount,
-                tenor = result.Tenor,
-                monthlyRepaymentAmount = result.MonthlyRepaymentAmount
+                maxLoanEligible = result.MaxLoanEligible,
+                minLoanEligible = result.MinLoanEligible,
+                maxTenor = result.MaxTenor,
+                minTenor = result.MinTenor
             }));
         }
         catch (AppException ex)
@@ -136,6 +155,37 @@ public class BorrowerController(
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled error during Step 3");
+            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
+        }
+    }
+
+    /// <summary>
+    /// Step 4: Final loan submission with selected amount and tenor
+    /// </summary>
+    /// <param name="request">Requested loan amount, tenor (duration in months), and loan ID</param>
+    /// <returns>Repayment details including total repayment amount and monthly installment</returns>
+    [HttpPost("step4")]
+    public async Task<IActionResult> Step4([FromBody] BorrowerStep4RequestDto request)
+    {
+        try
+        {
+            var result = await _borrowerOnboardingService.Step4_SubmitLoanApplicationAsync(request);
+            return Ok(ApiResponse.Ok(result.Message, new
+            {
+                loanId = request.LoanId,
+                repaymentAmount = result.RepaymentAmount,
+                tenor = result.Tenor,
+                monthlyRepaymentAmount = result.MonthlyRepaymentAmount
+            }));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error during Step 4 for borrower onboarding");
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error during Step 4");
             return StatusCode(500, ApiResponse.Fail("Something went wrong"));
         }
     }
@@ -163,6 +213,31 @@ public class BorrowerController(
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled error resending Step 1 email OTP for loan ID: {LoanId}", request.LoanId);
+            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
+        }
+    }
+
+    /// <summary>
+    /// Resends BVN OTP for Step 2 verification when the original OTP expires or is not received
+    /// </summary>
+    /// <param name="request">Loan ID for which to resend the BVN OTP</param>
+    /// <returns>Confirmation that a new BVN OTP has been sent to the registered phone</returns>
+    [HttpPost("resend-step2-bvn-otp")]
+    public async Task<IActionResult> ResendStep2BvnOtp([FromBody] ResendStep2BvnOtpRequestDto request)
+    {
+        try
+        {
+            var result = await _borrowerOnboardingService.ResendStep2BvnOtpAsync(request);
+            return Ok(ApiResponse.Ok("BVN OTP has been resent successfully"));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error resending Step 2 BVN OTP for loan ID: {LoanId}", request.LoanId);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error resending Step 2 BVN OTP for loan ID: {LoanId}", request.LoanId);
             return StatusCode(500, ApiResponse.Fail("Something went wrong"));
         }
     }

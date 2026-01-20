@@ -154,7 +154,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         return new BorrowerStep1BResponseDto();
     }
 
-    public async Task<BorrowerStep2ResponseDto> Step2_SaveBankAddressDocumentsAsync(BorrowerStep2RequestDto request)
+    public async Task<BorrowerStep2ResponseDto> Step2_SaveBvnAsync(BorrowerStep2RequestDto request)
     {
         var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
 
@@ -171,10 +171,131 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         }
 
         // Allow resubmitting this step - clear subsequent step data if going back
-        if (application.CurrentStep > BorrowerOnboardingStep.Step2_DocumentsUploaded)
+        if (application.CurrentStep > BorrowerOnboardingStep.Step2_BvnSent)
         {
             _logger.LogInformation("Borrower going back to Step 2 for application {ApplicationId}. Clearing subsequent step data.", application.Id);
+            ClearStepsFromStep2BOnwards(application);
+        }
+
+        // Get company for logging
+        var company = await _companyRepository.GetCompanyById(application.CompanyId);
+        var companyName = company?.Name ?? "Unknown Company";
+
+        // EARLY VALIDATION: Check company wallet balance before proceeding with BVN OTP
+        try
+        {
+            var settings = await _settingsService.GetSettingsAsync();
+            await _walletService.ValidateCompanyBalanceForFeeAsync(application.CompanyId, settings.OtpFee, "BVN OTP");
+        }
+        catch (AppException ex) when (ex.StatusCode == 400 || ex.StatusCode == 404)
+        {
+            _logger.LogWarning(
+                "AUDIT: BVN step blocked for Company {CompanyName} (ID: {CompanyId}). Reason: {Reason}",
+                companyName, application.CompanyId, ex.Message);
+            throw new AppException(
+                "We're unable to process your application at this time. Please contact support.",
+                503);
+        }
+
+        // Validate BVN format (11 digits)
+        if (string.IsNullOrWhiteSpace(request.BVN) || request.BVN.Length != 11 || !request.BVN.All(char.IsDigit))
+        {
+            throw new AppException("Invalid BVN format. BVN must be 11 digits.", 400);
+        }
+
+        // Save BVN to application
+        application.BVN = request.BVN;
+        application.CurrentStep = BorrowerOnboardingStep.Step2_BvnSent;
+        application.UpdatedAt = DateTime.UtcNow;
+
+        // Generate and store BVN OTP
+        var bvnOtp = GenerateOtp();
+        application.LastBvnOtp = bvnOtp;
+        application.BvnOtpGeneratedAt = DateTime.UtcNow;
+
+        await _borrowerRepository.UpdateAsync(application);
+
+        // Send BVN OTP via SMS
+        var smsSent = await _smsService.SendOtpSmsAsync(
+            application.PhoneNumber ?? string.Empty,
+            bvnOtp,
+            "BVN Verification"
+        );
+
+        if (!smsSent)
+        {
+            _logger.LogWarning("Failed to send BVN OTP SMS for application {ApplicationId}", application.Id);
+            // Don't throw - we can still proceed, user can request resend
+        }
+        else
+        {
+            // Deduct OTP fee from company wallet
+            await DeductOtpFeeAsync(application.CompanyId, "BVN OTP");
+        }
+
+        return new BorrowerStep2ResponseDto();
+    }
+
+    public async Task<BorrowerStep2BResponseDto> Step2B_ValidateBvnOtpAsync(BorrowerStep2BRequestDto request)
+    {
+        var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
+
+        // Prevent modifications if loan application is already submitted
+        if (application.IsCompleted)
+        {
+            throw new AppException("Cannot modify a submitted loan application", 400);
+        }
+
+        // Must have completed Step 2 (BVN sent)
+        if (application.CurrentStep < BorrowerOnboardingStep.Step2_BvnSent)
+        {
+            throw new AppException("Please complete BVN submission first", 400);
+        }
+
+        // Allow resubmitting this step - clear subsequent step data if going back
+        if (application.CurrentStep > BorrowerOnboardingStep.Step2B_BvnValidated)
+        {
+            _logger.LogInformation("Borrower going back to Step 2B for application {ApplicationId}. Clearing subsequent step data.", application.Id);
             ClearStepsFromStep3Onwards(application);
+        }
+
+        // Validate BVN OTP
+        if (!ValidateOtp(application.BVN ?? string.Empty, request.Otp, application.LastBvnOtp, application.BvnOtpGeneratedAt))
+        {
+            throw new AppException("Invalid or expired BVN OTP", 400);
+        }
+
+        // Update application
+        application.CurrentStep = BorrowerOnboardingStep.Step2B_BvnValidated;
+        application.BvnVerifiedAt = DateTime.UtcNow;
+        application.UpdatedAt = DateTime.UtcNow;
+
+        await _borrowerRepository.UpdateAsync(application);
+
+        return new BorrowerStep2BResponseDto();
+    }
+
+    public async Task<BorrowerStep3ResponseDto> Step3_SaveBankAddressDocumentsAsync(BorrowerStep3RequestDto request)
+    {
+        var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
+
+        // Prevent modifications if loan application is already submitted
+        if (application.IsCompleted)
+        {
+            throw new AppException("Cannot modify a submitted loan application", 400);
+        }
+
+        // Must have completed Step 2B (BVN validated) at minimum
+        if (application.CurrentStep < BorrowerOnboardingStep.Step2B_BvnValidated)
+        {
+            throw new AppException("Please complete BVN verification first", 400);
+        }
+
+        // Allow resubmitting this step - clear subsequent step data if going back
+        if (application.CurrentStep > BorrowerOnboardingStep.Step3_DocumentsUploaded)
+        {
+            _logger.LogInformation("Borrower going back to Step 3 for application {ApplicationId}. Clearing subsequent step data.", application.Id);
+            ClearStepsFromStep4Onwards(application);
         }
 
         // Validate at least 2 images are provided
@@ -218,7 +339,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         var salaryHistoryResponse = await _remitaService.GetSalaryHistoryAsync(
             request.AccountNo,
             request.BankCode,
-            application.BVN ?? string.Empty, // BVN is optional now
+            application.BVN ?? string.Empty,
             application.Id); // Pass borrowerApplicationId instead of email
 
         if (salaryHistoryResponse == null)
@@ -276,13 +397,13 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         application.MaxLoanEligible = finalMaxEligible;
         application.MinTenor = minTenor;
         application.MaxTenor = maxTenor;
-        application.CurrentStep = BorrowerOnboardingStep.Step2_DocumentsUploaded;
+        application.CurrentStep = BorrowerOnboardingStep.Step3_DocumentsUploaded;
         application.DocumentsUploadedAt = DateTime.UtcNow;
         application.UpdatedAt = DateTime.UtcNow;
 
         await _borrowerRepository.UpdateAsync(application);
 
-        return new BorrowerStep2ResponseDto
+        return new BorrowerStep3ResponseDto
         {
             MinLoanEligible = finalMinEligible,
             MaxLoanEligible = finalMaxEligible,
@@ -291,12 +412,12 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         };
     }
 
-    public async Task<BorrowerStep3ResponseDto> Step3_SubmitLoanApplicationAsync(BorrowerStep3RequestDto request)
+    public async Task<BorrowerStep4ResponseDto> Step4_SubmitLoanApplicationAsync(BorrowerStep4RequestDto request)
     {
         var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
 
-        // Must have completed Step 2 at minimum
-        if (application.CurrentStep < BorrowerOnboardingStep.Step2_DocumentsUploaded)
+        // Must have completed Step 3 at minimum
+        if (application.CurrentStep < BorrowerOnboardingStep.Step3_DocumentsUploaded)
         {
             throw new AppException("Please complete document upload first", 400);
         }
@@ -427,7 +548,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         application.LoanId = loan.Id;
 
         // Update application
-        application.CurrentStep = BorrowerOnboardingStep.Step3_LoanSubmitted;
+        application.CurrentStep = BorrowerOnboardingStep.Step4_LoanSubmitted;
         application.LoanSubmittedAt = DateTime.UtcNow;
         application.IsCompleted = true;
         application.UpdatedAt = DateTime.UtcNow;
@@ -468,7 +589,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             }
         }
 
-        return new BorrowerStep3ResponseDto
+        return new BorrowerStep4ResponseDto
         {
             LoanPrincipal = loanPrincipal,
             ApplicableFees = applicableFees,
@@ -478,6 +599,68 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             Tenor = request.Tenor,
             MonthlyRepaymentAmount = monthlyRepayment
         };
+    }
+
+    public async Task<ResendStep2BvnOtpResponseDto> ResendStep2BvnOtpAsync(ResendStep2BvnOtpRequestDto request)
+    {
+        var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
+
+        // Only allow resending if the application is on Step 2 (BVN sent but not validated)
+        if (application.CurrentStep != BorrowerOnboardingStep.Step2_BvnSent)
+        {
+            throw new AppException("BVN OTP can only be resent for applications in Step 2 (BVN Sent) status", 400);
+        }
+
+        // Ensure BVN exists
+        if (string.IsNullOrEmpty(application.BVN))
+        {
+            throw new AppException("BVN not found for this application", 400);
+        }
+
+        // Get company for logging
+        var company = await _companyRepository.GetCompanyById(application.CompanyId);
+        var companyName = company?.Name ?? "Unknown Company";
+
+        // EARLY VALIDATION: Check company wallet balance before resending OTP
+        try
+        {
+            var settings = await _settingsService.GetSettingsAsync();
+            await _walletService.ValidateCompanyBalanceForFeeAsync(application.CompanyId, settings.OtpFee, "BVN OTP Resend");
+        }
+        catch (AppException ex) when (ex.StatusCode == 400 || ex.StatusCode == 404)
+        {
+            _logger.LogWarning(
+                "AUDIT: Borrower BVN OTP resend blocked for Company {CompanyName} (ID: {CompanyId}). Reason: {Reason}",
+                companyName, application.CompanyId, ex.Message);
+            throw new AppException(
+                "We're unable to process your request at this time. Please contact support.",
+                503);
+        }
+
+        // Generate new BVN OTP
+        var bvnOtp = GenerateOtp();
+        application.LastBvnOtp = bvnOtp;
+        application.BvnOtpGeneratedAt = DateTime.UtcNow;
+        application.UpdatedAt = DateTime.UtcNow;
+
+        await _borrowerRepository.UpdateAsync(application);
+
+        // Send BVN OTP via SMS
+        var smsSent = await _smsService.SendOtpSmsAsync(
+            application.PhoneNumber ?? string.Empty,
+            bvnOtp,
+            "BVN Verification - Resent"
+        );
+
+        if (!smsSent)
+        {
+            throw new AppException("Failed to resend BVN verification SMS. Please try again.", 500);
+        }
+
+        // Deduct OTP fee from company wallet
+        await DeductOtpFeeAsync(application.CompanyId, "BVN OTP Resend");
+
+        return new ResendStep2BvnOtpResponseDto();
     }
 
     public async Task<UpdateDocumentsResponseDto> UpdateDocumentsAsync(UpdateDocumentsRequestDto request)
@@ -861,18 +1044,23 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             response.EmailVerifiedAt = borrowerApplication.EmailVerifiedAt;
         }
 
-        if (borrowerApplication.CurrentStep >= BorrowerOnboardingStep.Step2_DocumentsUploaded || borrowerApplication.IsCompleted)
+        if (borrowerApplication.CurrentStep >= BorrowerOnboardingStep.Step2B_BvnValidated || borrowerApplication.IsCompleted)
+        {
+            response.BvnVerifiedAt = borrowerApplication.BvnVerifiedAt;
+        }
+
+        if (borrowerApplication.CurrentStep >= BorrowerOnboardingStep.Step3_DocumentsUploaded || borrowerApplication.IsCompleted)
         {
             response.DocumentsUploadedAt = borrowerApplication.DocumentsUploadedAt;
         }
 
-        if (borrowerApplication.CurrentStep >= BorrowerOnboardingStep.Step3_LoanSubmitted || borrowerApplication.IsCompleted)
+        if (borrowerApplication.CurrentStep >= BorrowerOnboardingStep.Step4_LoanSubmitted || borrowerApplication.IsCompleted)
         {
             response.LoanSubmittedAt = borrowerApplication.LoanSubmittedAt;
         }
 
-        // Set eligibility information if available (after Step 2 completion)
-        if (borrowerApplication.CurrentStep >= BorrowerOnboardingStep.Step2_DocumentsUploaded)
+        // Set eligibility information if available (after Step 3 completion)
+        if (borrowerApplication.CurrentStep >= BorrowerOnboardingStep.Step3_DocumentsUploaded)
         {
             response.MaxLoanEligible = borrowerApplication.MaxLoanEligible;
             response.MinLoanEligible = borrowerApplication.MinLoanEligible;
@@ -889,8 +1077,10 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         {
             BorrowerOnboardingStep.Step1_EmailSent => "Email Verification",
             BorrowerOnboardingStep.Step1B_EmailValidated => "Email Verified",
-            BorrowerOnboardingStep.Step2_DocumentsUploaded => "Bank Info & Documents Upload",
-            BorrowerOnboardingStep.Step3_LoanSubmitted => "Loan Application",
+            BorrowerOnboardingStep.Step2_BvnSent => "BVN Verification",
+            BorrowerOnboardingStep.Step2B_BvnValidated => "BVN Verified",
+            BorrowerOnboardingStep.Step3_DocumentsUploaded => "Bank Info & Documents Upload",
+            BorrowerOnboardingStep.Step4_LoanSubmitted => "Loan Application",
             _ => "Unknown Step"
         };
     }
@@ -900,9 +1090,11 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         return step switch
         {
             BorrowerOnboardingStep.Step1_EmailSent => "Please verify your email address by entering the OTP sent to your email.",
-            BorrowerOnboardingStep.Step1B_EmailValidated => "Email verified successfully. Proceed to provide your bank information, address and documents.",
-            BorrowerOnboardingStep.Step2_DocumentsUploaded => "Documents uploaded successfully. You can now submit your loan application.",
-            BorrowerOnboardingStep.Step3_LoanSubmitted => "Loan application submitted successfully. Your application is under review.",
+            BorrowerOnboardingStep.Step1B_EmailValidated => "Email verified successfully. Proceed to verify your BVN.",
+            BorrowerOnboardingStep.Step2_BvnSent => "Please verify your BVN by entering the OTP sent to your phone.",
+            BorrowerOnboardingStep.Step2B_BvnValidated => "BVN verified successfully. Proceed to provide your bank information, address and documents.",
+            BorrowerOnboardingStep.Step3_DocumentsUploaded => "Documents uploaded successfully. You can now submit your loan application.",
+            BorrowerOnboardingStep.Step4_LoanSubmitted => "Loan application submitted successfully. Your application is under review.",
             _ => "Unknown step description"
         };
     }
@@ -913,8 +1105,10 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         {
             BorrowerOnboardingStep.Step1_EmailSent => 1,
             BorrowerOnboardingStep.Step1B_EmailValidated => 2,
-            BorrowerOnboardingStep.Step2_DocumentsUploaded => 3,
-            BorrowerOnboardingStep.Step3_LoanSubmitted => 4,
+            BorrowerOnboardingStep.Step2_BvnSent => 3,
+            BorrowerOnboardingStep.Step2B_BvnValidated => 4,
+            BorrowerOnboardingStep.Step3_DocumentsUploaded => 5,
+            BorrowerOnboardingStep.Step4_LoanSubmitted => 6,
             _ => 0
         };
     }
@@ -924,9 +1118,11 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         return currentStep switch
         {
             BorrowerOnboardingStep.Step1_EmailSent => BorrowerOnboardingStep.Step1B_EmailValidated,
-            BorrowerOnboardingStep.Step1B_EmailValidated => BorrowerOnboardingStep.Step2_DocumentsUploaded,
-            BorrowerOnboardingStep.Step2_DocumentsUploaded => BorrowerOnboardingStep.Step3_LoanSubmitted,
-            BorrowerOnboardingStep.Step3_LoanSubmitted => null, // Final step
+            BorrowerOnboardingStep.Step1B_EmailValidated => BorrowerOnboardingStep.Step2_BvnSent,
+            BorrowerOnboardingStep.Step2_BvnSent => BorrowerOnboardingStep.Step2B_BvnValidated,
+            BorrowerOnboardingStep.Step2B_BvnValidated => BorrowerOnboardingStep.Step3_DocumentsUploaded,
+            BorrowerOnboardingStep.Step3_DocumentsUploaded => BorrowerOnboardingStep.Step4_LoanSubmitted,
+            BorrowerOnboardingStep.Step4_LoanSubmitted => null, // Final step
             _ => null
         };
     }
@@ -936,9 +1132,11 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         return step switch
         {
             BorrowerOnboardingStep.Step1_EmailSent => new List<string> { "Verify your email address using the OTP sent to your email" },
-            BorrowerOnboardingStep.Step1B_EmailValidated => new List<string> { "Provide your bank account details, address, and upload required documents" },
-            BorrowerOnboardingStep.Step2_DocumentsUploaded => new List<string> { "Submit your loan application with desired amount and tenor" },
-            BorrowerOnboardingStep.Step3_LoanSubmitted => new List<string> { "Your application is complete and under review" },
+            BorrowerOnboardingStep.Step1B_EmailValidated => new List<string> { "Submit your BVN for verification" },
+            BorrowerOnboardingStep.Step2_BvnSent => new List<string> { "Verify your BVN using the OTP sent to your phone" },
+            BorrowerOnboardingStep.Step2B_BvnValidated => new List<string> { "Provide your bank account details, address, and upload required documents" },
+            BorrowerOnboardingStep.Step3_DocumentsUploaded => new List<string> { "Submit your loan application with desired amount and tenor" },
+            BorrowerOnboardingStep.Step4_LoanSubmitted => new List<string> { "Your application is complete and under review" },
             _ => new List<string>()
         };
     }
@@ -946,11 +1144,38 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     #region Step Data Clearing Methods
 
     /// <summary>
-    /// Clears all data from Step 2 onwards (bank info, documents, loan eligibility, loan submission)
+    /// Clears all data from Step 2 onwards (BVN, bank info, documents, loan eligibility, loan submission)
     /// </summary>
     private static void ClearStepsFromStep2Onwards(BorrowerApplication application)
     {
-        // Clear Step 2 data
+        // Clear Step 2 data (BVN)
+        application.BVN = null;
+        application.LastBvnOtp = null;
+        application.BvnOtpGeneratedAt = null;
+        application.BvnVerifiedAt = null;
+
+        // Clear Step 2B and beyond
+        ClearStepsFromStep2BOnwards(application);
+    }
+
+    /// <summary>
+    /// Clears all data from Step 2B onwards (BVN validation, bank info, documents, loan submission)
+    /// </summary>
+    private static void ClearStepsFromStep2BOnwards(BorrowerApplication application)
+    {
+        // Clear Step 2B data (BVN validation timestamp)
+        application.BvnVerifiedAt = null;
+
+        // Clear Step 3 and beyond
+        ClearStepsFromStep3Onwards(application);
+    }
+
+    /// <summary>
+    /// Clears all data from Step 3 onwards (bank info, documents, loan eligibility, loan submission)
+    /// </summary>
+    private static void ClearStepsFromStep3Onwards(BorrowerApplication application)
+    {
+        // Clear Step 3 data (bank info, documents)
         application.BankCode = null;
         application.AccountNo = null;
         application.Address = null;
@@ -962,16 +1187,16 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         application.MinTenor = null;
         application.MaxTenor = null;
 
-        // Clear Step 3 and beyond
-        ClearStepsFromStep3Onwards(application);
+        // Clear Step 4 and beyond
+        ClearStepsFromStep4Onwards(application);
     }
 
     /// <summary>
-    /// Clears all data from Step 3 onwards (loan submission)
+    /// Clears all data from Step 4 onwards (loan submission)
     /// </summary>
-    private static void ClearStepsFromStep3Onwards(BorrowerApplication application)
+    private static void ClearStepsFromStep4Onwards(BorrowerApplication application)
     {
-        // Clear Step 3 data
+        // Clear Step 4 data
         application.LoanId = null;
         application.LoanSubmittedAt = null;
         application.IsCompleted = false;

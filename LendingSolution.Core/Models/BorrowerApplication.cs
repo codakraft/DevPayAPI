@@ -6,8 +6,10 @@ public enum BorrowerOnboardingStep
 {
     Step1_EmailSent = 1,
     Step1B_EmailValidated = 2,
-    Step2_DocumentsUploaded = 3,
-    Step3_LoanSubmitted = 4
+    Step2_BvnSent = 3,
+    Step2B_BvnValidated = 4,
+    Step3_DocumentsUploaded = 5,
+    Step4_LoanSubmitted = 6
 }
 
 public class BorrowerApplication : Base

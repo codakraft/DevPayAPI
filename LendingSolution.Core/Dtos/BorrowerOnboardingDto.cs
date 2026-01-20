@@ -59,8 +59,50 @@ public class ResendStep1EmailOtpResponseDto
     public string Message { get; set; } = "Email OTP has been resent successfully";
 }
 
-// Step 2: Bank info, Address and documents
+// Step 2: BVN submission
 public class BorrowerStep2RequestDto
+{
+    [Required]
+    public required string BVN { get; set; }
+
+    [Required]
+    public Guid LoanId { get; set; }
+}
+
+public class BorrowerStep2ResponseDto
+{
+    public string Message { get; set; } = "BVN OTP sent successfully";
+}
+
+// Step 2B: BVN OTP validation
+public class BorrowerStep2BRequestDto
+{
+    [Required]
+    public required string Otp { get; set; }
+
+    [Required]
+    public Guid LoanId { get; set; }
+}
+
+public class BorrowerStep2BResponseDto
+{
+    public string Message { get; set; } = "BVN validated successfully";
+}
+
+// Resend Step 2 BVN OTP
+public class ResendStep2BvnOtpRequestDto
+{
+    [Required]
+    public Guid LoanId { get; set; }
+}
+
+public class ResendStep2BvnOtpResponseDto
+{
+    public string Message { get; set; } = "BVN OTP has been resent successfully";
+}
+
+// Step 3: Bank info, Address and documents
+public class BorrowerStep3RequestDto
 {
     [Required]
     public required string BankCode { get; set; }
@@ -81,7 +123,7 @@ public class BorrowerStep2RequestDto
     public Guid LoanId { get; set; }
 }
 
-public class BorrowerStep2ResponseDto
+public class BorrowerStep3ResponseDto
 {
     public decimal MaxLoanEligible { get; set; }
     public decimal MinLoanEligible { get; set; }
@@ -118,8 +160,8 @@ public class RequestImageReuploadResponseDto
     public string Message { get; set; } = "Image re-upload request sent successfully";
 }
 
-// Step 3: Loan application
-public class BorrowerStep3RequestDto
+// Step 4: Loan application
+public class BorrowerStep4RequestDto
 {
     [Required]
     public decimal LoanAmount { get; set; }
@@ -131,7 +173,7 @@ public class BorrowerStep3RequestDto
     public Guid LoanId { get; set; }
 }
 
-public class BorrowerStep3ResponseDto
+public class BorrowerStep4ResponseDto
 {
     public decimal LoanPrincipal { get; set; } // Loan Principal (LP)
     public decimal ApplicableFees { get; set; } // Applicable Fees (AF)
