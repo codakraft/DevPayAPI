@@ -59,9 +59,15 @@ public class ResendStep1EmailOtpResponseDto
     public string Message { get; set; } = "Email OTP has been resent successfully";
 }
 
-// Step 2: BVN submission
+// Step 2: BVN and Bank details submission
 public class BorrowerStep2RequestDto
 {
+    [Required]
+    public required string BankCode { get; set; }
+
+    [Required]
+    public required string AccountNo { get; set; }
+
     [Required]
     public required string BVN { get; set; }
 
@@ -101,15 +107,9 @@ public class ResendStep2BvnOtpResponseDto
     public string Message { get; set; } = "BVN OTP has been resent successfully";
 }
 
-// Step 3: Bank info, Address and documents
+// Step 3: Address and documents (bank details already collected in Step 2)
 public class BorrowerStep3RequestDto
 {
-    [Required]
-    public required string BankCode { get; set; }
-
-    [Required]
-    public required string AccountNo { get; set; }
-
     [Required]
     public required string Address { get; set; }
 

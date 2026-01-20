@@ -197,14 +197,22 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
                 503);
         }
 
+        // Validate bank details
+        if (string.IsNullOrEmpty(request.AccountNo) || string.IsNullOrEmpty(request.BankCode))
+        {
+            throw new AppException("Complete bank details are required.", 400);
+        }
+
         // Validate BVN format (11 digits)
         if (string.IsNullOrWhiteSpace(request.BVN) || request.BVN.Length != 11 || !request.BVN.All(char.IsDigit))
         {
             throw new AppException("Invalid BVN format. BVN must be 11 digits.", 400);
         }
 
-        // Save BVN to application
+        // Save BVN and bank details to application
         application.BVN = request.BVN;
+        application.BankCode = request.BankCode;
+        application.AccountNo = request.AccountNo;
         application.CurrentStep = BorrowerOnboardingStep.Step2_BvnSent;
         application.UpdatedAt = DateTime.UtcNow;
 
@@ -326,19 +334,19 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             throw new AppException("Loan product configuration error: Invalid tenor range. Please contact support.", 500);
         }
 
-        // Require bank details - borrower cannot proceed without it
-        if (string.IsNullOrEmpty(request.AccountNo) || string.IsNullOrEmpty(request.BankCode))
+        // Bank details should already be saved from Step 2
+        if (string.IsNullOrEmpty(application.AccountNo) || string.IsNullOrEmpty(application.BankCode))
         {
-            throw new AppException("Complete bank details are required to proceed.", 400);
+            throw new AppException("Bank details not found. Please complete Step 2 first.", 400);
         }
 
         // Fetch salary history from Remita - this is mandatory
         _logger.LogInformation("Starting salary history retrieval for application {ApplicationId} - Account:{Account}, Bank:{Bank}",
-            application.Id, request.AccountNo, request.BankCode);
+            application.Id, application.AccountNo, application.BankCode);
 
         var salaryHistoryResponse = await _remitaService.GetSalaryHistoryAsync(
-            request.AccountNo,
-            request.BankCode,
+            application.AccountNo,
+            application.BankCode,
             application.BVN ?? string.Empty,
             application.Id); // Pass borrowerApplicationId instead of email
 
@@ -387,9 +395,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         _logger.LogInformation("Final eligibility for application {ApplicationId}: Min={FinalMin}, Max={FinalMax}",
             application.Id, finalMinEligible, finalMaxEligible);
 
-        // Update application with bank info, address and documents
-        application.BankCode = request.BankCode;
-        application.AccountNo = request.AccountNo;
+        // Update application with address and documents (bank details already saved in Step 2)
         application.Address = request.Address;
         application.IdNumber = request.IdNumber;
         application.DocumentIds = string.Join(",", request.ImageIds);
@@ -1148,8 +1154,10 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     /// </summary>
     private static void ClearStepsFromStep2Onwards(BorrowerApplication application)
     {
-        // Clear Step 2 data (BVN)
+        // Clear Step 2 data (BVN and bank details)
         application.BVN = null;
+        application.BankCode = null;
+        application.AccountNo = null;
         application.LastBvnOtp = null;
         application.BvnOtpGeneratedAt = null;
         application.BvnVerifiedAt = null;
@@ -1159,7 +1167,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     }
 
     /// <summary>
-    /// Clears all data from Step 2B onwards (BVN validation, bank info, documents, loan submission)
+    /// Clears all data from Step 2B onwards (BVN validation, documents, loan submission)
     /// </summary>
     private static void ClearStepsFromStep2BOnwards(BorrowerApplication application)
     {
@@ -1171,13 +1179,11 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     }
 
     /// <summary>
-    /// Clears all data from Step 3 onwards (bank info, documents, loan eligibility, loan submission)
+    /// Clears all data from Step 3 onwards (address, documents, loan eligibility, loan submission)
     /// </summary>
     private static void ClearStepsFromStep3Onwards(BorrowerApplication application)
     {
-        // Clear Step 3 data (bank info, documents)
-        application.BankCode = null;
-        application.AccountNo = null;
+        // Clear Step 3 data (address, documents)
         application.Address = null;
         application.IdNumber = null;
         application.DocumentIds = null;
