@@ -14,6 +14,8 @@ namespace LendingSolution.Application.Services.Interfaces
         Task<PagedLoanProductListDto> GetAllLoanProductsAsync(LoanProductFilterDto filter); // For SuperAdmin
         Task<PagedLoanProductListDto> GetCompanyLoanProductsAsync(Guid companyId, LoanProductFilterDto filter); // For Admin
 
+        Task<bool> LoanProductExistsAsync(Guid loanProductId);
+
         // ...existing code...
     }
 

@@ -17,6 +17,12 @@ public class LoanProductService(
     private readonly ILoanProductRepository _loanProductRepository = loanProductRepository;
     private readonly ICompanyRepository _companyRepository = companyRepository;
 
+    public async Task<bool> LoanProductExistsAsync(Guid loanProductId)
+    {
+        var loanProduct = await _loanProductRepository.GetLoanProductById(loanProductId);
+        return loanProduct != null;
+    }
+
     public async Task<LoanProductResponseDto> CreateLoanProduct(CreateLoanProductRequestDto dto, Guid companyId)
     {
         if (!await CompanyExistsAsync(companyId))

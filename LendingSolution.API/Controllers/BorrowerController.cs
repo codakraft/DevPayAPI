@@ -18,6 +18,7 @@ public class BorrowerController(
     IBorrowerApplicationRepository borrowerApplicationRepository,
     IRemitaService remitaService,
     ILoanService loanService,
+    ILoanProductService loanProductService,
     ILogger<BorrowerController> logger
 ) : Controller
 {
@@ -25,6 +26,7 @@ public class BorrowerController(
     private readonly IBorrowerApplicationRepository _borrowerApplicationRepository = borrowerApplicationRepository;
     private readonly IRemitaService _remitaService = remitaService;
     private readonly ILoanService _loanService = loanService;
+    private readonly ILoanProductService _loanProductService = loanProductService;
     private readonly ILogger<BorrowerController> _logger = logger;
 
     /// <summary>
@@ -537,6 +539,26 @@ public class BorrowerController(
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error occurred while uploading signed offer letter for loan {LoanId}", id);
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    /// <summary>
+    /// Checks if a loan product exists by its ID
+    /// </summary>
+    /// <param name="loanProductId">The ID of the loan product to check</param>
+    /// <returns>Boolean indicating whether the loan product exists</returns>
+    [HttpGet("loan-product/{loanProductId:guid}/exists")]
+    public async Task<IActionResult> CheckLoanProductExists(Guid loanProductId)
+    {
+        try
+        {
+            var exists = await _loanProductService.LoanProductExistsAsync(loanProductId);
+            return Ok(ApiResponse.Ok("Loan product existence checked", new { exists }));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while checking loan product existence for ID {LoanProductId}", loanProductId);
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
