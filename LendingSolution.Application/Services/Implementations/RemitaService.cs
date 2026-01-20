@@ -138,6 +138,9 @@ public class RemitaService : IRemitaService
                 // Attach the authorization code to the response for downstream use
                 result.AuthorisationCode = finalAuthCode;
                 
+                // Compute and attach salary statistics if not provided by Remita
+                ComputeSalaryStatistics(result.Data);
+                
                 return result;
             }
             else
@@ -173,6 +176,27 @@ public class RemitaService : IRemitaService
     {
         try
         {
+            // Check if we should use test data for non-live mode
+            if (!_settings.UseLiveData)
+            {
+                _logger.LogInformation("UseLiveData is false - using Remita test data for mandate creation");
+                _logger.LogInformation("Original values - Phone: {PhoneNumber}, Account: {AccountNumber}, Bank: {BankCode}",
+                    phoneNumber, accountNumber, bankCode);
+                
+                // Override with Remita test account details
+                phoneNumber = "08154567478";
+                accountNumber = "5012284010";
+                bankCode = "023";
+                
+                _logger.LogInformation("Test values applied - Phone: {PhoneNumber}, Account: {AccountNumber}, Bank: {BankCode}",
+                    phoneNumber, accountNumber, bankCode);
+            }
+            else
+            {
+                _logger.LogInformation("UseLiveData is true - using borrower data - Phone: {PhoneNumber}, Account: {AccountNumber}, Bank: {BankCode}",
+                    phoneNumber, accountNumber, bankCode);
+            }
+
             // Validate required parameters
             if (string.IsNullOrWhiteSpace(customerId))
             {
@@ -627,5 +651,66 @@ public class RemitaService : IRemitaService
         }
 
         return digitsOnly;
+    }
+
+    /// <summary>
+    /// Computes salary statistics and loan information from the raw Remita response
+    /// and populates the pre-computed fields on the DTO
+    /// </summary>
+    private void ComputeSalaryStatistics(RemitaSalaryDataDto data)
+    {
+        if (data == null) return;
+
+        var payments = data.SalaryPaymentDetails ?? new List<RemitaSalaryPaymentDto>();
+        var amounts = new List<decimal>();
+
+        foreach (var payment in payments)
+        {
+            if (decimal.TryParse(payment.Amount, System.Globalization.NumberStyles.Any, 
+                System.Globalization.CultureInfo.InvariantCulture, out var amount))
+            {
+                amounts.Add(amount);
+            }
+        }
+
+        // Compute salary statistics if not already set
+        if (string.IsNullOrEmpty(data.MaxSalaryAmount) && amounts.Any())
+        {
+            data.MaxSalaryAmount = amounts.Max().ToString("F2");
+        }
+        if (string.IsNullOrEmpty(data.MinSalaryAmount) && amounts.Any())
+        {
+            data.MinSalaryAmount = amounts.Min().ToString("F2");
+        }
+        if (string.IsNullOrEmpty(data.AverageMonthlySalary) && amounts.Any())
+        {
+            data.AverageMonthlySalary = amounts.Average().ToString("F2");
+        }
+        if (string.IsNullOrEmpty(data.LatestSalaryAmount) && amounts.Any())
+        {
+            data.LatestSalaryAmount = amounts.First().ToString("F2");
+        }
+        if (string.IsNullOrEmpty(data.ConsistentMonths))
+        {
+            data.ConsistentMonths = data.SalaryCount;
+        }
+
+        // Compute loan information
+        var loanHistory = data.LoanHistoryDetails ?? new List<RemitaLoanHistoryDto>();
+        var totalOutstanding = loanHistory
+            .Where(l => l.OutstandingAmount > 0)
+            .Sum(l => l.OutstandingAmount);
+
+        if (string.IsNullOrEmpty(data.TotalOutstandingAmount))
+        {
+            data.TotalOutstandingAmount = totalOutstanding.ToString("F2");
+        }
+        if (string.IsNullOrEmpty(data.HasOutstandingLoans))
+        {
+            data.HasOutstandingLoans = (totalOutstanding > 0).ToString();
+        }
+
+        _logger.LogInformation("Computed salary stats - MaxSalary: {Max}, TotalOutstanding: {Outstanding}, HasLoans: {HasLoans}",
+            data.MaxSalaryAmount, data.TotalOutstandingAmount, data.HasOutstandingLoans);
     }
 }

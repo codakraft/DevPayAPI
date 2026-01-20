@@ -738,28 +738,6 @@ public class LoanService(
             throw new AppException("Borrower phone number not found. Cannot create mandate.", 400);
         }
 
-        // Check if we should use test data for Remita
-        var useLiveData = _configuration.GetValue<bool>("Remita:UseLiveData", true);
-        if (!useLiveData)
-        {
-            // Use test data for mock/test mode
-            phoneNumber = "08154567478";
-            accountNumber = "5012284010";
-            bankCode = "023";
-            _logger.LogInformation("UseLiveData is false - using test data - Phone: {PhoneNumber}, Account: {AccountNumber}, Bank: {BankCode}", 
-                phoneNumber, accountNumber, bankCode);
-        }
-        else
-        {
-            // Verify phoneNumber is still not null after live data check
-            if (string.IsNullOrEmpty(phoneNumber))
-            {
-                throw new AppException("Borrower phone number not found. Cannot create mandate.", 400);
-            }
-            _logger.LogInformation("UseLiveData is true - using borrower data - Phone: {PhoneNumber}, Account: {AccountNumber}, Bank: {BankCode}", 
-                phoneNumber, accountNumber, bankCode);
-        }
-
         // Get CustomerId and AuthorisationCode from RemitaSalaryHistory table
         if (loan.BorrowerApplication == null)
         {
@@ -817,13 +795,16 @@ public class LoanService(
         _logger.LogInformation("Mandate created successfully for loan {LoanId}. MandateReference: {MandateReference}",
             loanId, loan.MandateRef);
 
+        // Get disbursement amount (Amount to Disburse = Principal - Applicable Fees)
+        var disbursementAmount = loan.DisbursementAmount ?? loan.Amount; // Fallback to loan.Amount for legacy loans
+        
         // Initiate fund transfer via Providus
         var disbursementRequest = new ProvidusDisbursementInternalRequestDto
         {
             LoanId = loanId,
             DestinationAccountNumber = accountNumber,
             DestinationBankCode = bankCode,
-            Amount = loan.Amount,
+            Amount = disbursementAmount,
             Narration = $"Loan Disbursement for {borrowerName} - Loan ID: {loanId.ToString()[..8]}",
             BeneficiaryName = borrowerName
         };
@@ -868,7 +849,7 @@ public class LoanService(
         // Send disbursement notification email
         if (!string.IsNullOrEmpty(borrowerEmail))
         {
-            await _emailService.SendDisbursementNotificationAsync(borrowerEmail, borrowerName, loan.Amount, disbursementResult.DisbursementReference);
+            await _emailService.SendDisbursementNotificationAsync(borrowerEmail, borrowerName, disbursementAmount, disbursementResult.DisbursementReference);
         }
 
         return new LoanDisbursementResponseDto
@@ -878,7 +859,7 @@ public class LoanService(
             Message = disbursementResult.IsMockTransaction
                 ? "Loan has been disbursed successfully (MOCK MODE)."
                 : "Loan has been disbursed successfully.",
-            Amount = loan.Amount,
+            Amount = disbursementAmount,
             DisbursedAt = loan.DisbursementDate,
             DisbursementReference = disbursementResult.DisbursementReference,
             DueDate = loan.DueDate
@@ -913,20 +894,43 @@ public class LoanService(
         var interestRate = loan.Product.InterestRate;
         var isMonthlyRate = loan.Product.InterestCostComputation == InterestCostComputation.PerMonth;
         var monthlyRate = isMonthlyRate ? interestRate : interestRate / 12;
+        var monthlyRateDecimal = monthlyRate / 100; // Convert percentage to decimal
 
         decimal totalInterest;
+        decimal monthlyRepayment;
+        
         if (loan.Product.InterestComputationBasis == InterestComputationBasis.Flat)
         {
-            totalInterest = loan.Amount * (monthlyRate / 100) * loan.DurationInMonths;
+            // Flat interest: Principal * (monthly rate) * tenor
+            totalInterest = loan.Amount * monthlyRateDecimal * loan.DurationInMonths;
+            var totalRepaymentFlat = loan.Amount + totalInterest;
+            monthlyRepayment = totalRepaymentFlat / loan.DurationInMonths;
         }
-        else // Reducing balance
+        else // Reducing balance (Amortization)
         {
-            // Simple approximation for reducing balance
-            totalInterest = loan.Amount * (monthlyRate / 100) * loan.DurationInMonths * 0.55m;
+            // M = P × [r(1+r)^n] / [(1+r)^n - 1]
+            if (monthlyRateDecimal > 0)
+            {
+                var r = monthlyRateDecimal;
+                var n = loan.DurationInMonths;
+                var compoundFactor = (decimal)Math.Pow((double)(1 + r), n);
+                monthlyRepayment = loan.Amount * (r * compoundFactor) / (compoundFactor - 1);
+                totalInterest = (monthlyRepayment * n) - loan.Amount;
+            }
+            else
+            {
+                monthlyRepayment = loan.Amount / loan.DurationInMonths;
+                totalInterest = 0;
+            }
         }
 
         var totalRepayment = loan.Amount + totalInterest;
-        var monthlyRepayment = totalRepayment / loan.DurationInMonths;
+
+        // Calculate fees
+        var processingFee = loan.Amount * (loan.Product.ProcessingFeePercent / 100) + loan.Product.ProcessingFeeFlat;
+        var managementFee = loan.Amount * (loan.Product.ManagementFeePercent / 100);
+        var totalFees = processingFee + managementFee;
+        var disbursementAmount = loan.Amount - totalFees;
 
         // Company address
         var companyAddress = string.Join(", ", new[]
@@ -952,6 +956,10 @@ public class LoanService(
             TotalRepayment = Math.Round(totalRepayment, 2),
             MonthlyRepayment = Math.Round(monthlyRepayment, 2),
             Purpose = loan.Purpose,
+            ProcessingFee = Math.Round(processingFee, 2),
+            ManagementFee = Math.Round(managementFee, 2),
+            TotalFees = Math.Round(totalFees, 2),
+            DisbursementAmount = Math.Round(disbursementAmount, 2),
             ProductName = loan.Product.Name,
             PenaltyRate = loan.Product.PenaltyOnDefaultPrincipal,
             MoratoriumDays = loan.Product.Moratorium,

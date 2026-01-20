@@ -25,67 +25,91 @@ public class SalaryEligibilityService : ISalaryEligibilityService
     {
         var eligibility = new SalaryEligibilityDto();
 
-        if (salaryData?.Data?.SalaryPaymentDetails == null || !salaryData.Data.SalaryPaymentDetails.Any())
+        if (salaryData?.Data == null)
         {
-            eligibility.EligibilityReason = "No salary history found";
-            eligibility.FinalMinEligible = product.MinAmount;
-            eligibility.FinalMaxEligible = product.MinAmount; // Restrict to minimum if no salary data
+            eligibility.EligibilityReason = "No salary history found. Cannot determine eligibility.";
+            eligibility.FinalMinEligible = 0;
+            eligibility.FinalMaxEligible = 0;
             return Task.FromResult(eligibility);
         }
 
-        var payments = salaryData.Data.SalaryPaymentDetails;
-        var amounts = new List<decimal>();
-        var paymentDates = new List<DateTime>();
+        var data = salaryData.Data;
 
-        // Parse payment amounts and dates
-        foreach (var payment in payments)
+        // Use pre-computed values from Remita response
+        // Parse Max Salary Amount (MSA)
+        if (!decimal.TryParse(data.MaxSalaryAmount, NumberStyles.Any, CultureInfo.InvariantCulture, out var maxSalaryAmount) || maxSalaryAmount <= 0)
         {
-            if (decimal.TryParse(payment.Amount, out var amount))
-            {
-                amounts.Add(amount);
-            }
-
-            var paymentDate = ParseRemitaDate(payment.PaymentDate);
-            if (paymentDate.HasValue)
-            {
-                paymentDates.Add(paymentDate.Value);
-            }
-        }
-
-        if (!amounts.Any())
-        {
-            eligibility.EligibilityReason = "No valid salary amounts found";
-            eligibility.FinalMinEligible = product.MinAmount;
-            eligibility.FinalMaxEligible = product.MinAmount;
+            eligibility.EligibilityReason = "No valid max salary amount found. Cannot determine eligibility.";
+            eligibility.FinalMinEligible = 0;
+            eligibility.FinalMaxEligible = 0;
             return Task.FromResult(eligibility);
         }
 
-        // Calculate salary statistics
-        eligibility.AverageMonthlySalary = amounts.Average();
-        eligibility.LatestSalaryAmount = amounts.First(); // Assuming first is latest
-        eligibility.ConsistentMonths = amounts.Count;
+        // Parse salary statistics from pre-computed values
+        decimal.TryParse(data.AverageMonthlySalary, NumberStyles.Any, CultureInfo.InvariantCulture, out var avgSalary);
+        decimal.TryParse(data.LatestSalaryAmount, NumberStyles.Any, CultureInfo.InvariantCulture, out var latestSalary);
+        int.TryParse(data.ConsistentMonths ?? data.SalaryCount, out var consistentMonths);
 
-        // Calculate eligibility based on salary
-        var salaryMultiplier = GetSalaryMultiplier(eligibility.ConsistentMonths, false);
+        eligibility.AverageMonthlySalary = avgSalary;
+        eligibility.LatestSalaryAmount = latestSalary;
+        eligibility.ConsistentMonths = consistentMonths;
+
+        // Get Outstanding Loan Amount (OLA) from pre-computed values
+        decimal.TryParse(data.TotalOutstandingAmount, NumberStyles.Any, CultureInfo.InvariantCulture, out var outstandingLoanAmount);
+        var hasOutstandingLoans = bool.TryParse(data.HasOutstandingLoans, out var hasLoans) && hasLoans;
         
-        // Base calculation: percentage of average monthly salary * number of months
-        var baseEligibleAmount = eligibility.AverageMonthlySalary * salaryMultiplier;
+        eligibility.HasOutstandingLoans = hasOutstandingLoans;
+        eligibility.TotalOutstandingAmount = outstandingLoanAmount;
 
-        eligibility.CalculatedMinEligible = Math.Max(product.MinAmount, baseEligibleAmount * 0.3m); // 30% of calculated
-        eligibility.CalculatedMaxEligible = Math.Min(product.MaxAmount, baseEligibleAmount); // Full calculated amount but capped by product
+        _logger.LogInformation("Eligibility calculation - MSA: {MSA}, OLA: {OLA}, HasOutstandingLoans: {HasLoans}", 
+            maxSalaryAmount, outstandingLoanAmount, hasOutstandingLoans);
 
-        // Apply product constraints
-        eligibility.FinalMinEligible = Math.Max(product.MinAmount, eligibility.CalculatedMinEligible);
-        eligibility.FinalMaxEligible = Math.Min(product.MaxAmount, eligibility.CalculatedMaxEligible);
-
-        // Ensure min doesn't exceed max
-        if (eligibility.FinalMinEligible > eligibility.FinalMaxEligible)
+        // ELIGIBILITY CHECK: If Outstanding Loan Amount > Max Salary Amount => Ineligible
+        if (outstandingLoanAmount > maxSalaryAmount)
         {
-            eligibility.FinalMaxEligible = eligibility.FinalMinEligible;
+            eligibility.EligibilityReason = $"Outstanding loan amount ({outstandingLoanAmount:C}) exceeds max salary amount ({maxSalaryAmount:C}). Not eligible for loan.";
+            eligibility.FinalMinEligible = 0;
+            eligibility.FinalMaxEligible = 0;
+            _logger.LogInformation("Borrower ineligible: OLA ({OLA}) > MSA ({MSA})", outstandingLoanAmount, maxSalaryAmount);
+            return Task.FromResult(eligibility);
         }
+
+        // ELIGIBLE: OLA <= MSA
+        // Max Eligible Amount (MEA) = EligibilityPercentage% of (MSA - OLA)
+        var disposableAmount = maxSalaryAmount - outstandingLoanAmount;
+        var eligibilityPercent = product.EligibilityPercentage > 0 ? product.EligibilityPercentage : 33m; // Default to 33% if not set
+        var maxEligibleAmount = disposableAmount * (eligibilityPercent / 100m);
+
+        // Min Eligible Amount (MiEA) = min amount from Loan Product
+        var minEligibleAmount = product.MinAmount;
+
+        _logger.LogInformation("Eligibility calculation - Disposable: {Disposable}, MEA ({EligibilityPercent}%): {MEA}, Product Min: {ProductMin}",
+            disposableAmount, eligibilityPercent, maxEligibleAmount, minEligibleAmount);
+
+        // ELIGIBILITY CHECK: If MEA < Product Min Amount => Ineligible
+        if (maxEligibleAmount < product.MinAmount)
+        {
+            eligibility.EligibilityReason = $"Maximum eligible amount ({maxEligibleAmount:C}) is below the minimum loan amount ({product.MinAmount:C}) for this product. Not eligible.";
+            eligibility.FinalMinEligible = 0;
+            eligibility.FinalMaxEligible = 0;
+            _logger.LogInformation("Borrower ineligible: MEA ({MEA}) < Product Min ({ProductMin})", maxEligibleAmount, product.MinAmount);
+            return Task.FromResult(eligibility);
+        }
+
+        // Set eligibility amounts
+        eligibility.CalculatedMinEligible = minEligibleAmount;
+        eligibility.CalculatedMaxEligible = maxEligibleAmount;
+
+        // Apply product constraints - cap max at product max amount
+        eligibility.FinalMinEligible = product.MinAmount;
+        eligibility.FinalMaxEligible = Math.Min(maxEligibleAmount, product.MaxAmount);
 
         // Generate eligibility reason
-        eligibility.EligibilityReason = GenerateEligibilityReason(eligibility, salaryMultiplier);
+        eligibility.EligibilityReason = $"Eligible. Max salary: {maxSalaryAmount:C}, Outstanding loans: {outstandingLoanAmount:C}, " +
+            $"Disposable income: {disposableAmount:C}, Max eligible (33%): {maxEligibleAmount:C}";
+
+        _logger.LogInformation("Borrower eligible - Final Min: {FinalMin}, Final Max: {FinalMax}", 
+            eligibility.FinalMinEligible, eligibility.FinalMaxEligible);
 
         return Task.FromResult(eligibility);
     }

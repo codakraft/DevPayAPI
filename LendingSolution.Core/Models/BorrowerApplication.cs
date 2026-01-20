@@ -6,10 +6,8 @@ public enum BorrowerOnboardingStep
 {
     Step1_EmailSent = 1,
     Step1B_EmailValidated = 2,
-    Step2_BvnSubmitted = 3,
-    Step2B_BvnValidated = 4,
-    Step3_DocumentsUploaded = 5,
-    Step4_LoanSubmitted = 6
+    Step2_DocumentsUploaded = 3,
+    Step3_LoanSubmitted = 4
 }
 
 public class BorrowerApplication : Base
@@ -20,12 +18,12 @@ public class BorrowerApplication : Base
     public required string Employer { get; set; }
     public string? PhoneNumber { get; set; }
     
-    // Bank and BVN information (Step 2)
+    // Bank information
     public string? BankCode { get; set; }
     public string? AccountNo { get; set; }
     public string? BVN { get; set; }
     
-    // Address and documents (Step 3)
+    // Address and documents (Step 2)
     public string? Address { get; set; }
     public string? IdNumber { get; set; }
     public string? DocumentIds { get; set; } // Stores comma-separated document IDs
@@ -40,7 +38,7 @@ public class BorrowerApplication : Base
     public Guid? LoanId { get; set; }
     public Loan? Loan { get; set; }
     
-    // Eligibility (calculated in Step 3)
+    // Eligibility (calculated in Step 2)
     public decimal? MaxLoanEligible { get; set; }
     public decimal? MinLoanEligible { get; set; }
     public int? MaxTenor { get; set; }

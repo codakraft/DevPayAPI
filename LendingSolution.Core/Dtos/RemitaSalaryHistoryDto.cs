@@ -37,6 +37,17 @@ public class RemitaSalaryDataDto
     public List<RemitaSalaryPaymentDto> SalaryPaymentDetails { get; set; } = new();
     public List<RemitaLoanHistoryDto> LoanHistoryDetails { get; set; } = new();
     public string? OriginalCustomerId { get; set; }
+    
+    // Pre-computed salary statistics from Remita
+    public string? AverageMonthlySalary { get; set; }
+    public string? LatestSalaryAmount { get; set; }
+    public string? MinSalaryAmount { get; set; }
+    public string? MaxSalaryAmount { get; set; }
+    public string? ConsistentMonths { get; set; }
+    
+    // Pre-computed loan information from Remita
+    public string? HasOutstandingLoans { get; set; }
+    public string? TotalOutstandingAmount { get; set; }
 }
 
 /// <summary>

@@ -20,6 +20,10 @@ public class LoanProductDto
     // Interest and fees
     public decimal InterestRate { get; set; } = 0;
     public decimal PenaltyOnDefaultPrincipal { get; set; } = 0;
+    public decimal ProcessingFeePercent { get; set; } = 0;
+    public decimal ProcessingFeeFlat { get; set; } = 0;
+    public decimal ManagementFeePercent { get; set; } = 1;
+    public decimal EligibilityPercentage { get; set; } = 33;
     
     // Eligibility and settings
     public int Moratorium { get; set; } = 30; // in days
@@ -52,6 +56,10 @@ public class CreateLoanProductRequestDto
     // Interest and fees
     public decimal InterestRate { get; set; } = 0;
     public decimal PenaltyOnDefaultPrincipal { get; set; } = 0;
+    public decimal ProcessingFeePercent { get; set; } = 0;
+    public decimal ProcessingFeeFlat { get; set; } = 0;
+    public decimal ManagementFeePercent { get; set; } = 1;
+    public decimal EligibilityPercentage { get; set; } = 33;
     
     // Eligibility and settings
     public int Moratorium { get; set; } = 30; // in days
@@ -90,6 +98,10 @@ public class UpdateLoanProductRequestDto
     // Interest and fees
     public decimal InterestRate { get; set; } = 0;
     public decimal PenaltyOnDefaultPrincipal { get; set; } = 0;
+    public decimal ProcessingFeePercent { get; set; } = 0;
+    public decimal ProcessingFeeFlat { get; set; } = 0;
+    public decimal ManagementFeePercent { get; set; } = 1;
+    public decimal EligibilityPercentage { get; set; } = 33;
     
     // Eligibility and settings
     public int Moratorium { get; set; } = 30; // in days
@@ -130,6 +142,10 @@ public class LoanProductListDto
     // Interest and fees
     public decimal InterestRate { get; set; }
     public decimal PenaltyOnDefaultPrincipal { get; set; }
+    public decimal ProcessingFeePercent { get; set; }
+    public decimal ProcessingFeeFlat { get; set; }
+    public decimal ManagementFeePercent { get; set; }
+    public decimal EligibilityPercentage { get; set; }
     
     // Eligibility and settings
     public int Moratorium { get; set; }

@@ -154,7 +154,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         return new BorrowerStep1BResponseDto();
     }
 
-    public async Task<BorrowerStep2ResponseDto> Step2_SaveBankBvnInfoAsync(BorrowerStep2RequestDto request)
+    public async Task<BorrowerStep2ResponseDto> Step2_SaveBankAddressDocumentsAsync(BorrowerStep2RequestDto request)
     {
         var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
 
@@ -170,185 +170,11 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             throw new AppException("Please complete email verification first", 400);
         }
 
-        // Get company for logging
-        var company = await _companyRepository.GetCompanyById(application.CompanyId);
-        var companyName = company?.Name ?? "Unknown Company";
-
-        // Check active data provider
-        var activeProvider = _configuration["ActiveDataProvider"] ?? "Remita";
-        _logger.LogInformation("Active data provider for BVN verification: {Provider}", activeProvider);
-
-        // Check company wallet balance before proceeding (both Remita OTP and Mono BVN lookup require fees)
-        try
-        {
-            var settings = await _settingsService.GetSettingsAsync();
-            var feeDescription = activeProvider.Equals("Mono", StringComparison.OrdinalIgnoreCase) ? "Mono BVN Lookup" : "BVN OTP";
-            await _walletService.ValidateCompanyBalanceForFeeAsync(application.CompanyId, settings.OtpFee, feeDescription);
-        }
-        catch (AppException ex) when (ex.StatusCode == 400 || ex.StatusCode == 404)
-        {
-            _logger.LogWarning(
-                "AUDIT: Borrower application blocked for Company {CompanyName} (ID: {CompanyId}). Reason: {Reason}",
-                companyName, application.CompanyId, ex.Message);
-            throw new AppException(
-                "We're unable to process your application at this time. Please contact support.",
-                503);
-        }
-
         // Allow resubmitting this step - clear subsequent step data if going back
-        if (application.CurrentStep > BorrowerOnboardingStep.Step2_BvnSubmitted)
+        if (application.CurrentStep > BorrowerOnboardingStep.Step2_DocumentsUploaded)
         {
             _logger.LogInformation("Borrower going back to Step 2 for application {ApplicationId}. Clearing subsequent step data.", application.Id);
-            ClearStepsFromStep2BOnwards(application);
-        }
-
-        // Update application with bank and BVN info
-        application.BankCode = request.BankCode;
-        application.AccountNo = request.AccountNo;
-        application.BVN = request.BVN;
-        application.CurrentStep = BorrowerOnboardingStep.Step2_BvnSubmitted;
-        application.UpdatedAt = DateTime.UtcNow;
-
-        await _borrowerRepository.UpdateAsync(application);
-
-        // If Mono is active provider, use Mono BVN lookup directly (no OTP needed)
-        if (activeProvider.Equals("Mono", StringComparison.OrdinalIgnoreCase))
-        {
-            _logger.LogInformation("Using Mono BVN lookup for application {ApplicationId}", application.Id);
-            
-            try
-            {
-                var bvnLookupRequest = new MonoBvnLookupRequestDto
-                {
-                    Bvn = request.BVN
-                };
-                
-                var bvnLookupResponse = await _monoService.BvnLookupAsync(bvnLookupRequest);
-                
-                if (bvnLookupResponse == null || bvnLookupResponse.Status != "successful")
-                {
-                    _logger.LogWarning("Mono BVN lookup failed for application {ApplicationId}", application.Id);
-                    throw new AppException("BVN verification failed. Please ensure your BVN is correct.", 400);
-                }
-                
-                // Deduct BVN lookup fee from company wallet (Mono BVN service fee, not OTP fee)
-                try
-                {
-                    var settings = await _settingsService.GetSettingsAsync();
-                    // Use OTP fee amount as BVN lookup fee (can be configured separately in future)
-                    await _walletService.TransferFundsAsync(
-                        (await _walletService.GetWalletByCompanyIdAsync(application.CompanyId))?.Id ?? Guid.Empty,
-                        (await _walletService.GetSuperAdminWalletAsync())?.Id ?? Guid.Empty,
-                        settings.OtpFee,
-                        $"Mono BVN Lookup - Application {application.Id}",
-                        null
-                    );
-                    _logger.LogInformation("BVN lookup fee deducted for application {ApplicationId}", application.Id);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to deduct BVN lookup fee for application {ApplicationId}, Company {CompanyId}",
-                        application.Id, application.CompanyId);
-                    // Don't throw - fee deduction failure shouldn't block BVN verification at this point
-                }
-                
-                // Mark BVN as verified since Mono validated it
-                application.BvnVerifiedAt = DateTime.UtcNow;
-                application.CurrentStep = BorrowerOnboardingStep.Step2B_BvnValidated;
-                await _borrowerRepository.UpdateAsync(application);
-                
-                _logger.LogInformation("Mono BVN lookup successful for application {ApplicationId}. BVN automatically verified.", application.Id);
-            }
-            catch (AppException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error during Mono BVN lookup for application {ApplicationId}", application.Id);
-                throw new AppException("Unable to verify BVN. Please try again later.", 500);
-            }
-        }
-        else
-        {
-            // For Remita: Generate BVN OTP
-            _logger.LogInformation("Using Remita BVN OTP verification for application {ApplicationId}", application.Id);
-            await GenerateBvnOtpAsync(new GenerateBvnOtpRequestDto { Email = application.Email });
-        }
-
-        return new BorrowerStep2ResponseDto();
-    }
-
-    public async Task<BorrowerStep2BResponseDto> Step2B_ValidateBvnOtpAsync(BorrowerStep2BRequestDto request)
-    {
-        var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
-
-        // Prevent modifications if loan application is already submitted
-        if (application.IsCompleted)
-        {
-            throw new AppException("Cannot modify a submitted loan application", 400);
-        }
-
-        // Must have completed Step 2 at minimum
-        if (application.CurrentStep < BorrowerOnboardingStep.Step2_BvnSubmitted)
-        {
-            throw new AppException("Please complete bank and BVN submission first", 400);
-        }
-
-        // Allow resubmitting this step - clear subsequent step data if going back
-        if (application.CurrentStep > BorrowerOnboardingStep.Step2B_BvnValidated)
-        {
-            _logger.LogInformation("Borrower going back to Step 2B for application {ApplicationId}. Clearing subsequent step data.", application.Id);
             ClearStepsFromStep3Onwards(application);
-        }
-
-        // Validate BVN OTP (mock implementation)
-        if (!ValidateOtp(application.BVN!, request.Otp, application.LastBvnOtp, application.BvnOtpGeneratedAt))
-        {
-            throw new AppException("Invalid or expired BVN OTP", 400);
-        }
-
-        // Update application
-        application.CurrentStep = BorrowerOnboardingStep.Step2B_BvnValidated;
-        application.BvnVerifiedAt = DateTime.UtcNow;
-        application.UpdatedAt = DateTime.UtcNow;
-
-        await _borrowerRepository.UpdateAsync(application);
-
-        return new BorrowerStep2BResponseDto();
-    }
-
-    public async Task<BorrowerStep3ResponseDto> Step3_SaveAddressDocumentsAsync(BorrowerStep3RequestDto request)
-    {
-        var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
-
-        // Prevent modifications if loan application is already submitted
-        if (application.IsCompleted)
-        {
-            throw new AppException("Cannot modify a submitted loan application", 400);
-        }
-
-        // Must have completed Step 2B at minimum
-        if (application.CurrentStep < BorrowerOnboardingStep.Step2B_BvnValidated)
-        {
-            throw new AppException("Please complete BVN verification first", 400);
-        }
-
-        // Validate BVN is not already attached to a different user
-        if (!string.IsNullOrEmpty(application.BVN))
-        {
-            var existingBvnApplication = await _borrowerRepository.GetByBvnAsync(application.BVN);
-            if (existingBvnApplication != null && existingBvnApplication.Id != application.Id)
-            {
-                throw new AppException("BVN already exists", 409);
-            }
-        }
-
-        // Allow resubmitting this step - clear subsequent step data if going back
-        if (application.CurrentStep > BorrowerOnboardingStep.Step3_DocumentsUploaded)
-        {
-            _logger.LogInformation("Borrower going back to Step 3 for application {ApplicationId}. Clearing subsequent step data.", application.Id);
-            ClearStepsFromStep4Onwards(application);
         }
 
         // Validate at least 2 images are provided
@@ -379,20 +205,20 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             throw new AppException("Loan product configuration error: Invalid tenor range. Please contact support.", 500);
         }
 
-        // Require salary history check - borrower cannot proceed without it
-        if (string.IsNullOrEmpty(application.BVN) || string.IsNullOrEmpty(application.AccountNo) || string.IsNullOrEmpty(application.BankCode))
+        // Require bank details - borrower cannot proceed without it
+        if (string.IsNullOrEmpty(request.AccountNo) || string.IsNullOrEmpty(request.BankCode))
         {
-            throw new AppException("BVN and complete bank details are required to proceed. Please complete Step 2 properly.", 400);
+            throw new AppException("Complete bank details are required to proceed.", 400);
         }
 
         // Fetch salary history from Remita - this is mandatory
-        _logger.LogInformation("Starting salary history retrieval for application {ApplicationId} - Account:{Account}, Bank:{Bank}, BVN:{BVN}",
-            application.Id, application.AccountNo, application.BankCode, application.BVN);
+        _logger.LogInformation("Starting salary history retrieval for application {ApplicationId} - Account:{Account}, Bank:{Bank}",
+            application.Id, request.AccountNo, request.BankCode);
 
         var salaryHistoryResponse = await _remitaService.GetSalaryHistoryAsync(
-            application.AccountNo,
-            application.BankCode,
-            application.BVN,
+            request.AccountNo,
+            request.BankCode,
+            application.BVN ?? string.Empty, // BVN is optional now
             application.Id); // Pass borrowerApplicationId instead of email
 
         if (salaryHistoryResponse == null)
@@ -411,12 +237,19 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         }
 
         // Save salary history to database
-
         await _salaryEligibilityService.SaveSalaryHistoryAsync(application.Id, salaryHistoryResponse);
 
         // Calculate eligibility based on salary history
         SalaryEligibilityDto eligibilityResult;
         eligibilityResult = await _salaryEligibilityService.CalculateLoanEligibilityAsync(salaryHistoryResponse, product);
+
+        // Check if borrower is eligible (FinalMaxEligible > 0 means eligible)
+        if (eligibilityResult.FinalMaxEligible <= 0)
+        {
+            _logger.LogWarning("Borrower not eligible for loan product {ProductId}. Reason: {Reason}",
+                product.Id, eligibilityResult.EligibilityReason);
+            throw new AppException(eligibilityResult.EligibilityReason, 400);
+        }
 
         // Use calculated eligibility amounts
         minLoanEligible = eligibilityResult.FinalMinEligible;
@@ -426,24 +259,16 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         _logger.LogInformation("Salary-based eligibility calculated for application {ApplicationId}: Min={MinEligible}, Max={MaxEligible}, Reason={Reason}",
             application.Id, minLoanEligible, maxLoanEligible, eligibilityResult.EligibilityReason);
 
-        // Check if borrower qualifies: max eligible amount must be at least the product's min amount
-        if (maxLoanEligible < product.MinAmount)
-        {
-            _logger.LogWarning("Borrower does not qualify for loan product {ProductId}. Max eligible ({MaxEligible}) is less than product min ({ProductMin})",
-                product.Id, maxLoanEligible, product.MinAmount);
-            throw new AppException($"Unfortunately, you do not qualify for this loan product. Your maximum eligible amount ({maxLoanEligible:C}) is below the minimum loan amount ({product.MinAmount:C}) for this product.", 400);
-        }
+        // Final eligibility amounts (already constrained by product limits in the service)
+        var finalMinEligible = minLoanEligible;
+        var finalMaxEligible = maxLoanEligible;
 
-        // Adjust max eligible amount: use the smaller of calculated max or product max
-        var finalMaxEligible = Math.Min(maxLoanEligible, product.MaxAmount);
+        _logger.LogInformation("Final eligibility for application {ApplicationId}: Min={FinalMin}, Max={FinalMax}",
+            application.Id, finalMinEligible, finalMaxEligible);
 
-        // Min eligible should always reflect the product's min amount
-        var finalMinEligible = product.MinAmount;
-
-        _logger.LogInformation("Final eligibility for application {ApplicationId}: Min={FinalMin} (Product Min), Max={FinalMax} (Lesser of Calculated {CalculatedMax} or Product Max {ProductMax})",
-            application.Id, finalMinEligible, finalMaxEligible, maxLoanEligible, product.MaxAmount);
-
-        // Update application
+        // Update application with bank info, address and documents
+        application.BankCode = request.BankCode;
+        application.AccountNo = request.AccountNo;
         application.Address = request.Address;
         application.IdNumber = request.IdNumber;
         application.DocumentIds = string.Join(",", request.ImageIds);
@@ -451,13 +276,13 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         application.MaxLoanEligible = finalMaxEligible;
         application.MinTenor = minTenor;
         application.MaxTenor = maxTenor;
-        application.CurrentStep = BorrowerOnboardingStep.Step3_DocumentsUploaded;
+        application.CurrentStep = BorrowerOnboardingStep.Step2_DocumentsUploaded;
         application.DocumentsUploadedAt = DateTime.UtcNow;
         application.UpdatedAt = DateTime.UtcNow;
 
         await _borrowerRepository.UpdateAsync(application);
 
-        return new BorrowerStep3ResponseDto
+        return new BorrowerStep2ResponseDto
         {
             MinLoanEligible = finalMinEligible,
             MaxLoanEligible = finalMaxEligible,
@@ -466,12 +291,12 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         };
     }
 
-    public async Task<BorrowerStep4ResponseDto> Step4_SubmitLoanApplicationAsync(BorrowerStep4RequestDto request)
+    public async Task<BorrowerStep3ResponseDto> Step3_SubmitLoanApplicationAsync(BorrowerStep3RequestDto request)
     {
         var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
 
-        // Must have completed Step 3 at minimum
-        if (application.CurrentStep < BorrowerOnboardingStep.Step3_DocumentsUploaded)
+        // Must have completed Step 2 at minimum
+        if (application.CurrentStep < BorrowerOnboardingStep.Step2_DocumentsUploaded)
         {
             throw new AppException("Please complete document upload first", 400);
         }
@@ -518,20 +343,74 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
                 503);
         }
 
-        // Calculate repayment (mock calculation)
+        // Calculate loan amounts
+        // Loan Principal (LP) = requested loan amount
+        // Applied Interest (AI) = LP * interest rate * tenor
+        // Repayment Amount (RA) = LP + AI
+        // Applicable Fees (AF) = processing fees (percent + flat)
+        // Amount to Disburse (AtD) = LP - AF
         var product = application.Product ?? await _loanProductRepository.GetLoanProductById(application.ProductId) ?? throw new AppException("Loan product not found", 404);
 
-        var monthlyInterestRate = product.InterestRate / 100 / 12;
-        var totalRepayment = Math.Round(request.LoanAmount * (1 + (monthlyInterestRate * request.Tenor)), 2);
-        var monthlyRepayment = Math.Round(totalRepayment / request.Tenor, 2);
+        var loanPrincipal = request.LoanAmount;
+        
+        // Calculate interest based on product settings
+        decimal appliedInterest;
+        decimal monthlyRepayment;
+        var isMonthlyRate = product.InterestCostComputation == InterestCostComputation.PerMonth;
+        var monthlyRate = isMonthlyRate ? product.InterestRate : product.InterestRate / 12;
+        var monthlyRateDecimal = monthlyRate / 100; // Convert percentage to decimal
+        
+        if (product.InterestComputationBasis == InterestComputationBasis.Flat)
+        {
+            // Flat interest: Principal * (monthly rate) * tenor
+            // Interest is calculated on full principal for entire period
+            appliedInterest = loanPrincipal * monthlyRateDecimal * request.Tenor;
+            appliedInterest = Math.Round(appliedInterest, 2);
+            var totalRepaymentFlat = loanPrincipal + appliedInterest;
+            monthlyRepayment = Math.Round(totalRepaymentFlat / request.Tenor, 2);
+        }
+        else
+        {
+            // Reducing Balance (Amortization): M = P × [r(1+r)^n] / [(1+r)^n - 1]
+            // Interest is calculated on remaining principal each month
+            if (monthlyRateDecimal > 0)
+            {
+                var r = monthlyRateDecimal;
+                var n = request.Tenor;
+                var compoundFactor = (decimal)Math.Pow((double)(1 + r), n);
+                monthlyRepayment = loanPrincipal * (r * compoundFactor) / (compoundFactor - 1);
+                monthlyRepayment = Math.Round(monthlyRepayment, 2);
+                appliedInterest = Math.Round((monthlyRepayment * n) - loanPrincipal, 2);
+            }
+            else
+            {
+                // Zero interest - just divide principal by tenor
+                monthlyRepayment = Math.Round(loanPrincipal / request.Tenor, 2);
+                appliedInterest = 0;
+            }
+        }
+        
+        // Repayment Amount (RA) = LP + AI
+        var totalRepayment = Math.Round(loanPrincipal + appliedInterest, 2);
+        
+        // Calculate Applicable Fees (AF) = Processing Fee + Management Fee
+        var processingFee = loanPrincipal * (product.ProcessingFeePercent / 100) + product.ProcessingFeeFlat;
+        var managementFee = loanPrincipal * (product.ManagementFeePercent / 100);
+        var applicableFees = Math.Round(processingFee + managementFee, 2);
+        
+        // Amount to Disburse (AtD) = LP - AF
+        var disbursementAmount = Math.Round(loanPrincipal - applicableFees, 2);
 
         // Create actual loan record (RemitaCustomerId and AuthorizationCode are now stored in RemitaSalaryHistory)
         var loan = new Loan
         {
-            Amount = request.LoanAmount,
+            Amount = loanPrincipal,
             DurationInMonths = request.Tenor,
             TotalRepayment = totalRepayment,
             MonthlyRepayment = monthlyRepayment,
+            DisbursementAmount = disbursementAmount,
+            ApplicableFees = applicableFees,
+            AppliedInterest = appliedInterest,
             Status = LoanStatus.Pending,
             CompanyId = application.CompanyId,
             ProductId = application.ProductId
@@ -548,7 +427,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         application.LoanId = loan.Id;
 
         // Update application
-        application.CurrentStep = BorrowerOnboardingStep.Step4_LoanSubmitted;
+        application.CurrentStep = BorrowerOnboardingStep.Step3_LoanSubmitted;
         application.LoanSubmittedAt = DateTime.UtcNow;
         application.IsCompleted = true;
         application.UpdatedAt = DateTime.UtcNow;
@@ -589,8 +468,12 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             }
         }
 
-        return new BorrowerStep4ResponseDto
+        return new BorrowerStep3ResponseDto
         {
+            LoanPrincipal = loanPrincipal,
+            ApplicableFees = applicableFees,
+            DisbursementAmount = disbursementAmount,
+            AppliedInterest = appliedInterest,
             RepaymentAmount = totalRepayment,
             Tenor = request.Tenor,
             MonthlyRepaymentAmount = monthlyRepayment
@@ -704,64 +587,9 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         return new ValidateEmailOtpResponseDto();
     }
 
-    public async Task<GenerateBvnOtpResponseDto> GenerateBvnOtpAsync(GenerateBvnOtpRequestDto request)
-    {
-        _logger.LogInformation("Attempting to generate BVN OTP for borrower with email: {Email}", request.Email);
-
-        // Find application by email
-        var application = await _borrowerRepository.GetByEmailAsync(request.Email);
-        if (application == null)
-        {
-            _logger.LogWarning("No application found for email: {Email}", request.Email);
-            throw new AppException("No application found with this email address.", 404);
-        }
-
-        // Ensure BVN was saved in Step 2
-        if (string.IsNullOrEmpty(application.BVN))
-        {
-            _logger.LogWarning("Application {ApplicationId} for email {Email} has no BVN saved. Step 2 not completed.",
-                application.Id, request.Email);
-            throw new AppException("Please complete Step 2 (Submit Bank & BVN Info) first before generating BVN OTP.", 400);
-        }
-
-        // Generate BVN OTP
-        var otp = GenerateOtp();
-
-        // Update application with new OTP
-        application.LastBvnOtp = otp;
-        application.BvnOtpGeneratedAt = DateTime.UtcNow;
-        await _borrowerRepository.UpdateAsync(application);
-
-        // Send BVN OTP via email (temporary - should be SMS via BVN verification service in production)
-        var emailSent = await _emailService.SendOtpEmailAsync(
-            application.Email,
-            otp,
-            "BVN Verification"
-        );
-
-        if (!emailSent)
-        {
-            throw new AppException("Failed to send BVN verification code. Please try again.", 500);
-        }
-
-        // Deduct OTP fee from company wallet only after successful email send
-        await DeductOtpFeeAsync(application.CompanyId, "BVN OTP");
-
-        return new GenerateBvnOtpResponseDto();
-    }
-
-    public Task<ValidateBvnOtpResponseDto> ValidateBvnOtpAsync(ValidateBvnOtpRequestDto request)
-    {
-        return Task.FromResult(new ValidateBvnOtpResponseDto());
-    }
-
     public async Task<ResendStep1EmailOtpResponseDto> ResendStep1EmailOtpAsync(ResendStep1EmailOtpRequestDto request)
     {
-        var application = await _borrowerRepository.GetByIdAsync(request.LoanId);
-        if (application == null)
-        {
-            throw new AppException("Application not found", 404);
-        }
+        var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
 
         // Only allow resending if the application is still on Step 1 (email sent but not validated)
         if (application.CurrentStep != BorrowerOnboardingStep.Step1_EmailSent)
@@ -1033,23 +861,18 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             response.EmailVerifiedAt = borrowerApplication.EmailVerifiedAt;
         }
 
-        if (borrowerApplication.CurrentStep >= BorrowerOnboardingStep.Step2B_BvnValidated || borrowerApplication.IsCompleted)
-        {
-            response.BvnVerifiedAt = borrowerApplication.BvnVerifiedAt;
-        }
-
-        if (borrowerApplication.CurrentStep >= BorrowerOnboardingStep.Step3_DocumentsUploaded || borrowerApplication.IsCompleted)
+        if (borrowerApplication.CurrentStep >= BorrowerOnboardingStep.Step2_DocumentsUploaded || borrowerApplication.IsCompleted)
         {
             response.DocumentsUploadedAt = borrowerApplication.DocumentsUploadedAt;
         }
 
-        if (borrowerApplication.CurrentStep >= BorrowerOnboardingStep.Step4_LoanSubmitted || borrowerApplication.IsCompleted)
+        if (borrowerApplication.CurrentStep >= BorrowerOnboardingStep.Step3_LoanSubmitted || borrowerApplication.IsCompleted)
         {
             response.LoanSubmittedAt = borrowerApplication.LoanSubmittedAt;
         }
 
-        // Set eligibility information if available (after Step 3 completion)
-        if (borrowerApplication.CurrentStep >= BorrowerOnboardingStep.Step3_DocumentsUploaded)
+        // Set eligibility information if available (after Step 2 completion)
+        if (borrowerApplication.CurrentStep >= BorrowerOnboardingStep.Step2_DocumentsUploaded)
         {
             response.MaxLoanEligible = borrowerApplication.MaxLoanEligible;
             response.MinLoanEligible = borrowerApplication.MinLoanEligible;
@@ -1066,10 +889,8 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         {
             BorrowerOnboardingStep.Step1_EmailSent => "Email Verification",
             BorrowerOnboardingStep.Step1B_EmailValidated => "Email Verified",
-            BorrowerOnboardingStep.Step2_BvnSubmitted => "Bank & BVN Information",
-            BorrowerOnboardingStep.Step2B_BvnValidated => "BVN Verified",
-            BorrowerOnboardingStep.Step3_DocumentsUploaded => "Documents Upload",
-            BorrowerOnboardingStep.Step4_LoanSubmitted => "Loan Application",
+            BorrowerOnboardingStep.Step2_DocumentsUploaded => "Bank Info & Documents Upload",
+            BorrowerOnboardingStep.Step3_LoanSubmitted => "Loan Application",
             _ => "Unknown Step"
         };
     }
@@ -1079,11 +900,9 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         return step switch
         {
             BorrowerOnboardingStep.Step1_EmailSent => "Please verify your email address by entering the OTP sent to your email.",
-            BorrowerOnboardingStep.Step1B_EmailValidated => "Email verified successfully. Proceed to provide your bank and BVN information.",
-            BorrowerOnboardingStep.Step2_BvnSubmitted => "Please verify your BVN by entering the OTP sent to your registered phone number.",
-            BorrowerOnboardingStep.Step2B_BvnValidated => "BVN verified successfully. Please upload your required documents.",
-            BorrowerOnboardingStep.Step3_DocumentsUploaded => "Documents uploaded successfully. You can now submit your loan application.",
-            BorrowerOnboardingStep.Step4_LoanSubmitted => "Loan application submitted successfully. Your application is under review.",
+            BorrowerOnboardingStep.Step1B_EmailValidated => "Email verified successfully. Proceed to provide your bank information, address and documents.",
+            BorrowerOnboardingStep.Step2_DocumentsUploaded => "Documents uploaded successfully. You can now submit your loan application.",
+            BorrowerOnboardingStep.Step3_LoanSubmitted => "Loan application submitted successfully. Your application is under review.",
             _ => "Unknown step description"
         };
     }
@@ -1094,10 +913,8 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         {
             BorrowerOnboardingStep.Step1_EmailSent => 1,
             BorrowerOnboardingStep.Step1B_EmailValidated => 2,
-            BorrowerOnboardingStep.Step2_BvnSubmitted => 3,
-            BorrowerOnboardingStep.Step2B_BvnValidated => 4,
-            BorrowerOnboardingStep.Step3_DocumentsUploaded => 5,
-            BorrowerOnboardingStep.Step4_LoanSubmitted => 6,
+            BorrowerOnboardingStep.Step2_DocumentsUploaded => 3,
+            BorrowerOnboardingStep.Step3_LoanSubmitted => 4,
             _ => 0
         };
     }
@@ -1107,11 +924,9 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         return currentStep switch
         {
             BorrowerOnboardingStep.Step1_EmailSent => BorrowerOnboardingStep.Step1B_EmailValidated,
-            BorrowerOnboardingStep.Step1B_EmailValidated => BorrowerOnboardingStep.Step2_BvnSubmitted,
-            BorrowerOnboardingStep.Step2_BvnSubmitted => BorrowerOnboardingStep.Step2B_BvnValidated,
-            BorrowerOnboardingStep.Step2B_BvnValidated => BorrowerOnboardingStep.Step3_DocumentsUploaded,
-            BorrowerOnboardingStep.Step3_DocumentsUploaded => BorrowerOnboardingStep.Step4_LoanSubmitted,
-            BorrowerOnboardingStep.Step4_LoanSubmitted => null, // Final step
+            BorrowerOnboardingStep.Step1B_EmailValidated => BorrowerOnboardingStep.Step2_DocumentsUploaded,
+            BorrowerOnboardingStep.Step2_DocumentsUploaded => BorrowerOnboardingStep.Step3_LoanSubmitted,
+            BorrowerOnboardingStep.Step3_LoanSubmitted => null, // Final step
             _ => null
         };
     }
@@ -1121,11 +936,9 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         return step switch
         {
             BorrowerOnboardingStep.Step1_EmailSent => new List<string> { "Verify your email address using the OTP sent to your email" },
-            BorrowerOnboardingStep.Step1B_EmailValidated => new List<string> { "Provide your bank account details and BVN information" },
-            BorrowerOnboardingStep.Step2_BvnSubmitted => new List<string> { "Verify your BVN using the OTP sent to your registered phone number" },
-            BorrowerOnboardingStep.Step2B_BvnValidated => new List<string> { "Upload required documents (ID, utility bill, passport photo)" },
-            BorrowerOnboardingStep.Step3_DocumentsUploaded => new List<string> { "Submit your loan application with desired amount and tenor" },
-            BorrowerOnboardingStep.Step4_LoanSubmitted => new List<string> { "Your application is complete and under review" },
+            BorrowerOnboardingStep.Step1B_EmailValidated => new List<string> { "Provide your bank account details, address, and upload required documents" },
+            BorrowerOnboardingStep.Step2_DocumentsUploaded => new List<string> { "Submit your loan application with desired amount and tenor" },
+            BorrowerOnboardingStep.Step3_LoanSubmitted => new List<string> { "Your application is complete and under review" },
             _ => new List<string>()
         };
     }
@@ -1133,40 +946,13 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     #region Step Data Clearing Methods
 
     /// <summary>
-    /// Clears all data from Step 2 onwards (bank/BVN info, documents, loan eligibility, loan submission)
+    /// Clears all data from Step 2 onwards (bank info, documents, loan eligibility, loan submission)
     /// </summary>
     private static void ClearStepsFromStep2Onwards(BorrowerApplication application)
     {
         // Clear Step 2 data
         application.BankCode = null;
         application.AccountNo = null;
-        application.BVN = null;
-        application.BvnVerifiedAt = null;
-        application.LastBvnOtp = null;
-        application.BvnOtpGeneratedAt = null;
-
-        // Clear Step 3 and beyond
-        ClearStepsFromStep3Onwards(application);
-    }
-
-    /// <summary>
-    /// Clears all data from Step 2B onwards (BVN verification, documents, loan eligibility, loan submission)
-    /// </summary>
-    private static void ClearStepsFromStep2BOnwards(BorrowerApplication application)
-    {
-        // Clear Step 2B data
-        application.BvnVerifiedAt = null;
-
-        // Clear Step 3 and beyond
-        ClearStepsFromStep3Onwards(application);
-    }
-
-    /// <summary>
-    /// Clears all data from Step 3 onwards (documents, address, loan eligibility, loan submission)
-    /// </summary>
-    private static void ClearStepsFromStep3Onwards(BorrowerApplication application)
-    {
-        // Clear Step 3 data
         application.Address = null;
         application.IdNumber = null;
         application.DocumentIds = null;
@@ -1176,16 +962,16 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         application.MinTenor = null;
         application.MaxTenor = null;
 
-        // Clear Step 4 and beyond
-        ClearStepsFromStep4Onwards(application);
+        // Clear Step 3 and beyond
+        ClearStepsFromStep3Onwards(application);
     }
 
     /// <summary>
-    /// Clears all data from Step 4 onwards (loan submission)
+    /// Clears all data from Step 3 onwards (loan submission)
     /// </summary>
-    private static void ClearStepsFromStep4Onwards(BorrowerApplication application)
+    private static void ClearStepsFromStep3Onwards(BorrowerApplication application)
     {
-        // Clear Step 4 data
+        // Clear Step 3 data
         application.LoanId = null;
         application.LoanSubmittedAt = null;
         application.IsCompleted = false;

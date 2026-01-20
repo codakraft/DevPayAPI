@@ -59,4 +59,9 @@ public class Loan : Base
     // Repayment calculation properties
     public decimal? TotalRepayment { get; set; }
     public decimal? MonthlyRepayment { get; set; }
+    
+    // Disbursement calculation properties
+    public decimal? DisbursementAmount { get; set; } // Amount to Disburse = Principal - Applicable Fees
+    public decimal? ApplicableFees { get; set; } // Total fees deducted from principal
+    public decimal? AppliedInterest { get; set; } // Interest added to principal for repayment
 }

@@ -26,6 +26,12 @@ public class OfferLetterDto
     public decimal MonthlyRepayment { get; set; }
     public string Purpose { get; set; } = string.Empty;
     
+    // Fees
+    public decimal ProcessingFee { get; set; }
+    public decimal ManagementFee { get; set; }
+    public decimal TotalFees { get; set; }
+    public decimal DisbursementAmount { get; set; } // Amount to be disbursed (LoanAmount - TotalFees)
+    
     // Product details
     public string ProductName { get; set; } = string.Empty;
     public decimal PenaltyRate { get; set; }

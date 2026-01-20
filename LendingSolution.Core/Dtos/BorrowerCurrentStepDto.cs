@@ -28,16 +28,15 @@ public class BorrowerCurrentStepResponseDto
     
     // Step completion timestamps
     public DateTime? EmailVerifiedAt { get; set; }
-    public DateTime? BvnVerifiedAt { get; set; }
     public DateTime? DocumentsUploadedAt { get; set; }
     public DateTime? LoanSubmittedAt { get; set; }
     
     // Progress information
     public int StepNumber { get; set; }
-    public int TotalSteps { get; set; } = 6;
+    public int TotalSteps { get; set; } = 4;
     public decimal ProgressPercentage { get; set; }
     
-    // Eligibility information (available after Step 3)
+    // Eligibility information (available after Step 2)
     public decimal? MaxLoanEligible { get; set; }
     public decimal? MinLoanEligible { get; set; }
     public int? MaxTenor { get; set; }

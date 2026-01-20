@@ -59,7 +59,7 @@ public class ResendStep1EmailOtpResponseDto
     public string Message { get; set; } = "Email OTP has been resent successfully";
 }
 
-// Step 2: Bank and BVN information
+// Step 2: Bank info, Address and documents
 public class BorrowerStep2RequestDto
 {
     [Required]
@@ -68,36 +68,6 @@ public class BorrowerStep2RequestDto
     [Required]
     public required string AccountNo { get; set; }
 
-    [Required]
-    public required string BVN { get; set; }
-
-    [Required]
-    public Guid LoanId { get; set; }
-}
-
-public class BorrowerStep2ResponseDto
-{
-    public string Message { get; set; } = "BVN validated successfully";
-}
-
-// Step 2B: BVN OTP validation
-public class BorrowerStep2BRequestDto
-{
-    [Required]
-    public required string Otp { get; set; }
-
-    [Required]
-    public Guid LoanId { get; set; }
-}
-
-public class BorrowerStep2BResponseDto
-{
-    public string Message { get; set; } = "BVN validation successful";
-}
-
-// Step 3: Address and documents
-public class BorrowerStep3RequestDto
-{
     [Required]
     public required string Address { get; set; }
 
@@ -109,6 +79,15 @@ public class BorrowerStep3RequestDto
 
     [Required]
     public Guid LoanId { get; set; }
+}
+
+public class BorrowerStep2ResponseDto
+{
+    public decimal MaxLoanEligible { get; set; }
+    public decimal MinLoanEligible { get; set; }
+    public int MaxTenor { get; set; }
+    public int MinTenor { get; set; }
+    public string Message { get; set; } = "Information added successfully";
 }
 
 public class UpdateDocumentsRequestDto
@@ -139,17 +118,8 @@ public class RequestImageReuploadResponseDto
     public string Message { get; set; } = "Image re-upload request sent successfully";
 }
 
-public class BorrowerStep3ResponseDto
-{
-    public decimal MaxLoanEligible { get; set; }
-    public decimal MinLoanEligible { get; set; }
-    public int MaxTenor { get; set; }
-    public int MinTenor { get; set; }
-    public string Message { get; set; } = "Information added successfully";
-}
-
-// Step 4: Loan application
-public class BorrowerStep4RequestDto
+// Step 3: Loan application
+public class BorrowerStep3RequestDto
 {
     [Required]
     public decimal LoanAmount { get; set; }
@@ -161,9 +131,13 @@ public class BorrowerStep4RequestDto
     public Guid LoanId { get; set; }
 }
 
-public class BorrowerStep4ResponseDto
+public class BorrowerStep3ResponseDto
 {
-    public decimal RepaymentAmount { get; set; }
+    public decimal LoanPrincipal { get; set; } // Loan Principal (LP)
+    public decimal ApplicableFees { get; set; } // Applicable Fees (AF)
+    public decimal DisbursementAmount { get; set; } // Amount to Disburse (AtD) = LP - AF
+    public decimal AppliedInterest { get; set; } // Applied Interest (AI)
+    public decimal RepaymentAmount { get; set; } // Total Repayment Amount (RA) = LP + AI
     public int Tenor { get; set; }
     public decimal MonthlyRepaymentAmount { get; set; }
     public string Message { get; set; } = "Loan application submitted successfully";
@@ -195,31 +169,4 @@ public class ValidateEmailOtpRequestDto
 public class ValidateEmailOtpResponseDto
 {
     public string Message { get; set; } = "OTP validation successful";
-}
-
-// BVN OTP endpoints
-public class GenerateBvnOtpRequestDto
-{
-    [Required]
-    [EmailAddress]
-    public required string Email { get; set; }
-}
-
-public class GenerateBvnOtpResponseDto
-{
-    public string Message { get; set; } = "BVN OTP sent successfully";
-}
-
-public class ValidateBvnOtpRequestDto
-{
-    [Required]
-    public required string BVN { get; set; }
-
-    [Required]
-    public required string Otp { get; set; }
-}
-
-public class ValidateBvnOtpResponseDto
-{
-    public string Message { get; set; } = "BVN validation successful";
 }
