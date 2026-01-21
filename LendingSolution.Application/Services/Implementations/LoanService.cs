@@ -928,8 +928,8 @@ public class LoanService(
 
         // Calculate fees
         var processingFee = loan.Amount * (loan.Product.ProcessingFeePercent / 100) + loan.Product.ProcessingFeeFlat;
-        var managementFee = loan.Amount * (loan.Product.ManagementFeePercent / 100);
-        var totalFees = processingFee + managementFee;
+        var maintenanceFee = loan.Amount * (loan.Product.MaintenanceFeePercent / 100);
+        var totalFees = processingFee + maintenanceFee;
         var disbursementAmount = loan.Amount - totalFees;
 
         // Company address
@@ -957,7 +957,7 @@ public class LoanService(
             MonthlyRepayment = Math.Round(monthlyRepayment, 2),
             Purpose = loan.Purpose,
             ProcessingFee = Math.Round(processingFee, 2),
-            ManagementFee = Math.Round(managementFee, 2),
+            MaintenanceFee = Math.Round(maintenanceFee, 2),
             TotalFees = Math.Round(totalFees, 2),
             DisbursementAmount = Math.Round(disbursementAmount, 2),
             ProductName = loan.Product.Name,

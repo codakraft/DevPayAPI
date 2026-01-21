@@ -7,8 +7,8 @@ public class Settings : ExtendedBase
     [Range(0, double.MaxValue, ErrorMessage = "Legal fee must be a positive value")]
     public decimal LegalFee { get; set; } = 0;
     
-    [Range(0, double.MaxValue, ErrorMessage = "Management fee must be a positive value")]
-    public decimal ManagementFee { get; set; } = 0;
+    [Range(0, double.MaxValue, ErrorMessage = "Maintenance fee must be a positive value")]
+    public decimal MaintenanceFee { get; set; } = 0;
     
     [Range(0, double.MaxValue, ErrorMessage = "Processing fee must be a positive value")]
     public decimal ProcessingFee { get; set; } = 0;
@@ -27,7 +27,7 @@ public class Settings : ExtendedBase
     
     public FeeType OtpFeeType { get; set; } = FeeType.FIXED;
     public FeeType LegalFeeType { get; set; } = FeeType.FIXED;
-    public FeeType ManagementFeeType { get; set; } = FeeType.FIXED;
+    public FeeType MaintenanceFeeType { get; set; } = FeeType.FIXED;
     public FeeType ProcessingFeeType { get; set; } = FeeType.FIXED;
 }
 

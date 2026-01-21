@@ -524,10 +524,11 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         // Repayment Amount (RA) = LP + AI
         var totalRepayment = Math.Round(loanPrincipal + appliedInterest, 2);
         
-        // Calculate Applicable Fees (AF) = Processing Fee + Management Fee
+        // Calculate Applicable Fees (AF) = Processing Fee + Maintenance Fee + Legal Fee
         var processingFee = loanPrincipal * (product.ProcessingFeePercent / 100) + product.ProcessingFeeFlat;
-        var managementFee = loanPrincipal * (product.ManagementFeePercent / 100);
-        var applicableFees = Math.Round(processingFee + managementFee, 2);
+        var maintenanceFee = loanPrincipal * (product.MaintenanceFeePercent / 100);
+        var legalFee = loanPrincipal * (product.LegalFeePercent / 100) + product.LegalFeeFlat;
+        var applicableFees = Math.Round(processingFee + maintenanceFee + legalFee, 2);
         
         // Amount to Disburse (AtD) = LP - AF
         var disbursementAmount = Math.Round(loanPrincipal - applicableFees, 2);

@@ -341,7 +341,7 @@ public class WalletService : IWalletService
             .Where(t => t.TransactionType == WalletTransactionType.FeeCharge ||
                        t.TransactionType == WalletTransactionType.LoanDisbursementFee ||
                        t.TransactionType == WalletTransactionType.ProcessingFee ||
-                       t.TransactionType == WalletTransactionType.ManagementFee ||
+                       t.TransactionType == WalletTransactionType.MaintenanceFee ||
                        t.TransactionType == WalletTransactionType.LegalFee)
             .Sum(t => Math.Abs(t.Amount));
 

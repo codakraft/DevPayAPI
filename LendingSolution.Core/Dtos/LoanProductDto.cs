@@ -22,7 +22,9 @@ public class LoanProductDto
     public decimal PenaltyOnDefaultPrincipal { get; set; } = 0;
     public decimal ProcessingFeePercent { get; set; } = 0;
     public decimal ProcessingFeeFlat { get; set; } = 0;
-    public decimal ManagementFeePercent { get; set; } = 1;
+    public decimal MaintenanceFeePercent { get; set; } = 1;
+    public decimal LegalFeePercent { get; set; } = 0;
+    public decimal LegalFeeFlat { get; set; } = 0;
     public decimal EligibilityPercentage { get; set; } = 33;
     
     // Eligibility and settings
@@ -58,7 +60,9 @@ public class CreateLoanProductRequestDto
     public decimal PenaltyOnDefaultPrincipal { get; set; } = 0;
     public decimal ProcessingFeePercent { get; set; } = 0;
     public decimal ProcessingFeeFlat { get; set; } = 0;
-    public decimal ManagementFeePercent { get; set; } = 1;
+    public decimal MaintenanceFeePercent { get; set; } = 1;
+    public decimal LegalFeePercent { get; set; } = 0;
+    public decimal LegalFeeFlat { get; set; } = 0;
     public decimal EligibilityPercentage { get; set; } = 33;
     
     // Eligibility and settings
@@ -100,7 +104,9 @@ public class UpdateLoanProductRequestDto
     public decimal PenaltyOnDefaultPrincipal { get; set; } = 0;
     public decimal ProcessingFeePercent { get; set; } = 0;
     public decimal ProcessingFeeFlat { get; set; } = 0;
-    public decimal ManagementFeePercent { get; set; } = 1;
+    public decimal MaintenanceFeePercent { get; set; } = 1;
+    public decimal LegalFeePercent { get; set; } = 0;
+    public decimal LegalFeeFlat { get; set; } = 0;
     public decimal EligibilityPercentage { get; set; } = 33;
     
     // Eligibility and settings
@@ -144,7 +150,9 @@ public class LoanProductListDto
     public decimal PenaltyOnDefaultPrincipal { get; set; }
     public decimal ProcessingFeePercent { get; set; }
     public decimal ProcessingFeeFlat { get; set; }
-    public decimal ManagementFeePercent { get; set; }
+    public decimal MaintenanceFeePercent { get; set; }
+    public decimal LegalFeePercent { get; set; }
+    public decimal LegalFeeFlat { get; set; }
     public decimal EligibilityPercentage { get; set; }
     
     // Eligibility and settings

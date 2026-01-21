@@ -23,7 +23,9 @@ public class LoanProduct : Base
     public decimal PenaltyOnDefaultPrincipal { get; set; } = 0;
     public decimal ProcessingFeePercent { get; set; } = 0; // Percentage of loan principal as processing fee
     public decimal ProcessingFeeFlat { get; set; } = 0; // Flat processing fee amount
-    public decimal ManagementFeePercent { get; set; } = 1; // Management fee percentage (default 1%)
+    public decimal MaintenanceFeePercent { get; set; } = 1; // Maintenance fee percentage (default 1%)
+    public decimal LegalFeePercent { get; set; } = 0; // Percentage of loan principal as legal fee
+    public decimal LegalFeeFlat { get; set; } = 0; // Flat legal fee amount
     
     // Eligibility and settings
     public int Moratorium { get; set; } = 30; // in days

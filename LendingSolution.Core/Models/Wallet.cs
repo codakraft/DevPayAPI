@@ -107,7 +107,7 @@ public enum WalletTransactionType
     PaystackFunding = 5,
     LoanDisbursementFee = 6,
     ProcessingFee = 7,
-    ManagementFee = 8,
+    MaintenanceFee = 8,
     LegalFee = 9,
     OtpFee = 10
 }

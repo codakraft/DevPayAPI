@@ -41,6 +41,12 @@ public class LoanProductService(
             MaxTenor = dto.MaxTenor,
             InterestRate = dto.InterestRate,
             PenaltyOnDefaultPrincipal = dto.PenaltyOnDefaultPrincipal,
+            ProcessingFeePercent = dto.ProcessingFeePercent,
+            ProcessingFeeFlat = dto.ProcessingFeeFlat,
+            MaintenanceFeePercent = dto.MaintenanceFeePercent,
+            LegalFeePercent = dto.LegalFeePercent,
+            LegalFeeFlat = dto.LegalFeeFlat,
+            EligibilityPercentage = dto.EligibilityPercentage,
             Moratorium = dto.Moratorium,
             NotifyApprovalsViaEmail = dto.NotifyApprovalsViaEmail,
             TurnoverEligibilityPercent = dto.TurnoverEligibilityPercent,
@@ -141,6 +147,12 @@ public class LoanProductService(
         existingProduct.MaxTenor = dto.MaxTenor;
         existingProduct.InterestRate = dto.InterestRate;
         existingProduct.PenaltyOnDefaultPrincipal = dto.PenaltyOnDefaultPrincipal;
+        existingProduct.ProcessingFeePercent = dto.ProcessingFeePercent;
+        existingProduct.ProcessingFeeFlat = dto.ProcessingFeeFlat;
+        existingProduct.MaintenanceFeePercent = dto.MaintenanceFeePercent;
+        existingProduct.LegalFeePercent = dto.LegalFeePercent;
+        existingProduct.LegalFeeFlat = dto.LegalFeeFlat;
+        existingProduct.EligibilityPercentage = dto.EligibilityPercentage;
         existingProduct.Moratorium = dto.Moratorium;
         existingProduct.NotifyApprovalsViaEmail = dto.NotifyApprovalsViaEmail;
         existingProduct.TurnoverEligibilityPercent = dto.TurnoverEligibilityPercent;

@@ -69,7 +69,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             .HasPrecision(18, 2);
 
         modelBuilder.Entity<Settings>()
-            .Property(s => s.ManagementFee)
+            .Property(s => s.MaintenanceFee)
             .HasPrecision(18, 2);
 
         modelBuilder.Entity<Settings>()
@@ -102,7 +102,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             .HasConversion<int>();
 
         modelBuilder.Entity<Settings>()
-            .Property(s => s.ManagementFeeType)
+            .Property(s => s.MaintenanceFeeType)
             .HasConversion<int>();
 
         modelBuilder.Entity<Settings>()

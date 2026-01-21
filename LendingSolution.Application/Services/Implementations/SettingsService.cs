@@ -25,7 +25,7 @@ public class SettingsService : ISettingsService
             settings = new Settings
             {
                 LegalFee = 0,
-                ManagementFee = 0,
+                MaintenanceFee = 0,
                 ProcessingFee = 0,
                 PenaltyFee = 0,
                 LateFee = 0,
@@ -33,7 +33,7 @@ public class SettingsService : ISettingsService
                 DocumentationFee = 0,
                 OtpFeeType = FeeType.FIXED,
                 LegalFeeType = FeeType.FIXED,
-                ManagementFeeType = FeeType.FIXED,
+                MaintenanceFeeType = FeeType.FIXED,
                 ProcessingFeeType = FeeType.FIXED,
                 CreatedBy = "System"
             };
@@ -57,8 +57,8 @@ public class SettingsService : ISettingsService
         if (settingsDto.LegalFee.HasValue)
             existingSettings.LegalFee = settingsDto.LegalFee.Value;
             
-        if (settingsDto.ManagementFee.HasValue)
-            existingSettings.ManagementFee = settingsDto.ManagementFee.Value;
+        if (settingsDto.MaintenanceFee.HasValue)
+            existingSettings.MaintenanceFee = settingsDto.MaintenanceFee.Value;
             
         if (settingsDto.ProcessingFee.HasValue)
             existingSettings.ProcessingFee = settingsDto.ProcessingFee.Value;
@@ -81,8 +81,8 @@ public class SettingsService : ISettingsService
         if (settingsDto.LegalFeeType.HasValue)
             existingSettings.LegalFeeType = settingsDto.LegalFeeType.Value;
             
-        if (settingsDto.ManagementFeeType.HasValue)
-            existingSettings.ManagementFeeType = settingsDto.ManagementFeeType.Value;
+        if (settingsDto.MaintenanceFeeType.HasValue)
+            existingSettings.MaintenanceFeeType = settingsDto.MaintenanceFeeType.Value;
             
         if (settingsDto.ProcessingFeeType.HasValue)
             existingSettings.ProcessingFeeType = settingsDto.ProcessingFeeType.Value;
@@ -103,7 +103,7 @@ public class SettingsService : ISettingsService
         {
             Id = settings.Id,
             LegalFee = settings.LegalFee,
-            ManagementFee = settings.ManagementFee,
+            MaintenanceFee = settings.MaintenanceFee,
             ProcessingFee = settings.ProcessingFee,
             PenaltyFee = settings.PenaltyFee,
             LateFee = settings.LateFee,
@@ -111,7 +111,7 @@ public class SettingsService : ISettingsService
             DocumentationFee = settings.DocumentationFee,
             OtpFeeType = settings.OtpFeeType,
             LegalFeeType = settings.LegalFeeType,
-            ManagementFeeType = settings.ManagementFeeType,
+            MaintenanceFeeType = settings.MaintenanceFeeType,
             ProcessingFeeType = settings.ProcessingFeeType,
             CreatedAt = settings.CreatedAt,
             UpdatedAt = settings.UpdatedAt,

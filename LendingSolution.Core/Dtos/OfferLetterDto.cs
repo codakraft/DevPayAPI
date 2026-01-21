@@ -28,7 +28,7 @@ public class OfferLetterDto
     
     // Fees
     public decimal ProcessingFee { get; set; }
-    public decimal ManagementFee { get; set; }
+    public decimal MaintenanceFee { get; set; }
     public decimal TotalFees { get; set; }
     public decimal DisbursementAmount { get; set; } // Amount to be disbursed (LoanAmount - TotalFees)
     
