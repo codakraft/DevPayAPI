@@ -241,6 +241,20 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             await DeductOtpFeeAsync(application.CompanyId, "BVN OTP");
         }
 
+        // Also send BVN OTP via email as backup
+        var emailSent = await _emailService.SendOtpEmailAsync(
+            application.Email ?? string.Empty,
+            bvnOtp,
+            "BVN Verification",
+            companyName
+        );
+
+        if (!emailSent)
+        {
+            _logger.LogWarning("Failed to send BVN OTP email for application {ApplicationId}", application.Id);
+            // Don't throw - SMS is the primary channel
+        }
+
         return new BorrowerStep2ResponseDto();
     }
 
@@ -665,6 +679,20 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
         // Deduct OTP fee from company wallet
         await DeductOtpFeeAsync(application.CompanyId, "BVN OTP Resend");
+
+        // Also send BVN OTP via email as backup
+        var emailSent = await _emailService.SendOtpEmailAsync(
+            application.Email ?? string.Empty,
+            bvnOtp,
+            "BVN Verification - Resent",
+            companyName
+        );
+
+        if (!emailSent)
+        {
+            _logger.LogWarning("Failed to resend BVN OTP email for application {ApplicationId}", application.Id);
+            // Don't throw - SMS is the primary channel
+        }
 
         return new ResendStep2BvnOtpResponseDto();
     }

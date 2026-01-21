@@ -87,7 +87,8 @@ public class EmailService : IEmailService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send email to {EmailAddress}", emailAddress);
+            _logger.LogError(ex, "Failed to send email to {EmailAddress}. SMTP: {Host}:{Port}, SSL: {EnableSsl}, User: {User}", 
+                emailAddress, _emailSettings.SmtpHost, _emailSettings.SmtpPort, _emailSettings.EnableSsl, _emailSettings.SmtpUser);
             
             // If email simulation on failure is enabled, simulate the send instead of failing
             if (_emailSettings.AllowEmailSimulationOnFailure)
