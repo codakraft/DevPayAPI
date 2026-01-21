@@ -212,3 +212,17 @@ public class ValidateEmailOtpResponseDto
 {
     public string Message { get; set; } = "OTP validation successful";
 }
+
+// BVN OTP generation endpoint
+public class GenerateBvnOtpRequestDto
+{
+    [Required]
+    [StringLength(11, MinimumLength = 11, ErrorMessage = "BVN must be exactly 11 digits")]
+    [RegularExpression(@"^\d{11}$", ErrorMessage = "BVN must contain only digits")]
+    public required string BVN { get; set; }
+}
+
+public class GenerateBvnOtpResponseDto
+{
+    public string Message { get; set; } = "Verification email has been sent";
+}

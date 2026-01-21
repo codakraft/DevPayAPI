@@ -33,6 +33,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<MonoMandateReference> MonoMandateReferences { get; set; }
     public DbSet<MonoBvnVerificationRecord> MonoBvnVerificationRecords { get; set; }
     public DbSet<MonoCreditAnalysisRecord> MonoCreditAnalysisRecords { get; set; }
+    public DbSet<Otp> Otps { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

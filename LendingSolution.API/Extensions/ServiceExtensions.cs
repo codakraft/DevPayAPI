@@ -264,6 +264,8 @@ public static class ServiceExtensions
         services.AddScoped<IBorrowerOnboardingService, BorrowerOnboardingService>();
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<ISmsService, SmsService>();
+        services.AddScoped<INotificationOrchestrationService, NotificationOrchestrationService>();
+        services.AddScoped<IOtpService, OtpService>();
         services.AddScoped<ISalaryEligibilityService, SalaryEligibilityService>();
         services.AddScoped<ISalaryHistoryViewService, SalaryHistoryViewService>();
         services.AddScoped<IProvidusDisbursementService, ProvidusDisbursementService>();
@@ -277,6 +279,7 @@ public static class ServiceExtensions
         services.AddScoped<ILoanRepository, LoanRespository>();
         services.AddScoped<IAdminSettingsRepository, AdminSettingsRepository>();
         services.AddScoped<ISettingsRepository, SettingsRepository>();
+        services.AddScoped<IOtpRepository, OtpRepository>();
         services.AddScoped<IApprovalRepository, ApprovalRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IDisbursementRepository, DisbursementRepository>();

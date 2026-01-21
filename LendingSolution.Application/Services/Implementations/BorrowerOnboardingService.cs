@@ -27,6 +27,8 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     private readonly IRemitaSalaryHistoryRepository _remitaSalaryHistoryRepository;
     private readonly IConfiguration _configuration;
     private readonly ILogger<BorrowerOnboardingService> _logger;
+    private readonly INotificationOrchestrationService _notificationOrchestrator;
+    private readonly IOtpService _otpService;
 
     public BorrowerOnboardingService(
         IBorrowerApplicationRepository borrowerRepository,
@@ -42,6 +44,8 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         IMonoService monoService,
         ISalaryEligibilityService salaryEligibilityService,
         IRemitaSalaryHistoryRepository remitaSalaryHistoryRepository,
+        INotificationOrchestrationService notificationOrchestrator,
+        IOtpService otpService,
         IConfiguration configuration,
         ILogger<BorrowerOnboardingService> logger)
     {
@@ -58,6 +62,8 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         _monoService = monoService;
         _salaryEligibilityService = salaryEligibilityService;
         _remitaSalaryHistoryRepository = remitaSalaryHistoryRepository;
+        _notificationOrchestrator = notificationOrchestrator;
+        _otpService = otpService;
         _configuration = configuration;
         _logger = logger;
     }
@@ -138,10 +144,17 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             throw new AppException("Please complete Step 1 first", 400);
         }
 
-        // Validate OTP (mock implementation - replace with real OTP validation)
-        if (!ValidateOtp(application.Email, request.Otp, application.LastEmailOtp, application.EmailOtpGeneratedAt))
+        // Validate email OTP using OTP service
+        var validateResult = await _otpService.ValidateOtpAsync(new ValidateOtpRequest
         {
-            throw new AppException("Invalid or expired OTP", 400);
+            Type = OtpType.EmailVerification,
+            RecipientIdentifier = application.Email,
+            Code = request.Otp
+        });
+
+        if (!validateResult.Success)
+        {
+            throw new AppException(validateResult.ErrorMessage ?? "Invalid or expired OTP", 400);
         }
 
         // Update application
@@ -181,22 +194,6 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         var company = await _companyRepository.GetCompanyById(application.CompanyId);
         var companyName = company?.Name ?? "Unknown Company";
 
-        // EARLY VALIDATION: Check company wallet balance before proceeding with BVN OTP
-        try
-        {
-            var settings = await _settingsService.GetSettingsAsync();
-            await _walletService.ValidateCompanyBalanceForFeeAsync(application.CompanyId, settings.OtpFee, "BVN OTP");
-        }
-        catch (AppException ex) when (ex.StatusCode == 400 || ex.StatusCode == 404)
-        {
-            _logger.LogWarning(
-                "AUDIT: BVN step blocked for Company {CompanyName} (ID: {CompanyId}). Reason: {Reason}",
-                companyName, application.CompanyId, ex.Message);
-            throw new AppException(
-                "We're unable to process your application at this time. Please contact support.",
-                503);
-        }
-
         // Validate bank details
         if (string.IsNullOrEmpty(request.AccountNo) || string.IsNullOrEmpty(request.BankCode))
         {
@@ -216,44 +213,30 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         application.CurrentStep = BorrowerOnboardingStep.Step2_BvnSent;
         application.UpdatedAt = DateTime.UtcNow;
 
-        // Generate and store BVN OTP
-        var bvnOtp = GenerateOtp();
-        application.LastBvnOtp = bvnOtp;
-        application.BvnOtpGeneratedAt = DateTime.UtcNow;
-
         await _borrowerRepository.UpdateAsync(application);
 
-        // Send BVN OTP via SMS
-        var smsSent = await _smsService.SendOtpSmsAsync(
-            application.PhoneNumber ?? string.Empty,
-            bvnOtp,
-            "BVN Verification"
-        );
-
-        if (!smsSent)
+        // Generate OTP for BVN verification using OTP service
+        var otpResult = await _otpService.GenerateAndSendOtpAsync(new GenerateOtpRequest
         {
-            _logger.LogWarning("Failed to send BVN OTP SMS for application {ApplicationId}", application.Id);
-            // Don't throw - we can still proceed, user can request resend
-        }
-        else
+            Type = OtpType.BvnVerification,
+            RecipientIdentifier = application.BVN,
+            CompanyId = application.CompanyId,
+            RelatedEntityId = application.Id,
+            RelatedEntityType = "BorrowerApplication",
+            DeliveryChannel = NotificationChannel.SMSPrimary,
+            SenderName = companyName,
+            CreatedBy = "System"
+        });
+
+        if (!otpResult.Success)
         {
-            // Deduct OTP fee from company wallet
-            await DeductOtpFeeAsync(application.CompanyId, "BVN OTP");
+            throw new AppException(otpResult.ErrorMessage ?? "Failed to send BVN OTP", 500);
         }
 
-        // Also send BVN OTP via email as backup
-        var emailSent = await _emailService.SendOtpEmailAsync(
-            application.Email ?? string.Empty,
-            bvnOtp,
-            "BVN Verification",
-            companyName
-        );
-
-        if (!emailSent)
-        {
-            _logger.LogWarning("Failed to send BVN OTP email for application {ApplicationId}", application.Id);
-            // Don't throw - SMS is the primary channel
-        }
+        // Dual write: Update legacy fields for backward compatibility (will be removed in future)
+        application.LastBvnOtp = "******"; // Masked for security - actual OTP in Otps table
+        application.BvnOtpGeneratedAt = DateTime.UtcNow;
+        await _borrowerRepository.UpdateAsync(application);
 
         return new BorrowerStep2ResponseDto();
     }
@@ -281,10 +264,17 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             ClearStepsFromStep3Onwards(application);
         }
 
-        // Validate BVN OTP
-        if (!ValidateOtp(application.BVN ?? string.Empty, request.Otp, application.LastBvnOtp, application.BvnOtpGeneratedAt))
+        // Validate BVN OTP using OTP service
+        var validateResult = await _otpService.ValidateOtpAsync(new ValidateOtpRequest
         {
-            throw new AppException("Invalid or expired BVN OTP", 400);
+            Type = OtpType.BvnVerification,
+            RecipientIdentifier = application.BVN ?? string.Empty,
+            Code = request.Otp
+        });
+
+        if (!validateResult.Success)
+        {
+            throw new AppException(validateResult.ErrorMessage ?? "Invalid or expired BVN OTP", 400);
         }
 
         // Update application
@@ -641,58 +631,27 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         var company = await _companyRepository.GetCompanyById(application.CompanyId);
         var companyName = company?.Name ?? "Unknown Company";
 
-        // EARLY VALIDATION: Check company wallet balance before resending OTP
-        try
+        // Resend BVN OTP using OTP service
+        var resendResult = await _otpService.ResendOtpAsync(new ResendOtpRequest
         {
-            var settings = await _settingsService.GetSettingsAsync();
-            await _walletService.ValidateCompanyBalanceForFeeAsync(application.CompanyId, settings.OtpFee, "BVN OTP Resend");
-        }
-        catch (AppException ex) when (ex.StatusCode == 400 || ex.StatusCode == 404)
+            Type = OtpType.BvnVerification,
+            RecipientIdentifier = application.BVN,
+            CompanyId = application.CompanyId,
+            DeliveryChannel = NotificationChannel.SMSPrimary,
+            SenderName = companyName
+        });
+
+        if (!resendResult.Success)
         {
-            _logger.LogWarning(
-                "AUDIT: Borrower BVN OTP resend blocked for Company {CompanyName} (ID: {CompanyId}). Reason: {Reason}",
-                companyName, application.CompanyId, ex.Message);
-            throw new AppException(
-                "We're unable to process your request at this time. Please contact support.",
-                503);
+            throw new AppException(resendResult.ErrorMessage ?? "Failed to resend BVN OTP", 500);
         }
 
-        // Generate new BVN OTP
-        var bvnOtp = GenerateOtp();
-        application.LastBvnOtp = bvnOtp;
+        // Dual write: Update legacy fields
+        application.LastBvnOtp = "******"; // Masked for security
         application.BvnOtpGeneratedAt = DateTime.UtcNow;
         application.UpdatedAt = DateTime.UtcNow;
 
         await _borrowerRepository.UpdateAsync(application);
-
-        // Send BVN OTP via SMS
-        var smsSent = await _smsService.SendOtpSmsAsync(
-            application.PhoneNumber ?? string.Empty,
-            bvnOtp,
-            "BVN Verification - Resent"
-        );
-
-        if (!smsSent)
-        {
-            throw new AppException("Failed to resend BVN verification SMS. Please try again.", 500);
-        }
-
-        // Deduct OTP fee from company wallet
-        await DeductOtpFeeAsync(application.CompanyId, "BVN OTP Resend");
-
-        // Also send BVN OTP via email as backup
-        var emailSent = await _emailService.SendOtpEmailAsync(
-            application.Email ?? string.Empty,
-            bvnOtp,
-            "BVN Verification - Resent",
-            companyName
-        );
-
-        if (!emailSent)
-        {
-            _logger.LogWarning("Failed to resend BVN OTP email for application {ApplicationId}", application.Id);
-            // Don't throw - SMS is the primary channel
-        }
 
         return new ResendStep2BvnOtpResponseDto();
     }
@@ -762,28 +721,27 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         // Find application by email to get company information
         var application = await _borrowerRepository.GetByEmailAsync(request.EmailAddress) ?? throw new AppException("No application found for this email", 404);
 
-        // Generate OTP
-        var otp = GenerateOtp();
-
-        // Update application with new OTP
-        application.LastEmailOtp = otp;
-        application.EmailOtpGeneratedAt = DateTime.UtcNow;
-        await _borrowerRepository.UpdateAsync(application);
-
-        // Send actual email OTP
-        var emailSent = await _emailService.SendOtpEmailAsync(
-            request.EmailAddress,
-            otp,
-            "Email Verification"
-        );
-
-        if (!emailSent)
+        // Generate OTP using OTP service
+        var otpResult = await _otpService.GenerateAndSendOtpAsync(new GenerateOtpRequest
         {
-            throw new AppException("Failed to send verification email. Please try again.", 500);
+            Type = OtpType.EmailVerification,
+            RecipientIdentifier = request.EmailAddress,
+            CompanyId = application.CompanyId,
+            RelatedEntityId = application.Id,
+            RelatedEntityType = "BorrowerApplication",
+            DeliveryChannel = NotificationChannel.Email,
+            CreatedBy = "System"
+        });
+
+        if (!otpResult.Success)
+        {
+            throw new AppException(otpResult.ErrorMessage ?? "Failed to send email OTP", 500);
         }
 
-        // Deduct OTP fee from company wallet only after successful email send
-        await DeductOtpFeeAsync(application.CompanyId, "Email OTP");
+        // Dual write: Update legacy fields
+        application.LastEmailOtp = "******"; // Masked for security
+        application.EmailOtpGeneratedAt = DateTime.UtcNow;
+        await _borrowerRepository.UpdateAsync(application);
 
         return new GenerateEmailOtpResponseDto();
     }
@@ -796,12 +754,56 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             throw new AppException("No application found for this email", 404);
         }
 
-        if (!ValidateOtp(request.Email, request.Otp, application.LastEmailOtp, application.EmailOtpGeneratedAt))
+        // Validate using OTP service
+        var validateResult = await _otpService.ValidateOtpAsync(new ValidateOtpRequest
         {
-            throw new AppException("Invalid or expired OTP", 400);
+            Type = OtpType.EmailVerification,
+            RecipientIdentifier = request.Email,
+            Code = request.Otp
+        });
+
+        if (!validateResult.Success)
+        {
+            throw new AppException(validateResult.ErrorMessage ?? "Invalid or expired OTP", 400);
         }
 
         return new ValidateEmailOtpResponseDto();
+    }
+
+    public async Task<GenerateBvnOtpResponseDto> GenerateBvnOtpAsync(GenerateBvnOtpRequestDto request)
+    {
+        // Find application by BVN
+        var application = await _borrowerRepository.GetByBvnAsync(request.BVN) ?? throw new AppException("BVN not found", 404);
+
+        // Get company for logging
+        var company = await _companyRepository.GetCompanyById(application.CompanyId);
+        var companyName = company?.Name ?? "Unknown Company";
+
+        // Generate OTP using OTP service
+        var otpResult = await _otpService.GenerateAndSendOtpAsync(new GenerateOtpRequest
+        {
+            Type = OtpType.BvnVerification,
+            RecipientIdentifier = request.BVN,
+            CompanyId = application.CompanyId,
+            RelatedEntityId = application.Id,
+            RelatedEntityType = "BorrowerApplication",
+            DeliveryChannel = NotificationChannel.EmailPrimary,
+            SenderName = companyName,
+            CreatedBy = "System"
+        });
+
+        if (!otpResult.Success)
+        {
+            throw new AppException(otpResult.ErrorMessage ?? "Failed to send BVN OTP", 500);
+        }
+
+        // Dual write: Update legacy fields
+        application.LastBvnOtp = "******"; // Masked for security
+        application.BvnOtpGeneratedAt = DateTime.UtcNow;
+        application.UpdatedAt = DateTime.UtcNow;
+        await _borrowerRepository.UpdateAsync(application);
+
+        return new GenerateBvnOtpResponseDto();
     }
 
     public async Task<ResendStep1EmailOtpResponseDto> ResendStep1EmailOtpAsync(ResendStep1EmailOtpRequestDto request)
@@ -814,50 +816,26 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             throw new AppException("Email OTP can only be resent for applications in Step 1 (Email Sent) status", 400);
         }
 
-        // Get company for logging
-        var company = await _companyRepository.GetCompanyById(application.CompanyId);
-        var companyName = company?.Name ?? "Unknown Company";
+        // Resend OTP using OTP service
+        var resendResult = await _otpService.ResendOtpAsync(new ResendOtpRequest
+        {
+            Type = OtpType.EmailVerification,
+            RecipientIdentifier = application.Email,
+            CompanyId = application.CompanyId,
+            DeliveryChannel = NotificationChannel.Email
+        });
 
-        // EARLY VALIDATION: Check company wallet balance before resending OTP
-        try
+        if (!resendResult.Success)
         {
-            var settings = await _settingsService.GetSettingsAsync();
-            await _walletService.ValidateCompanyBalanceForFeeAsync(application.CompanyId, settings.OtpFee, "Email OTP Resend");
-        }
-        catch (AppException ex) when (ex.StatusCode == 400 || ex.StatusCode == 404)
-        {
-            _logger.LogWarning(
-                "AUDIT: Borrower OTP resend blocked for Company {CompanyName} (ID: {CompanyId}). Reason: {Reason}",
-                companyName, application.CompanyId, ex.Message);
-            throw new AppException(
-                "We're unable to process your request at this time. Please contact support.",
-                503);
+            throw new AppException(resendResult.ErrorMessage ?? "Failed to resend email OTP", 500);
         }
 
-        // Generate new OTP
-        var otp = GenerateOtp();
-
-        // Update application with new OTP
-        application.LastEmailOtp = otp;
+        // Dual write: Update legacy fields
+        application.LastEmailOtp = "******"; // Masked for security
         application.EmailOtpGeneratedAt = DateTime.UtcNow;
         application.UpdatedAt = DateTime.UtcNow;
 
         await _borrowerRepository.UpdateAsync(application);
-
-        // Send actual email OTP
-        var emailSent = await _emailService.SendOtpEmailAsync(
-            application.Email,
-            otp,
-            "Email Verification - Resent"
-        );
-
-        if (!emailSent)
-        {
-            throw new AppException("Failed to resend verification email. Please try again.", 500);
-        }
-
-        // Deduct OTP fee from company wallet only after successful email send
-        await DeductOtpFeeAsync(application.CompanyId, "Email OTP Resend");
 
         return new ResendStep1EmailOtpResponseDto();
     }
@@ -998,29 +976,6 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             // Log the exception and throw a generic error
             throw new AppException("An error occurred while processing Email fee. Please try again.", 500);
         }
-    }
-
-    private static string GenerateOtp()
-    {
-        var random = new Random();
-        return random.Next(100000, 999999).ToString();
-        // return "564312";
-    }
-
-    private static bool ValidateOtp(string identifier, string providedOtp, string? storedOtp, DateTime? generatedAt)
-    {
-        if (string.IsNullOrEmpty(storedOtp) || !generatedAt.HasValue)
-        {
-            return false;
-        }
-
-        // OTP expires after 10 minutes
-        if (DateTime.UtcNow.Subtract(generatedAt.Value).TotalMinutes > 3)
-        {
-            return false;
-        }
-
-        return providedOtp == storedOtp;
     }
 
     public async Task<BorrowerCurrentStepResponseDto> GetCurrentStepAsync(BorrowerCurrentStepRequestDto request)

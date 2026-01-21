@@ -294,6 +294,31 @@ public class BorrowerController(
         }
     }
 
+    /// <summary>
+    /// Generates and sends BVN OTP to the borrower via email and SMS (if balance allows)
+    /// </summary>
+    /// <param name="request">BVN (11 digits) to generate OTP for</param>
+    /// <returns>Confirmation that verification email has been sent</returns>
+    [HttpPost("generate-bvn-otp")]
+    public async Task<IActionResult> GenerateBvnOtp([FromBody] GenerateBvnOtpRequestDto request)
+    {
+        try
+        {
+            var result = await _borrowerOnboardingService.GenerateBvnOtpAsync(request);
+            return Ok(ApiResponse.Ok(result.Message));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error generating BVN OTP");
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error generating BVN OTP");
+            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
+        }
+    }
+
     #endregion
 
     #region Application Status Endpoints
