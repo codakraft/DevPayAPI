@@ -216,10 +216,11 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         await _borrowerRepository.UpdateAsync(application);
 
         // Generate OTP for BVN verification using OTP service
+        // Use email as recipient identifier since we're sending via email
         var otpResult = await _otpService.GenerateAndSendOtpAsync(new GenerateOtpRequest
         {
             Type = OtpType.BvnVerification,
-            RecipientIdentifier = application.BVN,
+            RecipientIdentifier = application.Email, // Use email for delivery
             CompanyId = application.CompanyId,
             RelatedEntityId = application.Id,
             RelatedEntityType = "BorrowerApplication",
@@ -265,10 +266,11 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         }
 
         // Validate BVN OTP using OTP service
+        // Use email as recipient identifier to match how it was sent
         var validateResult = await _otpService.ValidateOtpAsync(new ValidateOtpRequest
         {
             Type = OtpType.BvnVerification,
-            RecipientIdentifier = application.BVN ?? string.Empty,
+            RecipientIdentifier = application.Email,
             Code = request.Otp
         });
 
@@ -633,12 +635,13 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         var companyName = company?.Name ?? "Unknown Company";
 
         // Resend BVN OTP using OTP service
+        // Use email as recipient identifier to match how it was sent
         var resendResult = await _otpService.ResendOtpAsync(new ResendOtpRequest
         {
             Type = OtpType.BvnVerification,
-            RecipientIdentifier = application.BVN,
+            RecipientIdentifier = application.Email,
             CompanyId = application.CompanyId,
-            DeliveryChannel = NotificationChannel.SMSPrimary,
+            DeliveryChannel = NotificationChannel.EmailPrimary,
             SenderName = companyName
         });
 
@@ -781,10 +784,11 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         var companyName = company?.Name ?? "Unknown Company";
 
         // Generate OTP using OTP service
+        // Use email as recipient identifier since we're sending via email
         var otpResult = await _otpService.GenerateAndSendOtpAsync(new GenerateOtpRequest
         {
             Type = OtpType.BvnVerification,
-            RecipientIdentifier = request.BVN,
+            RecipientIdentifier = application.Email,
             CompanyId = application.CompanyId,
             RelatedEntityId = application.Id,
             RelatedEntityType = "BorrowerApplication",
