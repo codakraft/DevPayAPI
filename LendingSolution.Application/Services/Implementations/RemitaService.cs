@@ -56,94 +56,30 @@ public class RemitaService : IRemitaService
     {
         try
         {
-            // Check if we should use live data or mock data
+            // Check if we should use test data for non-live mode
             string finalAuthCode;
 
             if (!_settings.UseLiveData)
             {
-                // Return mock salary history data without calling Remita API
-                _logger.LogInformation("UseLiveData is false - returning mock salary history data without API call");
+                _logger.LogInformation("UseLiveData is false - using Remita test data for salary history");
+                _logger.LogInformation("Original values - Account: {AccountNumber}, Bank: {BankCode}, BVN: {BVN}",
+                    accountNumber, bankCode, bvn);
                 
-                return new RemitaSalaryHistoryResponseDto
-                {
-                    Status = "success",
-                    ResponseCode = "00",
-                    ResponseMsg = "Mock data for development",
-                    HasData = true,
-                    ResponseId = "MOCK_" + Guid.NewGuid().ToString().Substring(0, 8),
-                    ResponseDate = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"),
-                    RequestDate = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"),
-                    AuthorisationCode = GenerateRandomAuthorizationCode(),
-                    Data = new RemitaSalaryDataDto
-                    {
-                        CustomerId = "CUS_MOCK_" + borrowerApplicationId.ToString().Substring(0, 8),
-                        AccountNumber = accountNumber,
-                        BankCode = bankCode,
-                        BVN = bvn,
-                        CustomerName = "Test Borrower",
-                        CompanyName = "Mock Company Limited",
-                        Category = "Federal Government",
-                        FirstPaymentDate = DateTime.UtcNow.AddMonths(-6).ToString("dd-MMM-yyyy"),
-                        SalaryCount = "6",
-                        SalaryPaymentDetails = new List<RemitaSalaryPaymentDto>
-                        {
-                            new RemitaSalaryPaymentDto
-                            {
-                                PaymentDate = DateTime.UtcNow.AddMonths(-1).ToString("dd-MMM-yyyy"),
-                                Amount = "150000.00",
-                                AccountNumber = accountNumber,
-                                BankCode = bankCode
-                            },
-                            new RemitaSalaryPaymentDto
-                            {
-                                PaymentDate = DateTime.UtcNow.AddMonths(-2).ToString("dd-MMM-yyyy"),
-                                Amount = "150000.00",
-                                AccountNumber = accountNumber,
-                                BankCode = bankCode
-                            },
-                            new RemitaSalaryPaymentDto
-                            {
-                                PaymentDate = DateTime.UtcNow.AddMonths(-3).ToString("dd-MMM-yyyy"),
-                                Amount = "150000.00",
-                                AccountNumber = accountNumber,
-                                BankCode = bankCode
-                            },
-                            new RemitaSalaryPaymentDto
-                            {
-                                PaymentDate = DateTime.UtcNow.AddMonths(-4).ToString("dd-MMM-yyyy"),
-                                Amount = "145000.00",
-                                AccountNumber = accountNumber,
-                                BankCode = bankCode
-                            },
-                            new RemitaSalaryPaymentDto
-                            {
-                                PaymentDate = DateTime.UtcNow.AddMonths(-5).ToString("dd-MMM-yyyy"),
-                                Amount = "150000.00",
-                                AccountNumber = accountNumber,
-                                BankCode = bankCode
-                            },
-                            new RemitaSalaryPaymentDto
-                            {
-                                PaymentDate = DateTime.UtcNow.AddMonths(-6).ToString("dd-MMM-yyyy"),
-                                Amount = "150000.00",
-                                AccountNumber = accountNumber,
-                                BankCode = bankCode
-                            }
-                        },
-                        // Pre-computed statistics for 6 months of salary (as strings to match DTO)
-                        AverageMonthlySalary = "149166.67",
-                        LatestSalaryAmount = "150000.00",
-                        MinSalaryAmount = "145000.00",
-                        MaxSalaryAmount = "150000.00",
-                        ConsistentMonths = "6",
-                        HasOutstandingLoans = "false",
-                        TotalOutstandingAmount = "0.00",
-                        LoanHistoryDetails = new List<RemitaLoanHistoryDto>()
-                    }
-                };
+                // Override with Remita test account details
+                accountNumber = "5012284010";
+                bankCode = "023";
+                bvn = "22222222222";
+                
+                _logger.LogInformation("Test values applied - Account: {AccountNumber}, Bank: {BankCode}, BVN: {BVN}",
+                    accountNumber, bankCode, bvn);
+            }
+            else
+            {
+                _logger.LogInformation("UseLiveData is true - using borrower data - Account: {AccountNumber}, Bank: {BankCode}",
+                    accountNumber, bankCode);
             }
             
-            // Live data mode - proceed with actual API call
+            // Proceed with actual API call
             finalAuthCode = GenerateRandomAuthorizationCode();
             _logger.LogInformation("Processing salary history request for BorrowerApplicationId {BorrowerApplicationId} with new authorization code", borrowerApplicationId);
 
