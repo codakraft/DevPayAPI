@@ -223,7 +223,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             CompanyId = application.CompanyId,
             RelatedEntityId = application.Id,
             RelatedEntityType = "BorrowerApplication",
-            DeliveryChannel = NotificationChannel.SMSPrimary,
+            DeliveryChannel = NotificationChannel.EmailPrimary,
             SenderName = companyName,
             CreatedBy = "System"
         });
