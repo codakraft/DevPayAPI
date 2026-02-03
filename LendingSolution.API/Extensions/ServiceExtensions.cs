@@ -208,6 +208,7 @@ public static class ServiceExtensions
             var emailService = provider.GetRequiredService<IEmailService>();
             var documentService = provider.GetRequiredService<IDocumentService>();
             var providusDisbursementService = provider.GetRequiredService<IProvidusDisbursementService>();
+            var auditService = provider.GetRequiredService<IAuditService>();
 
             return new ServiceManager(
                 contextAccessor,
@@ -237,7 +238,8 @@ public static class ServiceExtensions
                 walletService,
                 emailService,
                 documentService,
-                providusDisbursementService
+                providusDisbursementService,
+                auditService
             );
         });
     }
@@ -268,6 +270,7 @@ public static class ServiceExtensions
         services.AddScoped<IOtpService, OtpService>();
         services.AddScoped<ISalaryEligibilityService, SalaryEligibilityService>();
         services.AddScoped<ISalaryHistoryViewService, SalaryHistoryViewService>();
+        services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IProvidusDisbursementService, ProvidusDisbursementService>();
     }
 

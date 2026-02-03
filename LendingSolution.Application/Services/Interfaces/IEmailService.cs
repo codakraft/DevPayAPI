@@ -64,5 +64,6 @@ public interface IEmailService
     /// <param name="totalRepayment">Total repayment amount</param>
     /// <param name="productName">Loan product name</param>
     /// <param name="companyName">Company name</param>
-    Task<bool> SendLoanApplicationSummaryEmailAsync(string emailAddress, string borrowerName, decimal loanAmount, int tenor, decimal monthlyRepayment, decimal totalRepayment, string productName, string companyName);
+    /// <param name="offerLetter">Optional offer letter to attach as PDF</param>
+    Task<bool> SendLoanApplicationSummaryEmailAsync(string emailAddress, string borrowerName, decimal loanAmount, int tenor, decimal monthlyRepayment, decimal totalRepayment, string productName, string companyName, OfferLetterDto? offerLetter = null);
 }

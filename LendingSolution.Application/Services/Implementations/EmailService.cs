@@ -377,12 +377,22 @@ public class EmailService : IEmailService
         return await SendEmailAsync(emailAddress, subject, body);
     }
     
-    public async Task<bool> SendLoanApplicationSummaryEmailAsync(string emailAddress, string borrowerName, decimal loanAmount, int tenor, decimal monthlyRepayment, decimal totalRepayment, string productName, string companyName)
+    public async Task<bool> SendLoanApplicationSummaryEmailAsync(string emailAddress, string borrowerName, decimal loanAmount, int tenor, decimal monthlyRepayment, decimal totalRepayment, string productName, string companyName, OfferLetterDto? offerLetter = null)
     {
         var subject = "Loan Application Submitted Successfully! 🎉";
-        var body = GenerateLoanApplicationSummaryTemplate(borrowerName, loanAmount, tenor, monthlyRepayment, totalRepayment, productName, companyName);
+        var body = GenerateLoanApplicationSummaryTemplate(borrowerName, loanAmount, tenor, monthlyRepayment, totalRepayment, productName, companyName, offerLetter != null);
         
-        return await SendEmailAsync(emailAddress, subject, body);
+        // Attach offer letter PDF if provided
+        byte[]? offerLetterPdf = null;
+        string? offerLetterFileName = null;
+        
+        if (offerLetter != null)
+        {
+            offerLetterPdf = GenerateOfferLetterPdf(offerLetter);
+            offerLetterFileName = $"Offer_Letter_{offerLetter.LoanId}.pdf";
+        }
+        
+        return await SendEmailAsync(emailAddress, subject, body, attachmentBytes: offerLetterPdf, attachmentFileName: offerLetterFileName);
     }
 
     public async Task<bool> SendImageReuploadRequestAsync(string emailAddress, string borrowerName, string reason, string reuploadUrl)
@@ -582,7 +592,7 @@ public class EmailService : IEmailService
 </body>
 </html>";
     }    
-    private string GenerateLoanApplicationSummaryTemplate(string borrowerName, decimal loanAmount, int tenor, decimal monthlyRepayment, decimal totalRepayment, string productName, string companyName)
+    private string GenerateLoanApplicationSummaryTemplate(string borrowerName, decimal loanAmount, int tenor, decimal monthlyRepayment, decimal totalRepayment, string productName, string companyName, bool hasOfferLetter = false)
     {
         return $@"
 <!DOCTYPE html>
@@ -836,6 +846,18 @@ public class EmailService : IEmailService
                     <li><strong>Repayment Schedule:</strong> Your repayment will be automatically deducted from your salary account monthly</li>
                 </ol>
             </div>
+
+            " + (hasOfferLetter ? @"
+            <div class='info-box' style='background: #f0fdf4; border-left: 4px solid #10b981;'>
+                <h3 style='color: #065f46;'>📄 Offer Letter Attached</h3>
+                <ul style='color: #064e3b;'>
+                    <li>Your loan offer letter has been attached to this email as a PDF document</li>
+                    <li>Please review the terms and conditions carefully</li>
+                    <li>By accepting this offer, you agree to all terms outlined in the offer letter</li>
+                    <li>Keep this document for your records</li>
+                </ul>
+            </div>
+            " : "") + @"
 
             <div class='info-box'>
                 <h3>Important Information</h3>

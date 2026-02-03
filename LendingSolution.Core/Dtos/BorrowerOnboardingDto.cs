@@ -171,6 +171,9 @@ public class BorrowerStep4RequestDto
 
     [Required]
     public Guid LoanId { get; set; }
+
+    [Required]
+    public bool AcceptOfferLetter { get; set; }
 }
 
 public class BorrowerStep4ResponseDto

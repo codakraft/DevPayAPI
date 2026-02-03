@@ -16,17 +16,20 @@ public class WalletService : IWalletService
     private readonly IWalletTransactionRepository _transactionRepository;
     private readonly IPaystackService _paystackService;
     private readonly ILogger<WalletService> _logger;
+    private readonly IAuditService _auditService;
 
     public WalletService(
         IWalletRepository walletRepository,
         IWalletTransactionRepository transactionRepository,
         IPaystackService paystackService,
-        ILogger<WalletService> logger)
+        ILogger<WalletService> logger,
+        IAuditService auditService)
     {
         _walletRepository = walletRepository;
         _transactionRepository = transactionRepository;
         _paystackService = paystackService;
         _logger = logger;
+        _auditService = auditService;
     }
 
     public async Task<WalletDto?> GetWalletByIdAsync(Guid walletId)
@@ -182,6 +185,8 @@ public class WalletService : IWalletService
             throw new AppException("Insufficient wallet balance");
         }
 
+        var oldBalance = wallet.Balance;
+
         // Update wallet balance
         wallet.Balance -= debitWalletDto.Amount;
         wallet.TotalDebits += debitWalletDto.Amount;
@@ -201,6 +206,20 @@ public class WalletService : IWalletService
 
         await _transactionRepository.CreateTransactionAsync(transaction);
 
+        // Audit log
+        await _auditService.LogAsync(
+            action: "WalletDebited",
+            category: "Financial",
+            userId: userId,
+            entityType: "Wallet",
+            entityId: debitWalletDto.WalletId.ToString(),
+            companyId: wallet.CompanyId,
+            details: debitWalletDto.Description,
+            amount: debitWalletDto.Amount,
+            oldBalance: oldBalance,
+            newBalance: wallet.Balance
+        );
+
         return true;
     }
 
@@ -211,6 +230,8 @@ public class WalletService : IWalletService
         {
             return false;
         }
+
+        var oldBalance = wallet.Balance;
 
         // Update wallet balance
         wallet.Balance += amount;
@@ -230,6 +251,20 @@ public class WalletService : IWalletService
         };
 
         await _transactionRepository.CreateTransactionAsync(transaction);
+
+        // Audit log
+        await _auditService.LogAsync(
+            action: "WalletCredited",
+            category: "Financial",
+            userId: userId,
+            entityType: "Wallet",
+            entityId: walletId.ToString(),
+            companyId: wallet.CompanyId,
+            details: description,
+            amount: amount,
+            oldBalance: oldBalance,
+            newBalance: wallet.Balance
+        );
 
         return true;
     }
@@ -362,6 +397,9 @@ public class WalletService : IWalletService
 
     public async Task<bool> TransferFundsAsync(Guid fromWalletId, Guid toWalletId, decimal amount, string description, string? userId)
     {
+        var fromWallet = await _walletRepository.GetWalletByIdAsync(fromWalletId);
+        var toWallet = await _walletRepository.GetWalletByIdAsync(toWalletId);
+
         // Debit from source wallet
         var debitSuccess = await DebitWalletAsync(new DebitWalletDto
         {
@@ -386,6 +424,19 @@ public class WalletService : IWalletService
             // TODO: Implement rollback mechanism
             return false;
         }
+
+        // Audit log for transfer (especially important for fee transfers)
+        var isFeeTransfer = description.Contains("fee", StringComparison.OrdinalIgnoreCase);
+        await _auditService.LogAsync(
+            action: isFeeTransfer ? "FeeTransferred" : "FundsTransferred",
+            category: "Financial",
+            userId: userId,
+            entityType: "WalletTransfer",
+            entityId: $"{fromWalletId}→{toWalletId}",
+            companyId: fromWallet?.CompanyId,
+            details: $"Transfer from {fromWallet?.Company?.Name ?? "Unknown"} to {toWallet?.Company?.Name ?? (toWallet?.IsSuperAdminWallet == true ? "SuperAdmin" : "Unknown")}: {description}",
+            amount: amount
+        );
 
         return true;
     }

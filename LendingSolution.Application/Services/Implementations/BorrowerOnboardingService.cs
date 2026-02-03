@@ -29,6 +29,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     private readonly ILogger<BorrowerOnboardingService> _logger;
     private readonly INotificationOrchestrationService _notificationOrchestrator;
     private readonly IOtpService _otpService;
+    private readonly IAuditService _auditService;
 
     public BorrowerOnboardingService(
         IBorrowerApplicationRepository borrowerRepository,
@@ -47,7 +48,8 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         INotificationOrchestrationService notificationOrchestrator,
         IOtpService otpService,
         IConfiguration configuration,
-        ILogger<BorrowerOnboardingService> logger)
+        ILogger<BorrowerOnboardingService> logger,
+        IAuditService auditService)
     {
         _borrowerRepository = borrowerRepository;
         _companyRepository = companyRepository;
@@ -66,6 +68,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         _otpService = otpService;
         _configuration = configuration;
         _logger = logger;
+        _auditService = auditService;
     }
 
     public async Task<BorrowerStep1ResponseDto> Step1_SaveBorrowerInfoAsync(BorrowerStep1RequestDto request)
@@ -428,6 +431,12 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     {
         var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
 
+        // Must accept offer letter to proceed
+        if (!request.AcceptOfferLetter)
+        {
+            throw new AppException("You must accept the offer letter to proceed with the loan application", 400);
+        }
+
         // Must have completed Step 3 at minimum
         if (application.CurrentStep < BorrowerOnboardingStep.Step3_DocumentsUploaded)
         {
@@ -560,15 +569,63 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         // Since the loan entity now has the generated ID, we can use it
         application.LoanId = loan.Id;
 
-        // Update application
+        // Update application with offer letter acceptance (always true at this point due to validation)
         application.CurrentStep = BorrowerOnboardingStep.Step4_LoanSubmitted;
         application.LoanSubmittedAt = DateTime.UtcNow;
         application.IsCompleted = true;
+        application.IsOfferLetterAccepted = true;
+        application.OfferLetterAcceptedAt = DateTime.UtcNow;
         application.UpdatedAt = DateTime.UtcNow;
 
         await _borrowerRepository.UpdateAsync(application);
 
-        // Send loan application summary email to borrower
+        // Audit log for offer letter acceptance
+        await _auditService.LogAsync(
+            action: "OfferLetterAccepted",
+            category: "Loan",
+            userEmail: application.Email,
+            entityType: "BorrowerApplication",
+            entityId: application.Id.ToString(),
+            companyId: application.CompanyId,
+            details: $"Borrower {application.FirstName} {application.LastName} ({application.Email}) accepted offer letter for loan amount {request.LoanAmount:C}",
+            amount: request.LoanAmount
+        );
+
+        // Build offer letter DTO for generating PDF
+        var offerLetterDto = new OfferLetterDto
+        {
+            LoanId = loan.Id,
+            BorrowerName = $"{application.FirstName} {application.LastName}",
+            BorrowerEmail = application.Email,
+            BorrowerAddress = application.Address ?? "Address not provided",
+            CompanyName = application.Company?.Name ?? "DevPay",
+            CompanyAddress = string.Join(", ", new[] { 
+                application.Company?.Street, 
+                application.Company?.City, 
+                application.Company?.State 
+            }.Where(s => !string.IsNullOrEmpty(s))),
+            LoanAmount = loanPrincipal,
+            DurationInMonths = request.Tenor,
+            InterestRate = product.InterestRate,
+            InterestComputationBasis = product.InterestComputationBasis.ToString(),
+            TotalInterest = appliedInterest,
+            TotalRepayment = totalRepayment,
+            MonthlyRepayment = monthlyRepayment,
+            Purpose = "Salary Loan",
+            ProcessingFee = Math.Round(loanPrincipal * (product.ProcessingFeePercent / 100) + product.ProcessingFeeFlat, 2),
+            MaintenanceFee = Math.Round(loanPrincipal * (product.MaintenanceFeePercent / 100), 2),
+            TotalFees = applicableFees,
+            DisbursementAmount = disbursementAmount,
+            ProductName = product.Name,
+            PenaltyRate = product.PenaltyOnDefaultPrincipal,
+            MoratoriumDays = product.Moratorium,
+            OfferDate = DateTime.UtcNow,
+            ExpiryDate = DateTime.UtcNow.AddDays(7),
+            ExpectedDisbursementDate = DateTime.UtcNow.AddDays(3),
+            ExpectedMaturityDate = DateTime.UtcNow.AddMonths(request.Tenor)
+        };
+
+        // Send loan application summary email to borrower with attached offer letter
         var borrowerFullName = $"{application.FirstName} {application.LastName}";
         var emailSent = await _emailService.SendLoanApplicationSummaryEmailAsync(
             application.Email,
@@ -578,7 +635,8 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             monthlyRepayment,
             totalRepayment,
             product.Name,
-            application.Company?.Name ?? "DevPay"
+            application.Company?.Name ?? "DevPay",
+            offerLetterDto
         );
 
         if (!emailSent)

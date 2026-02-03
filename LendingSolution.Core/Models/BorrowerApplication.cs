@@ -59,6 +59,10 @@ public class BorrowerApplication : Base
     public string? LastBvnOtp { get; set; }
     public DateTime? BvnOtpGeneratedAt { get; set; }
     
+    // Offer Letter Acceptance
+    public bool IsOfferLetterAccepted { get; set; } = false;
+    public DateTime? OfferLetterAcceptedAt { get; set; }
+    
     // Status
     public bool IsCompleted { get; set; } = false;
     public bool IsActive { get; set; } = true;
