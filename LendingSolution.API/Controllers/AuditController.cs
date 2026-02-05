@@ -2,11 +2,13 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Models;
+using Asp.Versioning;
 
 namespace LendingSolution.API.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/[controller]")]
 [Authorize(Roles = "SuperAdmin,Admin")]
 public class AuditController : ControllerBase
 {
