@@ -59,6 +59,10 @@ public class BorrowerApplication : Base
     public string? LastBvnOtp { get; set; }
     public DateTime? BvnOtpGeneratedAt { get; set; }
     
+    // Mono BVN Verification
+    public string? MonoBvnSessionId { get; set; }
+    public string? MonoBvnVerifiedData { get; set; } // JSON of verified BVN data from Mono
+    
     // Offer Letter Acceptance
     public bool IsOfferLetterAccepted { get; set; } = false;
     public DateTime? OfferLetterAcceptedAt { get; set; }
