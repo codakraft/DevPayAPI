@@ -40,7 +40,6 @@ public class MonoService : IMonoService
         _logger.LogInformation("  SecretKey loaded: {HasKey}", !string.IsNullOrEmpty(_settings?.SecretKey));
         _logger.LogInformation("  SecretKey length: {Length}", _settings?.SecretKey?.Length ?? 0);
         _logger.LogInformation("  PublicKey loaded: {HasKey}", !string.IsNullOrEmpty(_settings?.PublicKey));
-        _logger.LogInformation("  IsLiveMode: {IsLive}", _settings?.IsLiveMode ?? false);
     }
 
     public async Task<MonoGenerateMandateResponseDto?> GenerateMandateAsync(Guid loanId, MonoGenerateMandateRequestDto request, string? userId = null)
@@ -323,21 +322,23 @@ public class MonoService : IMonoService
         try
         {
             var requestUri = "/v2/lookup/bvn/initiate";
+            var requestBody = JsonSerializer.Serialize(request);
 
             var httpRequest = new HttpRequestMessage(HttpMethod.Post, BuildUrl(requestUri))
             {
-                Content = new StringContent(JsonSerializer.Serialize(request), Encoding.UTF8, "application/json")
+                Content = new StringContent(requestBody, Encoding.UTF8, "application/json")
             };
 
             // Add headers using the existing method
             AddMonoHeaders(httpRequest);
 
-            _logger.LogInformation("Sending Mono BVN lookup request for BVN: {BVN}", request.Bvn);
+            _logger.LogInformation("[Mono BVN Lookup] REQUEST - URI: {URI}, Body: {Body}", 
+                requestUri, requestBody);
 
             var response = await _httpClient.SendAsync(httpRequest);
             var responseContent = await response.Content.ReadAsStringAsync();
 
-            _logger.LogInformation("Mono BVN lookup response: {StatusCode} - {Content}",
+            _logger.LogInformation("[Mono BVN Lookup] RESPONSE - Status: {StatusCode}, Body: {Content}",
                 response.StatusCode, responseContent);
 
             if (response.IsSuccessStatusCode)
@@ -372,25 +373,28 @@ public class MonoService : IMonoService
         }
     }
 
-    public async Task<MonoBvnVerifyResponseDto?> BvnVerifyAsync(MonoBvnVerifyRequestDto request, string? userId = null)
+    public async Task<MonoBvnVerifyResponseDto?> BvnVerifyAsync(MonoBvnVerifyRequestDto request, string sessionId, string? userId = null)
     {
         try
         {
             var requestUri = "/v2/lookup/bvn/verify";
+            var requestBody = JsonSerializer.Serialize(request);
 
             var httpRequest = new HttpRequestMessage(HttpMethod.Post, BuildUrl(requestUri))
             {
-                Content = new StringContent(JsonSerializer.Serialize(request), Encoding.UTF8, "application/json")
+                Content = new StringContent(requestBody, Encoding.UTF8, "application/json")
             };
 
             AddMonoHeaders(httpRequest);
+            httpRequest.Headers.Add("x-session-id", sessionId);
 
-            _logger.LogInformation("Sending Mono BVN verify request for method: {Method}", request.Method);
+            _logger.LogInformation("[Mono BVN Verify] REQUEST - URI: {URI}, SessionId: {SessionId}, Body: {Body}", 
+                requestUri, sessionId, requestBody);
 
             var response = await _httpClient.SendAsync(httpRequest);
             var responseContent = await response.Content.ReadAsStringAsync();
 
-            _logger.LogInformation("Mono BVN verify response: {StatusCode} - {Content}",
+            _logger.LogInformation("[Mono BVN Verify] RESPONSE - Status: {StatusCode}, Body: {Content}",
                 response.StatusCode, responseContent);
 
             if (response.IsSuccessStatusCode)
@@ -425,25 +429,31 @@ public class MonoService : IMonoService
         }
     }
 
-    public async Task<MonoBvnDetailsResponseDto?> BvnGetDetailsAsync(MonoBvnDetailsRequestDto request, string? userId = null)
+    public async Task<MonoBvnDetailsResponseDto?> BvnGetDetailsAsync(MonoBvnDetailsRequestDto request, string sessionId, string? userId = null)
     {
         try
         {
             var requestUri = "/v2/lookup/bvn/details";
+            // Mask OTP in logs for security
+            var maskedRequest = new { otp = "****" };
+            var requestBody = JsonSerializer.Serialize(request);
 
             var httpRequest = new HttpRequestMessage(HttpMethod.Post, BuildUrl(requestUri))
             {
-                Content = new StringContent(JsonSerializer.Serialize(request), Encoding.UTF8, "application/json")
+                Content = new StringContent(requestBody, Encoding.UTF8, "application/json")
             };
 
             AddMonoHeaders(httpRequest);
+            httpRequest.Headers.Add("x-session-id", sessionId);
 
-            _logger.LogInformation("Sending Mono BVN details request with OTP");
+            _logger.LogInformation("[Mono BVN Details] REQUEST - URI: {URI}, SessionId: {SessionId}, Body: {Body}", 
+                requestUri, sessionId, JsonSerializer.Serialize(maskedRequest));
 
             var response = await _httpClient.SendAsync(httpRequest);
             var responseContent = await response.Content.ReadAsStringAsync();
 
-            _logger.LogInformation("Mono BVN details response: {StatusCode}", response.StatusCode);
+            _logger.LogInformation("[Mono BVN Details] RESPONSE - Status: {StatusCode}, Body: {Content}", 
+                response.StatusCode, responseContent);
 
             if (response.IsSuccessStatusCode)
             {
@@ -510,7 +520,7 @@ public class MonoService : IMonoService
             {
                 Method = method,
                 PhoneNumber = phoneNumber
-            }, userId);
+            }, result.SessionId, userId);
 
             if (verifyResponse == null || verifyResponse.Status != "successful")
             {
@@ -522,7 +532,7 @@ public class MonoService : IMonoService
             var detailsResponse = await BvnGetDetailsAsync(new MonoBvnDetailsRequestDto
             {
                 Otp = otp
-            }, userId);
+            }, result.SessionId, userId);
 
             if (detailsResponse?.Data != null && detailsResponse.Status == "successful")
             {
@@ -558,7 +568,7 @@ public class MonoService : IMonoService
         {
             Method = request.Method,
             PhoneNumber = request.PhoneNumber
-        }, userId);
+        }, request.SessionId, userId);
     }
 
     public async Task<MonoBvnDetailsResponseDto?> BvnGetDetailsWithSessionAsync(MonoBvnSessionDetailsRequestDto request, string? userId = null)
@@ -566,7 +576,7 @@ public class MonoService : IMonoService
         return await BvnGetDetailsAsync(new MonoBvnDetailsRequestDto
         {
             Otp = request.Otp
-        }, userId);
+        }, request.SessionId, userId);
     }
 
     // BVN Verification Tracking Methods

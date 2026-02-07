@@ -27,7 +27,8 @@ public class LoanService(
     IDocumentService documentService,
     IProvidusDisbursementService providusDisbursementService,
     ApplicationDbContext db,
-    ILogger<LoanService> logger
+    ILogger<LoanService> logger,
+    IAuditService auditService
 ) : ILoanService
 {
     private readonly UserManager<ApplicationUser> _userManager = userManager;
@@ -181,16 +182,20 @@ public class LoanService(
             throw new AppException("Failed to update loan status", 500);
         }
 
-        // Send offer letter after approval
-        try
-        {
-            await SendOfferLetterAsync(loanId, approvedBy);
-        }
-        catch (Exception)
-        {
-            // Log but don't fail the approval if offer letter sending fails
-            // The admin can resend the offer letter manually
-        }
+        // Audit log
+        await auditService.LogAsync(
+            action: "LoanApproved",
+            category: "Loan",
+            userId: approvedBy,
+            entityType: "Loan",
+            entityId: loanId.ToString(),
+            companyId: loan.CompanyId,
+            details: $"Loan {loan.Id} for {loan.User?.Email} approved. Amount: {loan.Amount:C}. Reason: {reason}",
+            amount: loan.Amount
+        );
+
+        // Offer letter is now sent during borrower onboarding Step 4
+        // No need to send it again during approval
 
         return loan;
     }
@@ -229,6 +234,18 @@ public class LoanService(
         {
             throw new AppException("Failed to update loan status", 500);
         }
+
+        // Audit log
+        await auditService.LogAsync(
+            action: "LoanRejected",
+            category: "Loan",
+            userId: rejectedBy,
+            entityType: "Loan",
+            entityId: loanId.ToString(),
+            companyId: loan.CompanyId,
+            details: $"Loan {loan.Id} for {loan.User?.Email} rejected. Amount: {loan.Amount:C}. Reason: {reason}",
+            amount: loan.Amount
+        );
 
         return loan;
     }
@@ -845,6 +862,18 @@ public class LoanService(
 
         _logger.LogInformation("Created repayment record for loan {LoanId} with TotalDue: {TotalDue}",
             loanId, repayment.TotalDue);
+
+        // Audit log for disbursement
+        await auditService.LogAsync(
+            action: "LoanDisbursed",
+            category: "Loan",
+            userId: disbursedBy,
+            entityType: "Loan",
+            entityId: loanId.ToString(),
+            companyId: loan.CompanyId,
+            details: $"Loan {loan.Id} disbursed to {borrowerName} ({borrowerEmail}). Reference: {disbursementResult.DisbursementReference}",
+            amount: disbursementAmount
+        );
 
         // Send disbursement notification email
         if (!string.IsNullOrEmpty(borrowerEmail))

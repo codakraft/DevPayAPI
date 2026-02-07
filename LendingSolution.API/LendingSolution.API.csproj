@@ -28,4 +28,10 @@
     <ProjectReference Include="..\\LendingSolution.Core\\LendingSolution.Core.csproj" />
     <ProjectReference Include="..\\LendingSolution.Infrastructure\\LendingSolution.Infrastructure.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Update="firebase-service-account-key.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 </Project>

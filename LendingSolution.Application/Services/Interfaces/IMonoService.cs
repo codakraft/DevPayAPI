@@ -16,8 +16,8 @@ public interface IMonoService
     
     // BVN Validation (Original)
     Task<MonoBvnLookupResponseDto?> BvnLookupAsync(MonoBvnLookupRequestDto request, string? userId = null);
-    Task<MonoBvnVerifyResponseDto?> BvnVerifyAsync(MonoBvnVerifyRequestDto request, string? userId = null);
-    Task<MonoBvnDetailsResponseDto?> BvnGetDetailsAsync(MonoBvnDetailsRequestDto request, string? userId = null);
+    Task<MonoBvnVerifyResponseDto?> BvnVerifyAsync(MonoBvnVerifyRequestDto request, string sessionId, string? userId = null);
+    Task<MonoBvnDetailsResponseDto?> BvnGetDetailsAsync(MonoBvnDetailsRequestDto request, string sessionId, string? userId = null);
     Task<MonoBvnValidationResultDto?> ValidateBvnCompleteAsync(string bvn, string method, string phoneNumber, string otp, string scope = "identity", string? userId = null);
     
     // Session-based BVN Validation (Enhanced)

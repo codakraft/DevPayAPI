@@ -20,7 +20,8 @@ public class AuthService(
     RoleManager<IdentityRole> roleManager,
     IDisbursementRepository disbursementRepository,
     IRepaymentRepository repaymentRepository,
-    ISupportTicketRepository supportTicketRepository
+    ISupportTicketRepository supportTicketRepository,
+    IAuditService auditService
 ) : IAuthService
 {
     private readonly UserManager<ApplicationUser> _userManager = userManager;
@@ -52,10 +53,29 @@ public class AuthService(
 
         if (user is null || !await _userManager.CheckPasswordAsync(user, body.Password))
         {
+            // Log failed login attempt
+            await auditService.LogAsync(
+                action: "LoginFailed",
+                category: "Security",
+                userEmail: body.Email,
+                details: $"Failed login attempt for {body.Email}",
+                isSuccess: false,
+                errorMessage: "Invalid credentials"
+            );
             throw new AppException("Invalid credentials", 401);
         }
 
         var tokenResponse = await _tokenService.GenerateTokenWithRefreshAsync(user);
+
+        // Log successful login
+        await auditService.LogAsync(
+            action: "LoginSuccessful",
+            category: "Security",
+            userId: user.Id,
+            userEmail: user.Email,
+            companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
+            details: $"User {user.Email} logged in successfully"
+        );
 
         var data = new
         {
@@ -84,10 +104,29 @@ public class AuthService(
 
         if (user is null || !await _userManager.CheckPasswordAsync(user, body.Password))
         {
+            // Log failed admin login attempt
+            await auditService.LogAsync(
+                action: "AdminLoginFailed",
+                category: "Security",
+                userEmail: body.Email,
+                details: $"Failed admin login attempt for {body.Email}",
+                isSuccess: false,
+                errorMessage: "Invalid credentials"
+            );
             throw new AppException("Invalid credentials", 401);
         }
 
         var tokenResponse = await _tokenService.GenerateTokenWithRefreshAsync(user);
+
+        // Log successful admin login
+        await auditService.LogAsync(
+            action: "AdminLoginSuccessful",
+            category: "Security",
+            userId: user.Id,
+            userEmail: user.Email,
+            companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
+            details: $"Admin {user.Email} logged in successfully"
+        );
 
         var data = new
         {
@@ -212,6 +251,18 @@ public class AuthService(
         // Assign Admin role
         await _userManager.AddToRoleAsync(user, "Admin");
 
+        // Audit log for admin creation
+        await auditService.LogAsync(
+            action: "AdminCreated",
+            category: "User",
+            userId: user.Id,
+            userEmail: user.Email,
+            entityType: "User",
+            entityId: user.Id,
+            companyId: body.CompanyId,
+            details: $"New admin created: {user.Email} for company {body.CompanyId}"
+        );
+
         return new { userId = user.Id };
     }
 
@@ -238,6 +289,17 @@ public class AuthService(
         }
 
         var result = await _userManager.AddToRoleAsync(user, role.Name!);
+
+        // Audit log for role assignment
+        await auditService.LogAsync(
+            action: "RoleAssigned",
+            category: "User",
+            entityType: "User",
+            entityId: user.Id,
+            userEmail: user.Email,
+            companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
+            details: $"Role '{role.Name}' assigned to user {user.Email}"
+        );
 
         return result;
     }

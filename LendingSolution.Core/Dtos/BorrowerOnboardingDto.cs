@@ -77,7 +77,8 @@ public class BorrowerStep2RequestDto
 
 public class BorrowerStep2ResponseDto
 {
-    public string Message { get; set; } = "BVN OTP sent successfully";
+    public string Message { get; set; } = "BVN verification initiated successfully";
+    public string? OtpHint { get; set; } // Hint for where OTP will be sent
 }
 
 // Step 2B: BVN OTP validation
@@ -171,6 +172,9 @@ public class BorrowerStep4RequestDto
 
     [Required]
     public Guid LoanId { get; set; }
+
+    [Required]
+    public bool AcceptOfferLetter { get; set; }
 }
 
 public class BorrowerStep4ResponseDto
