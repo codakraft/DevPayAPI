@@ -243,10 +243,11 @@ public class MonoController : ControllerBase
     /// Step 2: Verify BVN lookup with selected method - Parallel to Remita (non-disruptive)
     /// </summary>
     /// <param name="request">BVN verification request containing method and phone number</param>
+    /// <param name="sessionId">Mono session ID from initiate step</param>
     /// <returns>Mono BVN verification response</returns>
     [HttpPost("bvn-verify")]
     [Authorize(Roles = "SuperAdmin,Admin")]
-    public async Task<ActionResult<MonoBvnVerifyResponseDto>> BvnVerify([FromBody] MonoBvnVerifyRequestDto request)
+    public async Task<ActionResult<MonoBvnVerifyResponseDto>> BvnVerify([FromBody] MonoBvnVerifyRequestDto request, [FromHeader(Name = "x-session-id")] string sessionId)
     {
         try
         {
@@ -255,7 +256,12 @@ public class MonoController : ControllerBase
             _logger.LogInformation("Processing Mono BVN verification for method: {Method} by user: {UserId}", 
                 request.Method, userId);
             
-            var result = await _monoService.BvnVerifyAsync(request, userId);
+            if (string.IsNullOrEmpty(sessionId))
+            {
+                return BadRequest(ApiResponse.Fail("x-session-id header is required for BVN verification"));
+            }
+            
+            var result = await _monoService.BvnVerifyAsync(request, sessionId, userId);
 
             if (result == null)
             {
@@ -286,10 +292,11 @@ public class MonoController : ControllerBase
     /// Step 3: Get BVN details using OTP - Parallel to Remita (non-disruptive)
     /// </summary>
     /// <param name="request">BVN details request containing OTP</param>
+    /// <param name="sessionId">Mono session ID from initiate step</param>
     /// <returns>Mono BVN details response</returns>
     [HttpPost("bvn-details")]
     [Authorize(Roles = "SuperAdmin,Admin")]
-    public async Task<ActionResult<MonoBvnDetailsResponseDto>> BvnGetDetails([FromBody] MonoBvnDetailsRequestDto request)
+    public async Task<ActionResult<MonoBvnDetailsResponseDto>> BvnGetDetails([FromBody] MonoBvnDetailsRequestDto request, [FromHeader(Name = "x-session-id")] string sessionId)
     {
         try
         {
@@ -297,7 +304,12 @@ public class MonoController : ControllerBase
             
             _logger.LogInformation("Retrieving Mono BVN details with OTP by user: {UserId}", userId);
             
-            var result = await _monoService.BvnGetDetailsAsync(request, userId);
+            if (string.IsNullOrEmpty(sessionId))
+            {
+                return BadRequest(ApiResponse.Fail("x-session-id header is required for BVN details retrieval"));
+            }
+            
+            var result = await _monoService.BvnGetDetailsAsync(request, sessionId, userId);
 
             if (result == null)
             {

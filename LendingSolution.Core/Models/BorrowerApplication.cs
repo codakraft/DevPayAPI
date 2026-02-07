@@ -61,6 +61,9 @@ public class BorrowerApplication : Base
     
     // Mono BVN Verification
     public string? MonoBvnSessionId { get; set; }
+    public string? MonoBvnMethod { get; set; } // Selected method: phone, phone_1, email, alternate_phone
+    public string? MonoBvnMethodHint { get; set; } // Hint message for where OTP will be sent
+    public bool IsBvnVerified { get; set; } = false; // Track if BVN verification is complete
     public string? MonoBvnVerifiedData { get; set; } // JSON of verified BVN data from Mono
     
     // Offer Letter Acceptance

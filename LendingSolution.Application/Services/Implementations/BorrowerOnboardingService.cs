@@ -231,40 +231,47 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             throw new AppException("Failed to initiate BVN verification. Please try again later.", 500);
         }
 
-        // Save Mono session ID
+        // Save Mono session details - always use alternate_phone method
         application.MonoBvnSessionId = monoLookupResult.Data.SessionId;
-        _logger.LogInformation("Mono BVN lookup successful. SessionId: {SessionId}", application.MonoBvnSessionId);
+        
+        _logger.LogInformation("Mono BVN lookup successful. SessionId: {SessionId}, Using method: alternate_phone", 
+            application.MonoBvnSessionId);
 
-        // Step 2: Automatically trigger SMS OTP using phone number from Step 1
-        if (string.IsNullOrEmpty(application.PhoneNumber))
-        {
-            throw new AppException("Phone number is required for BVN verification", 400);
-        }
-
-        _logger.LogInformation("Triggering Mono SMS OTP for application {ApplicationId}", application.Id);
+        // Step 2: Verify - Send OTP to user using alternate_phone method
+        _logger.LogInformation("Sending Mono BVN OTP for application {ApplicationId}, Method: alternate_phone", 
+            application.Id);
         
         var monoVerifyResult = await _monoService.BvnVerifyAsync(new MonoBvnVerifyRequestDto
         {
-            Method = "sms",
+            Method = "alternate_phone",
             PhoneNumber = application.PhoneNumber
-        });
+        }, application.MonoBvnSessionId!);
 
         if (monoVerifyResult?.Status?.ToLower() != "successful")
         {
-            _logger.LogError("Mono BVN OTP trigger failed for application {ApplicationId}: {Message}", 
+            _logger.LogError("Mono BVN verify failed for application {ApplicationId}: {Message}", 
                 application.Id, monoVerifyResult?.Message ?? "No response from Mono");
-            throw new AppException("Failed to send BVN verification OTP. Please try again later.", 500);
+            throw new AppException(monoVerifyResult?.Message ?? "Failed to send OTP. Please try again.", 500);
         }
 
         // Update application status
         application.CurrentStep = BorrowerOnboardingStep.Step2_BvnSent;
+        application.BVN = GenerateBvnHash(request.BVN);
+        application.BankCode = request.BankCode;
+        application.AccountNo = request.AccountNo;
         application.BvnOtpGeneratedAt = DateTime.UtcNow;
+        application.UpdatedAt = DateTime.UtcNow;
         
         await _borrowerRepository.UpdateAsync(application);
 
-        _logger.LogInformation("BVN verification OTP sent via Mono for application {ApplicationId}", application.Id);
+        _logger.LogInformation("BVN verification OTP sent for application {ApplicationId}. Message: {Message}", 
+            application.Id, monoVerifyResult.Message);
 
-        return new BorrowerStep2ResponseDto();
+        return new BorrowerStep2ResponseDto
+        {
+            Message = monoVerifyResult.Message ?? "OTP sent successfully. Please check your phone.",
+            OtpHint = $"OTP sent to {application.PhoneNumber}"
+        };
     }
 
     public async Task<BorrowerStep2BResponseDto> Step2B_ValidateBvnOtpAsync(BorrowerStep2BRequestDto request)
@@ -293,7 +300,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         // Validate Mono session exists
         if (string.IsNullOrEmpty(application.MonoBvnSessionId))
         {
-            throw new AppException("BVN verification session not found. Please restart the process.", 400);
+            throw new AppException("BVN verification session not found. Please restart the process from Step 2.", 400);
         }
 
         // Validate OTP and retrieve BVN details from Mono
@@ -303,7 +310,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         var monoDetailsResult = await _monoService.BvnGetDetailsAsync(new MonoBvnDetailsRequestDto
         {
             Otp = request.Otp
-        });
+        }, application.MonoBvnSessionId!);
 
         if (monoDetailsResult?.Status?.ToLower() != "successful" || monoDetailsResult.Data == null)
         {
@@ -368,6 +375,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         // Update application
         application.CurrentStep = BorrowerOnboardingStep.Step2B_BvnValidated;
         application.BvnVerifiedAt = DateTime.UtcNow;
+        application.IsBvnVerified = true;
         application.UpdatedAt = DateTime.UtcNow;
 
         await _borrowerRepository.UpdateAsync(application);
@@ -781,21 +789,21 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             throw new AppException("BVN verification session not found. Please restart the process from Step 2.", 400);
         }
 
-        // Validate phone number exists
+        // Validate phone number is required for alternate_phone method
         if (string.IsNullOrEmpty(application.PhoneNumber))
         {
             throw new AppException("Phone number is required for BVN verification", 400);
         }
 
-        // Resend Mono BVN OTP via SMS
-        _logger.LogInformation("Resending Mono BVN OTP for application {ApplicationId}, SessionId: {SessionId}", 
+        // Resend Mono BVN OTP using alternate_phone method
+        _logger.LogInformation("Resending Mono BVN OTP for application {ApplicationId}, SessionId: {SessionId}, Method: alternate_phone", 
             application.Id, application.MonoBvnSessionId);
         
         var monoVerifyResult = await _monoService.BvnVerifyAsync(new MonoBvnVerifyRequestDto
         {
-            Method = "sms",
+            Method = "alternate_phone",
             PhoneNumber = application.PhoneNumber
-        });
+        }, application.MonoBvnSessionId!);
 
         if (monoVerifyResult?.Status?.ToLower() != "successful")
         {
