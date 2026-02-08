@@ -103,6 +103,9 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         }
 
         // Create borrower application
+        _logger.LogInformation("Step1: Received phone number: {PhoneNumber} (Length: {Length})", 
+            request.PhoneNumber, request.PhoneNumber?.Length);
+        
         var application = new BorrowerApplication
         {
             Email = request.Email,
@@ -116,6 +119,8 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         };
 
         var createdApplication = await _borrowerRepository.CreateAsync(application);
+        _logger.LogInformation("Step1: Created application with phone number: {PhoneNumber}", 
+            createdApplication.PhoneNumber);
 
         // Generate and send email OTP
         await GenerateEmailOtpAsync(new GenerateEmailOtpRequestDto { EmailAddress = request.Email });
