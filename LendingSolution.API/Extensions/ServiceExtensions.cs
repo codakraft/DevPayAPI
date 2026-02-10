@@ -209,6 +209,7 @@ public static class ServiceExtensions
             var documentService = provider.GetRequiredService<IDocumentService>();
             var providusDisbursementService = provider.GetRequiredService<IProvidusDisbursementService>();
             var auditService = provider.GetRequiredService<IAuditService>();
+            var otpService = provider.GetRequiredService<IOtpService>();
 
             return new ServiceManager(
                 contextAccessor,
@@ -239,7 +240,8 @@ public static class ServiceExtensions
                 emailService,
                 documentService,
                 providusDisbursementService,
-                auditService
+                auditService,
+                otpService
             );
         });
     }

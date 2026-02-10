@@ -43,5 +43,10 @@ public enum OtpType
     /// <summary>
     /// Document signing verification
     /// </summary>
-    DocumentSigning = 8
+    DocumentSigning = 8,
+    
+    /// <summary>
+    /// Admin login multi-factor authentication
+    /// </summary>
+    AdminLogin = 9
 }
