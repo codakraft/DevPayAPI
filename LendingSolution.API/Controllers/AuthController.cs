@@ -29,8 +29,30 @@ public class AuthController(
     {
         try
         {
-            var result = await _authService.AdminLogin(body);
-            _logger.LogInformation("User logged in successfully: {Email}", body.Email);
+            var result = await _authService.AdminLoginWithMfaAsync(body);
+            _logger.LogInformation("Admin MFA initiated for: {Email}", body.Email);
+            return Ok(ApiResponse.Ok("OTP sent to your email", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred during admin login.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    [AllowAnonymous]
+    [HttpPost("verify-login")]
+    public async Task<IActionResult> VerifyLogin([FromBody] VerifyAdminLoginRequestDto body)
+    {
+        try
+        {
+            var result = await _authService.VerifyAdminLoginOtpAsync(body);
+            _logger.LogInformation("Admin login verified successfully");
             return Ok(ApiResponse.Ok("Login successful", result));
         }
         catch (AppException ex)
@@ -40,7 +62,7 @@ public class AuthController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred during login.");
+            _logger.LogError(ex, "Error occurred during OTP verification.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }

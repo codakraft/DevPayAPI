@@ -21,7 +21,8 @@ public class AuthService(
     IDisbursementRepository disbursementRepository,
     IRepaymentRepository repaymentRepository,
     ISupportTicketRepository supportTicketRepository,
-    IAuditService auditService
+    IAuditService auditService,
+    IOtpService otpService
 ) : IAuthService
 {
     private readonly UserManager<ApplicationUser> _userManager = userManager;
@@ -35,6 +36,7 @@ public class AuthService(
     private readonly IDisbursementRepository _disbursementRepository = disbursementRepository;
     private readonly IRepaymentRepository _repaymentRepository = repaymentRepository;
     private readonly ISupportTicketRepository _supportTicketRepository = supportTicketRepository;
+    private readonly IOtpService _otpService = otpService;
 
     private static bool VerifyBvn(String Bvn)
     {
@@ -831,5 +833,246 @@ public class AuthService(
         return result;
 
     }
+
+    // ========== MFA Session Management ==========
+    
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, AdminMfaSession> _mfaSessions = new();
+    
+    /// <summary>
+    /// Initiates admin login with MFA by validating credentials and sending OTP
+    /// </summary>
+    public async Task<AdminLoginResponseDto> AdminLoginWithMfaAsync(LoginRequestDto body)
+    {
+        var user = await _userManager.FindByEmailAsync(body.Email);
+
+        if (user is null || !await _userManager.CheckPasswordAsync(user, body.Password))
+        {
+            // Log failed admin login attempt
+            await auditService.LogAsync(
+                action: "AdminLoginFailed",
+                category: "Security",
+                userEmail: body.Email,
+                details: $"Failed admin login attempt for {body.Email}",
+                isSuccess: false,
+                errorMessage: "Invalid credentials"
+            );
+            throw new AppException("Invalid credentials", 401);
+        }
+
+        // Generate session ID
+        var sessionId = Guid.NewGuid().ToString();
+        var expiresAt = DateTime.UtcNow.AddMinutes(5);
+
+        // Generate and send OTP
+        var otpRequest = new GenerateOtpRequest
+        {
+            Type = OtpType.AdminLogin,
+            RecipientIdentifier = user.Email!,
+            DeliveryChannel = NotificationChannel.Email,
+            SenderName = "DevPay Admin",
+            CustomPurpose = "Admin Login Verification",
+            ExpiryMinutesOverride = 5,
+            CreatedBy = "System"
+        };
+
+        var otpResult = await _otpService.GenerateAndSendOtpAsync(otpRequest);
+
+        if (!otpResult.Success)
+        {
+            await auditService.LogAsync(
+                action: "AdminLoginOtpFailed",
+                category: "Security",
+                userId: user.Id,
+                userEmail: user.Email,
+                details: $"Failed to send OTP to {user.Email}",
+                isSuccess: false,
+                errorMessage: otpResult.ErrorMessage
+            );
+            throw new AppException($"Failed to send OTP: {otpResult.ErrorMessage}", 500);
+        }
+
+        // Store session
+        var session = new AdminMfaSession
+        {
+            UserId = user.Id,
+            Email = user.Email!,
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = expiresAt
+        };
+        _mfaSessions[sessionId] = session;
+
+        // Cleanup expired sessions
+        CleanupExpiredMfaSessions();
+
+        // Log MFA initiation
+        await auditService.LogAsync(
+            action: "AdminLoginMfaInitiated",
+            category: "Security",
+            userId: user.Id,
+            userEmail: user.Email,
+            details: $"Admin MFA initiated for {user.Email}"
+        );
+
+        // Mask email for response
+        var maskedEmail = MaskEmail(user.Email!);
+
+        return new AdminLoginResponseDto
+        {
+            SessionId = sessionId,
+            ExpiresAt = expiresAt,
+            OtpSentTo = maskedEmail
+        };
+    }
+
+    /// <summary>
+    /// Verifies admin login OTP and returns authentication tokens
+    /// </summary>
+    public async Task<VerifyAdminLoginResponseDto> VerifyAdminLoginOtpAsync(VerifyAdminLoginRequestDto request)
+    {
+        // Validate session exists
+        if (!_mfaSessions.TryGetValue(request.SessionId, out var session))
+        {
+            await auditService.LogAsync(
+                action: "AdminLoginOtpVerificationFailed",
+                category: "Security",
+                details: $"Invalid session ID: {request.SessionId}",
+                isSuccess: false,
+                errorMessage: "Invalid or expired session"
+            );
+            throw new AppException("Invalid or expired session", 404);
+        }
+
+        // Check if session has expired
+        if (DateTime.UtcNow > session.ExpiresAt)
+        {
+            _mfaSessions.TryRemove(request.SessionId, out _);
+            await auditService.LogAsync(
+                action: "AdminLoginOtpVerificationFailed",
+                category: "Security",
+                userEmail: session.Email,
+                details: $"Expired session for {session.Email}",
+                isSuccess: false,
+                errorMessage: "Session expired"
+            );
+            throw new AppException("Session has expired. Please login again.", 400);
+        }
+
+        // Validate OTP
+        var otpValidation = new ValidateOtpRequest
+        {
+            Type = OtpType.AdminLogin,
+            RecipientIdentifier = session.Email,
+            Code = request.Otp
+        };
+
+        var otpResult = await _otpService.ValidateOtpAsync(otpValidation);
+
+        if (!otpResult.Success)
+        {
+            await auditService.LogAsync(
+                action: "AdminLoginOtpVerificationFailed",
+                category: "Security",
+                userEmail: session.Email,
+                details: $"Invalid OTP for {session.Email}",
+                isSuccess: false,
+                errorMessage: otpResult.ErrorMessage
+            );
+            
+            var errorMessage = otpResult.RemainingAttempts.HasValue 
+                ? $"Invalid OTP. {otpResult.RemainingAttempts} attempts remaining."
+                : "Invalid OTP.";
+            
+            throw new AppException(errorMessage, 400);
+        }
+
+        // Get user
+        var user = await _userManager.FindByIdAsync(session.UserId);
+        if (user is null)
+        {
+            _mfaSessions.TryRemove(request.SessionId, out _);
+            throw new AppException("User not found", 404);
+        }
+
+        // Generate tokens
+        var tokenResponse = await _tokenService.GenerateTokenWithRefreshAsync(user);
+
+        // Remove session
+        _mfaSessions.TryRemove(request.SessionId, out _);
+
+        // Log successful admin login
+        await auditService.LogAsync(
+            action: "AdminLoginSuccessful",
+            category: "Security",
+            userId: user.Id,
+            userEmail: user.Email,
+            companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
+            details: $"Admin {user.Email} logged in successfully with MFA"
+        );
+
+        return new VerifyAdminLoginResponseDto
+        {
+            AccessToken = tokenResponse.AccessToken,
+            RefreshToken = tokenResponse.RefreshToken,
+            TokenType = tokenResponse.TokenType,
+            AccessTokenExpiry = tokenResponse.AccessTokenExpiry,
+            RefreshTokenExpiry = tokenResponse.RefreshTokenExpiry,
+            User = new AdminUserDto
+            {
+                Id = user.Id,
+                FirstName = user.FirstName ?? string.Empty,
+                LastName = user.LastName ?? string.Empty,
+                Email = user.Email ?? string.Empty,
+                PhoneNumber = user.PhoneNumber,
+                CompanyId = user.CompanyId
+            }
+        };
+    }
+
+    /// <summary>
+    /// Masks an email address for display (e.g., "ad***@example.com")
+    /// </summary>
+    private static string MaskEmail(string email)
+    {
+        var parts = email.Split('@');
+        if (parts.Length != 2) return email;
+
+        var localPart = parts[0];
+        var domain = parts[1];
+
+        if (localPart.Length <= 2)
+        {
+            return $"{localPart[0]}***@{domain}";
+        }
+
+        return $"{localPart[..2]}***@{domain}";
+    }
+
+    /// <summary>
+    /// Removes expired MFA sessions from memory
+    /// </summary>
+    private static void CleanupExpiredMfaSessions()
+    {
+        var now = DateTime.UtcNow;
+        var expiredSessions = _mfaSessions
+            .Where(kvp => kvp.Value.ExpiresAt < now)
+            .Select(kvp => kvp.Key)
+            .ToList();
+
+        foreach (var sessionId in expiredSessions)
+        {
+            _mfaSessions.TryRemove(sessionId, out _);
+        }
+    }
+}
+
+/// <summary>
+/// Represents a temporary MFA session for admin login
+/// </summary>
+internal class AdminMfaSession
+{
+    public required string UserId { get; set; }
+    public required string Email { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime ExpiresAt { get; set; }
 }
 
