@@ -210,6 +210,7 @@ public static class ServiceExtensions
             var providusDisbursementService = provider.GetRequiredService<IProvidusDisbursementService>();
             var auditService = provider.GetRequiredService<IAuditService>();
             var otpService = provider.GetRequiredService<IOtpService>();
+            var mfaSessionRepository = provider.GetRequiredService<IMfaSessionRepository>();
 
             return new ServiceManager(
                 contextAccessor,
@@ -241,7 +242,8 @@ public static class ServiceExtensions
                 documentService,
                 providusDisbursementService,
                 auditService,
-                otpService
+                otpService,
+                mfaSessionRepository
             );
         });
     }
@@ -299,6 +301,7 @@ public static class ServiceExtensions
         services.AddScoped<IBorrowerApplicationRepository, BorrowerApplicationRepository>();
         services.AddScoped<IRemitaSalaryHistoryRepository, RemitaSalaryHistoryRepository>();
         services.AddScoped<IRemitaSalaryHistoryRepository, RemitaSalaryHistoryRepository>();
+        services.AddScoped<IMfaSessionRepository, MfaSessionRepository>();
     }
 
     public static void ConfigureServices(this IServiceCollection services, IConfiguration configuration)

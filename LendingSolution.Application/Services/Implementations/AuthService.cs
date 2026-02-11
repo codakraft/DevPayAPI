@@ -22,7 +22,8 @@ public class AuthService(
     IRepaymentRepository repaymentRepository,
     ISupportTicketRepository supportTicketRepository,
     IAuditService auditService,
-    IOtpService otpService
+    IOtpService otpService,
+    IMfaSessionRepository mfaSessionRepository
 ) : IAuthService
 {
     private readonly UserManager<ApplicationUser> _userManager = userManager;
@@ -37,6 +38,7 @@ public class AuthService(
     private readonly IRepaymentRepository _repaymentRepository = repaymentRepository;
     private readonly ISupportTicketRepository _supportTicketRepository = supportTicketRepository;
     private readonly IOtpService _otpService = otpService;
+    private readonly IMfaSessionRepository _mfaSessionRepository = mfaSessionRepository;
 
     private static bool VerifyBvn(String Bvn)
     {
@@ -836,8 +838,6 @@ public class AuthService(
 
     // ========== MFA Session Management ==========
     
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, AdminMfaSession> _mfaSessions = new();
-    
     /// <summary>
     /// Initiates admin login with MFA by validating credentials and sending OTP
     /// </summary>
@@ -891,18 +891,19 @@ public class AuthService(
             throw new AppException($"Failed to send OTP: {otpResult.ErrorMessage}", 500);
         }
 
-        // Store session
-        var session = new AdminMfaSession
+        // Store session in database
+        var session = new MfaSession
         {
+            SessionId = sessionId,
             UserId = user.Id,
             Email = user.Email!,
             CreatedAt = DateTime.UtcNow,
             ExpiresAt = expiresAt
         };
-        _mfaSessions[sessionId] = session;
+        await _mfaSessionRepository.CreateAsync(session);
 
         // Cleanup expired sessions
-        CleanupExpiredMfaSessions();
+        await _mfaSessionRepository.CleanupExpiredAsync();
 
         // Log MFA initiation
         await auditService.LogAsync(
@@ -929,8 +930,9 @@ public class AuthService(
     /// </summary>
     public async Task<VerifyAdminLoginResponseDto> VerifyAdminLoginOtpAsync(VerifyAdminLoginRequestDto request)
     {
-        // Validate session exists
-        if (!_mfaSessions.TryGetValue(request.SessionId, out var session))
+        // Validate session exists in database
+        var session = await _mfaSessionRepository.GetBySessionIdAsync(request.SessionId);
+        if (session is null)
         {
             await auditService.LogAsync(
                 action: "AdminLoginOtpVerificationFailed",
@@ -945,7 +947,7 @@ public class AuthService(
         // Check if session has expired
         if (DateTime.UtcNow > session.ExpiresAt)
         {
-            _mfaSessions.TryRemove(request.SessionId, out _);
+            await _mfaSessionRepository.DeleteAsync(request.SessionId);
             await auditService.LogAsync(
                 action: "AdminLoginOtpVerificationFailed",
                 category: "Security",
@@ -989,7 +991,7 @@ public class AuthService(
         var user = await _userManager.FindByIdAsync(session.UserId);
         if (user is null)
         {
-            _mfaSessions.TryRemove(request.SessionId, out _);
+            await _mfaSessionRepository.DeleteAsync(request.SessionId);
             throw new AppException("User not found", 404);
         }
 
@@ -997,7 +999,7 @@ public class AuthService(
         var tokenResponse = await _tokenService.GenerateTokenWithRefreshAsync(user);
 
         // Remove session
-        _mfaSessions.TryRemove(request.SessionId, out _);
+        await _mfaSessionRepository.DeleteAsync(request.SessionId);
 
         // Log successful admin login
         await auditService.LogAsync(
@@ -1046,23 +1048,6 @@ public class AuthService(
         }
 
         return $"{localPart[..2]}***@{domain}";
-    }
-
-    /// <summary>
-    /// Removes expired MFA sessions from memory
-    /// </summary>
-    private static void CleanupExpiredMfaSessions()
-    {
-        var now = DateTime.UtcNow;
-        var expiredSessions = _mfaSessions
-            .Where(kvp => kvp.Value.ExpiresAt < now)
-            .Select(kvp => kvp.Key)
-            .ToList();
-
-        foreach (var sessionId in expiredSessions)
-        {
-            _mfaSessions.TryRemove(sessionId, out _);
-        }
     }
 
     /// <summary>
@@ -1221,16 +1206,5 @@ public class AuthService(
             details: $"Password changed successfully for {user.Email}"
         );
     }
-}
-
-/// <summary>
-/// Represents a temporary MFA session for admin login
-/// </summary>
-internal class AdminMfaSession
-{
-    public required string UserId { get; set; }
-    public required string Email { get; set; }
-    public DateTime CreatedAt { get; set; }
-    public DateTime ExpiresAt { get; set; }
 }
 
