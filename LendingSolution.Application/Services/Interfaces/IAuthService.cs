@@ -25,4 +25,7 @@ public interface IAuthService
 
     // Company user management
     Task<CreateCompanyUserResponseDto> CreateCompanyUserAsync(CreateCompanyUserRequestDto body, Guid companyId, string createdByUserId);
+
+    // Password management
+    Task ChangePasswordAsync(ChangePasswordRequestDto body, string userId);
 }

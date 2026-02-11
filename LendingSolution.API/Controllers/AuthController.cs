@@ -178,5 +178,36 @@ public class AuthController(
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
+
+    /// <summary>
+    /// Change password. Also clears the first-login password change requirement.
+    /// </summary>
+    [Authorize]
+    [HttpPost("change-password")]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequestDto body)
+    {
+        try
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized(ApiResponse.Fail("User not authenticated"));
+            }
+
+            await _authService.ChangePasswordAsync(body, userId);
+            _logger.LogInformation("Password changed successfully for user {UserId}", userId);
+            return Ok(ApiResponse.Ok("Password changed successfully"));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while changing password.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
 }
 

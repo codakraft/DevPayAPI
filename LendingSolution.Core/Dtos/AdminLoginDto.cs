@@ -53,6 +53,11 @@ public class VerifyAdminLoginResponseDto
     public DateTime AccessTokenExpiry { get; set; }
     public DateTime RefreshTokenExpiry { get; set; }
     public required AdminUserDto User { get; set; }
+    
+    /// <summary>
+    /// If true, the frontend should prompt the user to change their password
+    /// </summary>
+    public bool RequiresPasswordChange { get; set; }
 }
 
 /// <summary>

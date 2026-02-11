@@ -1016,6 +1016,7 @@ public class AuthService(
             TokenType = tokenResponse.TokenType,
             AccessTokenExpiry = tokenResponse.AccessTokenExpiry,
             RefreshTokenExpiry = tokenResponse.RefreshTokenExpiry,
+            RequiresPasswordChange = user.RequiresPasswordChange,
             User = new AdminUserDto
             {
                 Id = user.Id,
@@ -1121,7 +1122,8 @@ public class AuthService(
             PhoneNumber = body.PhoneNumber,
             CompanyId = companyId.ToString(),
             IsActive = true,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            RequiresPasswordChange = true // Force password change on first login
         };
 
         var result = await _userManager.CreateAsync(user, body.Password);
@@ -1162,6 +1164,62 @@ public class AuthService(
             CompanyId = companyId,
             CreatedAt = user.CreatedAt
         };
+    }
+
+    /// <summary>
+    /// Changes user's password and clears the RequiresPasswordChange flag
+    /// </summary>
+    public async Task ChangePasswordAsync(ChangePasswordRequestDto body, string userId)
+    {
+        var user = await _userManager.FindByIdAsync(userId)
+            ?? throw new AppException("User not found", 404);
+
+        // Verify current password
+        var isCurrentPasswordValid = await _userManager.CheckPasswordAsync(user, body.CurrentPassword);
+        if (!isCurrentPasswordValid)
+        {
+            await auditService.LogAsync(
+                action: "PasswordChangeFailed",
+                category: "Security",
+                userId: user.Id,
+                userEmail: user.Email,
+                details: "Password change failed - incorrect current password",
+                isSuccess: false,
+                errorMessage: "Incorrect current password"
+            );
+            throw new AppException("Current password is incorrect", 400);
+        }
+
+        // Ensure new password is different from current
+        if (body.CurrentPassword == body.NewPassword)
+        {
+            throw new AppException("New password must be different from current password", 400);
+        }
+
+        // Change password
+        var result = await _userManager.ChangePasswordAsync(user, body.CurrentPassword, body.NewPassword);
+        if (!result.Succeeded)
+        {
+            throw new AppException(
+                "Failed to change password: " + string.Join(", ", result.Errors.Select(e => e.Description)), 400);
+        }
+
+        // Clear the first-login flag
+        if (user.RequiresPasswordChange)
+        {
+            user.RequiresPasswordChange = false;
+            await _userManager.UpdateAsync(user);
+        }
+
+        // Audit log
+        await auditService.LogAsync(
+            action: "PasswordChanged",
+            category: "Security",
+            userId: user.Id,
+            userEmail: user.Email,
+            companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
+            details: $"Password changed successfully for {user.Email}"
+        );
     }
 }
 
