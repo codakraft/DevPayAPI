@@ -1063,6 +1063,106 @@ public class AuthService(
             _mfaSessions.TryRemove(sessionId, out _);
         }
     }
+
+    /// <summary>
+    /// Allowed roles that a company Admin can assign to new users
+    /// </summary>
+    private static readonly HashSet<string> AllowedCompanyRoles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "LoanOfficer",
+        "CollectionsOfficer",
+        "Underwriter",
+        "SupportAgent",
+        "Auditor",
+        "Viewer"
+    };
+
+    /// <summary>
+    /// Creates a new user within the admin's company with a specific role
+    /// </summary>
+    public async Task<CreateCompanyUserResponseDto> CreateCompanyUserAsync(
+        CreateCompanyUserRequestDto body, Guid companyId, string createdByUserId)
+    {
+        // Validate role
+        if (!AllowedCompanyRoles.Contains(body.Role))
+        {
+            throw new AppException(
+                $"Invalid role '{body.Role}'. Allowed roles: {string.Join(", ", AllowedCompanyRoles)}", 400);
+        }
+
+        // Verify the role exists in the system
+        var roleExists = await _roleManager.RoleExistsAsync(body.Role);
+        if (!roleExists)
+        {
+            throw new AppException($"Role '{body.Role}' does not exist in the system", 400);
+        }
+
+        // Check if user with this email already exists
+        var existingUser = await _userManager.FindByEmailAsync(body.Email);
+        if (existingUser != null)
+        {
+            throw new AppException($"A user with email '{body.Email}' already exists", 409);
+        }
+
+        // Verify the company exists
+        var company = await _companyRepository.GetCompanyById(companyId);
+        if (company == null)
+        {
+            throw new AppException("Company not found", 404);
+        }
+
+        // Create the user
+        var user = new ApplicationUser
+        {
+            FirstName = body.FirstName,
+            LastName = body.LastName,
+            Email = body.Email,
+            UserName = body.Email,
+            PhoneNumber = body.PhoneNumber,
+            CompanyId = companyId.ToString(),
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        var result = await _userManager.CreateAsync(user, body.Password);
+
+        if (!result.Succeeded)
+        {
+            throw new AppException(
+                "Failed to create user: " + string.Join(", ", result.Errors.Select(e => e.Description)), 400);
+        }
+
+        // Assign the role
+        var roleResult = await _userManager.AddToRoleAsync(user, body.Role);
+        if (!roleResult.Succeeded)
+        {
+            // Rollback user creation if role assignment fails
+            await _userManager.DeleteAsync(user);
+            throw new AppException(
+                "Failed to assign role: " + string.Join(", ", roleResult.Errors.Select(e => e.Description)), 500);
+        }
+
+        // Audit log
+        await auditService.LogAsync(
+            action: "CompanyUserCreated",
+            category: "User",
+            userId: createdByUserId,
+            entityType: "User",
+            entityId: user.Id,
+            companyId: companyId,
+            details: $"New {body.Role} created: {user.Email} for company {company.Name} (ID: {companyId})"
+        );
+
+        return new CreateCompanyUserResponseDto
+        {
+            UserId = user.Id,
+            Email = user.Email!,
+            FullName = $"{user.FirstName} {user.LastName}",
+            Role = body.Role,
+            CompanyId = companyId,
+            CreatedAt = user.CreatedAt
+        };
+    }
 }
 
 /// <summary>

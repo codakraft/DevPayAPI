@@ -22,4 +22,7 @@ public interface IAuthService
     // MFA methods
     Task<AdminLoginResponseDto> AdminLoginWithMfaAsync(LoginRequestDto body);
     Task<VerifyAdminLoginResponseDto> VerifyAdminLoginOtpAsync(VerifyAdminLoginRequestDto request);
+
+    // Company user management
+    Task<CreateCompanyUserResponseDto> CreateCompanyUserAsync(CreateCompanyUserRequestDto body, Guid companyId, string createdByUserId);
 }

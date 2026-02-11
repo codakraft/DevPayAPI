@@ -19,6 +19,7 @@ public class CompanyController(
     ISupportService supportService,
     ILoanService loanService,
     IBorrowerOnboardingService borrowerOnboardingService,
+    IAuthService authService,
     ILogger<CompanyController> logger)
   : Controller
 {
@@ -27,6 +28,7 @@ public class CompanyController(
     private readonly ISupportService _supportService = supportService;
     private readonly ILoanService _loanService = loanService;
     private readonly IBorrowerOnboardingService _borrowerOnboardingService = borrowerOnboardingService;
+    private readonly IAuthService _authService = authService;
     private readonly ILogger<CompanyController> _logger = logger;
 
     [Authorize(Roles = "Admin")]
@@ -615,6 +617,52 @@ public class CompanyController(
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error occurred while fetching company users.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    /// <summary>
+    /// Creates a new user within the admin's company with a specific role.
+    /// Allowed roles: LoanOfficer, CollectionsOfficer, Underwriter, SupportAgent, Auditor, Viewer
+    /// </summary>
+    /// <param name="body">User creation details including role assignment</param>
+    /// <returns>Created user details with assigned role and company</returns>
+    // [POST] /api/company/users/create
+    [HttpPost("users/create")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> CreateCompanyUser([FromBody] CreateCompanyUserRequestDto body)
+    {
+        try
+        {
+            // Get company ID from JWT
+            var companyIdClaim = User.FindFirstValue("CompanyId");
+            if (string.IsNullOrEmpty(companyIdClaim) || !Guid.TryParse(companyIdClaim, out var companyId))
+            {
+                return BadRequest(ApiResponse.Fail("Company ID not found in token"));
+            }
+
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized(ApiResponse.Fail("User not authenticated"));
+            }
+
+            var result = await _authService.CreateCompanyUserAsync(body, companyId, userId);
+
+            _logger.LogInformation(
+                "Company user {Email} created with role {Role} for company {CompanyId} by admin {AdminId}",
+                body.Email, body.Role, companyId, userId);
+
+            return Ok(ApiResponse.Ok("Company user created successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while creating company user.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
