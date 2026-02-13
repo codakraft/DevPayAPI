@@ -1,4 +1,47 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace LendingSolution.Core.Dtos;
+
+/// <summary>
+/// Request DTO for Admin to create a user within their company
+/// </summary>
+public class CreateCompanyUserRequestDto
+{
+    [Required]
+    public string FirstName { get; set; } = string.Empty;
+
+    [Required]
+    public string LastName { get; set; } = string.Empty;
+
+    [Required]
+    [EmailAddress]
+    public string Email { get; set; } = string.Empty;
+
+    [Required]
+    [MinLength(8)]
+    public string Password { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Role to assign. Allowed values: LoanOfficer, CollectionsOfficer, Underwriter, SupportAgent, Auditor, Viewer
+    /// </summary>
+    [Required]
+    public string Role { get; set; } = string.Empty;
+
+    public string? PhoneNumber { get; set; }
+}
+
+/// <summary>
+/// Response DTO after creating a company user
+/// </summary>
+public class CreateCompanyUserResponseDto
+{
+    public string UserId { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string FullName { get; set; } = string.Empty;
+    public string Role { get; set; } = string.Empty;
+    public Guid CompanyId { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
 
 public class CompanyUserDto
 {

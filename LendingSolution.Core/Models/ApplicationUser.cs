@@ -14,6 +14,7 @@ public class ApplicationUser : IdentityUser
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow; // For accurate user registration analytics
     public bool IsActive { get; set; } = true; // User activation status
     public DateTime? LastLoginAt { get; set; }
+    public bool RequiresPasswordChange { get; set; } = false; // Force password change on first login
 
     public DateTime? DateOfBirth { get; set; } // <-- Make sure you assign a DateTime, not a string
 

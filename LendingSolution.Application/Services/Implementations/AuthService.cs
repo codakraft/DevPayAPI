@@ -21,7 +21,9 @@ public class AuthService(
     IDisbursementRepository disbursementRepository,
     IRepaymentRepository repaymentRepository,
     ISupportTicketRepository supportTicketRepository,
-    IAuditService auditService
+    IAuditService auditService,
+    IOtpService otpService,
+    IMfaSessionRepository mfaSessionRepository
 ) : IAuthService
 {
     private readonly UserManager<ApplicationUser> _userManager = userManager;
@@ -35,6 +37,8 @@ public class AuthService(
     private readonly IDisbursementRepository _disbursementRepository = disbursementRepository;
     private readonly IRepaymentRepository _repaymentRepository = repaymentRepository;
     private readonly ISupportTicketRepository _supportTicketRepository = supportTicketRepository;
+    private readonly IOtpService _otpService = otpService;
+    private readonly IMfaSessionRepository _mfaSessionRepository = mfaSessionRepository;
 
     private static bool VerifyBvn(String Bvn)
     {
@@ -830,6 +834,377 @@ public class AuthService(
 
         return result;
 
+    }
+
+    // ========== MFA Session Management ==========
+    
+    /// <summary>
+    /// Initiates admin login with MFA by validating credentials and sending OTP
+    /// </summary>
+    public async Task<AdminLoginResponseDto> AdminLoginWithMfaAsync(LoginRequestDto body)
+    {
+        var user = await _userManager.FindByEmailAsync(body.Email);
+
+        if (user is null || !await _userManager.CheckPasswordAsync(user, body.Password))
+        {
+            // Log failed admin login attempt
+            await auditService.LogAsync(
+                action: "AdminLoginFailed",
+                category: "Security",
+                userEmail: body.Email,
+                details: $"Failed admin login attempt for {body.Email}",
+                isSuccess: false,
+                errorMessage: "Invalid credentials"
+            );
+            throw new AppException("Invalid credentials", 401);
+        }
+
+        // Generate session ID
+        var sessionId = Guid.NewGuid().ToString();
+        var expiresAt = DateTime.UtcNow.AddMinutes(5);
+
+        // Generate and send OTP
+        var otpRequest = new GenerateOtpRequest
+        {
+            Type = OtpType.AdminLogin,
+            RecipientIdentifier = user.Email!,
+            DeliveryChannel = NotificationChannel.Email,
+            SenderName = "DevPay Admin",
+            CustomPurpose = "Admin Login Verification",
+            ExpiryMinutesOverride = 5,
+            CreatedBy = "System"
+        };
+
+        var otpResult = await _otpService.GenerateAndSendOtpAsync(otpRequest);
+
+        if (!otpResult.Success)
+        {
+            await auditService.LogAsync(
+                action: "AdminLoginOtpFailed",
+                category: "Security",
+                userId: user.Id,
+                userEmail: user.Email,
+                details: $"Failed to send OTP to {user.Email}",
+                isSuccess: false,
+                errorMessage: otpResult.ErrorMessage
+            );
+            throw new AppException($"Failed to send OTP: {otpResult.ErrorMessage}", 500);
+        }
+
+        // Store session in database
+        var session = new MfaSession
+        {
+            SessionId = sessionId,
+            UserId = user.Id,
+            Email = user.Email!,
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = expiresAt
+        };
+        await _mfaSessionRepository.CreateAsync(session);
+
+        // Cleanup expired sessions
+        await _mfaSessionRepository.CleanupExpiredAsync();
+
+        // Log MFA initiation
+        await auditService.LogAsync(
+            action: "AdminLoginMfaInitiated",
+            category: "Security",
+            userId: user.Id,
+            userEmail: user.Email,
+            details: $"Admin MFA initiated for {user.Email}"
+        );
+
+        // Mask email for response
+        var maskedEmail = MaskEmail(user.Email!);
+
+        return new AdminLoginResponseDto
+        {
+            SessionId = sessionId,
+            ExpiresAt = expiresAt,
+            OtpSentTo = maskedEmail
+        };
+    }
+
+    /// <summary>
+    /// Verifies admin login OTP and returns authentication tokens
+    /// </summary>
+    public async Task<VerifyAdminLoginResponseDto> VerifyAdminLoginOtpAsync(VerifyAdminLoginRequestDto request)
+    {
+        // Validate session exists in database
+        var session = await _mfaSessionRepository.GetBySessionIdAsync(request.SessionId);
+        if (session is null)
+        {
+            await auditService.LogAsync(
+                action: "AdminLoginOtpVerificationFailed",
+                category: "Security",
+                details: $"Invalid session ID: {request.SessionId}",
+                isSuccess: false,
+                errorMessage: "Invalid or expired session"
+            );
+            throw new AppException("Invalid or expired session", 404);
+        }
+
+        // Check if session has expired
+        if (DateTime.UtcNow > session.ExpiresAt)
+        {
+            await _mfaSessionRepository.DeleteAsync(request.SessionId);
+            await auditService.LogAsync(
+                action: "AdminLoginOtpVerificationFailed",
+                category: "Security",
+                userEmail: session.Email,
+                details: $"Expired session for {session.Email}",
+                isSuccess: false,
+                errorMessage: "Session expired"
+            );
+            throw new AppException("Session has expired. Please login again.", 400);
+        }
+
+        // Validate OTP
+        var otpValidation = new ValidateOtpRequest
+        {
+            Type = OtpType.AdminLogin,
+            RecipientIdentifier = session.Email,
+            Code = request.Otp
+        };
+
+        var otpResult = await _otpService.ValidateOtpAsync(otpValidation);
+
+        if (!otpResult.Success)
+        {
+            await auditService.LogAsync(
+                action: "AdminLoginOtpVerificationFailed",
+                category: "Security",
+                userEmail: session.Email,
+                details: $"Invalid OTP for {session.Email}",
+                isSuccess: false,
+                errorMessage: otpResult.ErrorMessage
+            );
+            
+            var errorMessage = otpResult.RemainingAttempts.HasValue 
+                ? $"Invalid OTP. {otpResult.RemainingAttempts} attempts remaining."
+                : "Invalid OTP.";
+            
+            throw new AppException(errorMessage, 400);
+        }
+
+        // Get user
+        var user = await _userManager.FindByIdAsync(session.UserId);
+        if (user is null)
+        {
+            await _mfaSessionRepository.DeleteAsync(request.SessionId);
+            throw new AppException("User not found", 404);
+        }
+
+        // Generate tokens
+        var tokenResponse = await _tokenService.GenerateTokenWithRefreshAsync(user);
+
+        // Remove session
+        await _mfaSessionRepository.DeleteAsync(request.SessionId);
+
+        // Log successful admin login
+        await auditService.LogAsync(
+            action: "AdminLoginSuccessful",
+            category: "Security",
+            userId: user.Id,
+            userEmail: user.Email,
+            companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
+            details: $"Admin {user.Email} logged in successfully with MFA"
+        );
+
+        return new VerifyAdminLoginResponseDto
+        {
+            AccessToken = tokenResponse.AccessToken,
+            RefreshToken = tokenResponse.RefreshToken,
+            TokenType = tokenResponse.TokenType,
+            AccessTokenExpiry = tokenResponse.AccessTokenExpiry,
+            RefreshTokenExpiry = tokenResponse.RefreshTokenExpiry,
+            RequiresPasswordChange = user.RequiresPasswordChange,
+            User = new AdminUserDto
+            {
+                Id = user.Id,
+                FirstName = user.FirstName ?? string.Empty,
+                LastName = user.LastName ?? string.Empty,
+                Email = user.Email ?? string.Empty,
+                PhoneNumber = user.PhoneNumber,
+                CompanyId = user.CompanyId
+            }
+        };
+    }
+
+    /// <summary>
+    /// Masks an email address for display (e.g., "ad***@example.com")
+    /// </summary>
+    private static string MaskEmail(string email)
+    {
+        var parts = email.Split('@');
+        if (parts.Length != 2) return email;
+
+        var localPart = parts[0];
+        var domain = parts[1];
+
+        if (localPart.Length <= 2)
+        {
+            return $"{localPart[0]}***@{domain}";
+        }
+
+        return $"{localPart[..2]}***@{domain}";
+    }
+
+    /// <summary>
+    /// Allowed roles that a company Admin can assign to new users
+    /// </summary>
+    private static readonly HashSet<string> AllowedCompanyRoles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "LoanOfficer",
+        "CollectionsOfficer",
+        "Underwriter",
+        "SupportAgent",
+        "Auditor",
+        "Viewer"
+    };
+
+    /// <summary>
+    /// Creates a new user within the admin's company with a specific role
+    /// </summary>
+    public async Task<CreateCompanyUserResponseDto> CreateCompanyUserAsync(
+        CreateCompanyUserRequestDto body, Guid companyId, string createdByUserId)
+    {
+        // Validate role
+        if (!AllowedCompanyRoles.Contains(body.Role))
+        {
+            throw new AppException(
+                $"Invalid role '{body.Role}'. Allowed roles: {string.Join(", ", AllowedCompanyRoles)}", 400);
+        }
+
+        // Verify the role exists in the system
+        var roleExists = await _roleManager.RoleExistsAsync(body.Role);
+        if (!roleExists)
+        {
+            throw new AppException($"Role '{body.Role}' does not exist in the system", 400);
+        }
+
+        // Check if user with this email already exists
+        var existingUser = await _userManager.FindByEmailAsync(body.Email);
+        if (existingUser != null)
+        {
+            throw new AppException($"A user with email '{body.Email}' already exists", 409);
+        }
+
+        // Verify the company exists
+        var company = await _companyRepository.GetCompanyById(companyId);
+        if (company == null)
+        {
+            throw new AppException("Company not found", 404);
+        }
+
+        // Create the user
+        var user = new ApplicationUser
+        {
+            FirstName = body.FirstName,
+            LastName = body.LastName,
+            Email = body.Email,
+            UserName = body.Email,
+            PhoneNumber = body.PhoneNumber,
+            CompanyId = companyId.ToString(),
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            RequiresPasswordChange = true // Force password change on first login
+        };
+
+        var result = await _userManager.CreateAsync(user, body.Password);
+
+        if (!result.Succeeded)
+        {
+            throw new AppException(
+                "Failed to create user: " + string.Join(", ", result.Errors.Select(e => e.Description)), 400);
+        }
+
+        // Assign the role
+        var roleResult = await _userManager.AddToRoleAsync(user, body.Role);
+        if (!roleResult.Succeeded)
+        {
+            // Rollback user creation if role assignment fails
+            await _userManager.DeleteAsync(user);
+            throw new AppException(
+                "Failed to assign role: " + string.Join(", ", roleResult.Errors.Select(e => e.Description)), 500);
+        }
+
+        // Audit log
+        await auditService.LogAsync(
+            action: "CompanyUserCreated",
+            category: "User",
+            userId: createdByUserId,
+            entityType: "User",
+            entityId: user.Id,
+            companyId: companyId,
+            details: $"New {body.Role} created: {user.Email} for company {company.Name} (ID: {companyId})"
+        );
+
+        return new CreateCompanyUserResponseDto
+        {
+            UserId = user.Id,
+            Email = user.Email!,
+            FullName = $"{user.FirstName} {user.LastName}",
+            Role = body.Role,
+            CompanyId = companyId,
+            CreatedAt = user.CreatedAt
+        };
+    }
+
+    /// <summary>
+    /// Changes user's password and clears the RequiresPasswordChange flag
+    /// </summary>
+    public async Task ChangePasswordAsync(ChangePasswordRequestDto body, string userId)
+    {
+        var user = await _userManager.FindByIdAsync(userId)
+            ?? throw new AppException("User not found", 404);
+
+        // Verify current password
+        var isCurrentPasswordValid = await _userManager.CheckPasswordAsync(user, body.CurrentPassword);
+        if (!isCurrentPasswordValid)
+        {
+            await auditService.LogAsync(
+                action: "PasswordChangeFailed",
+                category: "Security",
+                userId: user.Id,
+                userEmail: user.Email,
+                details: "Password change failed - incorrect current password",
+                isSuccess: false,
+                errorMessage: "Incorrect current password"
+            );
+            throw new AppException("Current password is incorrect", 400);
+        }
+
+        // Ensure new password is different from current
+        if (body.CurrentPassword == body.NewPassword)
+        {
+            throw new AppException("New password must be different from current password", 400);
+        }
+
+        // Change password
+        var result = await _userManager.ChangePasswordAsync(user, body.CurrentPassword, body.NewPassword);
+        if (!result.Succeeded)
+        {
+            throw new AppException(
+                "Failed to change password: " + string.Join(", ", result.Errors.Select(e => e.Description)), 400);
+        }
+
+        // Clear the first-login flag
+        if (user.RequiresPasswordChange)
+        {
+            user.RequiresPasswordChange = false;
+            await _userManager.UpdateAsync(user);
+        }
+
+        // Audit log
+        await auditService.LogAsync(
+            action: "PasswordChanged",
+            category: "Security",
+            userId: user.Id,
+            userEmail: user.Email,
+            companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
+            details: $"Password changed successfully for {user.Email}"
+        );
     }
 }
 

@@ -43,7 +43,9 @@ public class ServiceManager(
     IEmailService emailService,
     IDocumentService documentService,
     IProvidusDisbursementService providusDisbursementService,
-    IAuditService auditService
+    IAuditService auditService,
+    IOtpService otpService,
+    IMfaSessionRepository mfaSessionRepository
 ) : IServiceManager
 {
     private readonly Lazy<IAuthService> _authService = new Lazy<IAuthService>(() =>
@@ -59,7 +61,9 @@ public class ServiceManager(
                     disbursementRepository,
                     repaymentRepository,
                     supportTicketRepository,
-                    auditService
+                    auditService,
+                    otpService,
+                    mfaSessionRepository
                 ));
     private readonly Lazy<ITokenService> _tokenService = new Lazy<ITokenService>(() =>
                 new TokenService(userManager, jwtconfig, refreshTokenRepository));

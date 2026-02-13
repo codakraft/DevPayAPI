@@ -39,9 +39,10 @@ public class NotificationOrchestrationService : INotificationOrchestrationServic
     {
         var result = new SendNotificationResult();
         
-        // Get fee settings
+        // Get fee settings - skip fees for system/admin operations (no company context)
+        var isSystemOperation = request.CompanyId == Guid.Empty;
         var settings = await _settingsService.GetSettingsAsync();
-        var otpFee = settings.OtpFee;
+        var otpFee = isSystemOperation ? 0m : settings.OtpFee;
 
         // Determine which channels are required
         var (emailRequired, smsRequired, emailPrimary, smsPrimary) = DetermineChannelRequirements(request.Channel);
@@ -293,6 +294,13 @@ public class NotificationOrchestrationService : INotificationOrchestrationServic
 
     private async Task DeductFeeAsync(Guid companyId, decimal amount, string description)
     {
+        // Skip fee deduction for system/admin operations or zero-amount fees
+        if (companyId == Guid.Empty || amount <= 0)
+        {
+            _logger.LogInformation("Skipping fee deduction: CompanyId={CompanyId}, Amount={Amount}", companyId, amount);
+            return;
+        }
+
         var companyWallet = await _walletRepository.GetWalletByCompanyIdAsync(companyId);
         if (companyWallet == null)
         {

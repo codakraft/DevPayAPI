@@ -18,4 +18,14 @@ public interface IAuthService
     Task<bool> Logout(string? userId = null);
     Task<object> GetSuperAdminDashboardAsync();
     Task<object> GetAdminListAsync(AdminFilterDto filter);
+    
+    // MFA methods
+    Task<AdminLoginResponseDto> AdminLoginWithMfaAsync(LoginRequestDto body);
+    Task<VerifyAdminLoginResponseDto> VerifyAdminLoginOtpAsync(VerifyAdminLoginRequestDto request);
+
+    // Company user management
+    Task<CreateCompanyUserResponseDto> CreateCompanyUserAsync(CreateCompanyUserRequestDto body, Guid companyId, string createdByUserId);
+
+    // Password management
+    Task ChangePasswordAsync(ChangePasswordRequestDto body, string userId);
 }
