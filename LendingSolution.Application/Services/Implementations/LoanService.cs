@@ -698,16 +698,11 @@ public class LoanService(
     {
         var loan = await _loanRepository.GetLoanByIdWithIncludes(loanId) ?? throw new AppException("Loan not found", 404);
 
-        // Only allow disbursement for OfferLetterSigned status
-        if (loan.Status != LoanStatus.OfferLetterSigned)
+        // Allow disbursement for Approved or OfferLetterSigned status
+        // Offer letter acceptance is now captured during borrower onboarding (Step 4)
+        if (loan.Status != LoanStatus.Approved && loan.Status != LoanStatus.OfferLetterSigned)
         {
-            throw new AppException($"Cannot disburse loan with status: {loan.Status}. Signed offer letter must be uploaded first.", 400);
-        }
-
-        // Verify signed offer letter document exists
-        if (!loan.SignedOfferLetterDocumentId.HasValue)
-        {
-            throw new AppException("Signed offer letter not found. Please upload the signed offer letter before disbursement.", 400);
+            throw new AppException($"Cannot disburse loan with status: {loan.Status}. Loan must be approved first.", 400);
         }
 
         // Get borrower details for transfer
