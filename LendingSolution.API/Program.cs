@@ -1,10 +1,18 @@
 using LendingSolution.API.Extensions;
 using LendingSolution.Infrastructure.Data;
+using LendingSolution.Infrastructure.Logging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using System.Globalization;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add database logger provider for persisting logs
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (!string.IsNullOrEmpty(connectionString))
+{
+    builder.Logging.AddProvider(new DatabaseLoggerProvider(connectionString, LogLevel.Information));
+}
 
 builder.Services.ConfigureSqlContext(builder.Configuration);
 builder.Services.ConfigureIdentity();
