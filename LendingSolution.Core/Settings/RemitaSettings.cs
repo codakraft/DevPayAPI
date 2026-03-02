@@ -22,6 +22,12 @@ public class RemitaSettings
     public string ConnectGatewayBaseUrl { get; set; } = string.Empty;
     public string SecretKey { get; set; } = string.Empty;
     
+    // Direct Debit mandate endpoints (echannelsvc/echannel/mandate/)
+    public string GenerateMandateEndpoint { get; set; } = string.Empty;
+    public string ActivateMandateOtpEndpoint { get; set; } = string.Empty;
+    public string ValidateMandateOtpEndpoint { get; set; } = string.Empty;
+    public string StopDirectDebitMandateEndpoint { get; set; } = string.Empty;
+
     // When true the service will contact the live Remita API. When false it will use mock data.
     // Default to true for backward compatibility
     public bool UseLiveData { get; set; } = true;

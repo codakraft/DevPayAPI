@@ -556,6 +556,286 @@ public class RemitaService : IRemitaService
         throw new NotImplementedException();
     }
 
+    // ══════════════════════════════════════════════════════════════════════════
+    // Direct Debit Mandate API  (echannelsvc/echannel/mandate/)
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Step 1 – Creates a new Direct Debit mandate in Remita.
+    /// Endpoint: POST /echannelsvc/echannel/mandate/setup
+    /// </summary>
+    public async Task<DirectDebitGenerateMandateResponseDto?> GenerateDirectDebitMandateAsync(
+        DirectDebitGenerateMandateRequestDto request)
+    {
+        try
+        {
+            var normalizedPhone = NormalizePhoneNumber(request.PayerPhone);
+
+            var payload = new
+            {
+                requestId     = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString(),
+                mandateType   = request.MandateType,
+                payerName     = request.PayerName,
+                payerEmail    = request.PayerEmail,
+                payerPhone    = normalizedPhone,
+                payerBankCode = request.PayerBankCode,
+                payerAccount  = request.PayerAccountNumber,
+                amount        = request.Amount,
+                startDate     = request.StartDate,
+                endDate       = request.EndDate,
+                narration     = request.Description ?? string.Empty,
+                addedBy       = _settings.MerchantId
+            };
+
+            var endpoint = string.IsNullOrEmpty(_settings.GenerateMandateEndpoint)
+                ? "/echannelsvc/echannel/mandate/setup"
+                : _settings.GenerateMandateEndpoint;
+
+            var requestUrl = BuildUrl(endpoint);
+            _logger.LogInformation("[DirectDebit] GenerateMandate → {Url} | Payload: {Payload}",
+                requestUrl, JsonSerializer.Serialize(payload));
+
+            var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUrl)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+            };
+            AddRemitaHeaders(httpRequest);
+
+            var response = await _httpClient.SendAsync(httpRequest);
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+            _logger.LogInformation("[DirectDebit] GenerateMandate ← HTTP {StatusCode} | Body: {Body}",
+                (int)response.StatusCode, responseContent);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("[DirectDebit] GenerateMandate failed. Status: {Status}, Body: {Body}",
+                    response.StatusCode, responseContent);
+                return null;
+            }
+
+            var result = JsonSerializer.Deserialize<DirectDebitGenerateMandateResponseDto>(
+                responseContent,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (result == null || result.StatusCode != "00")
+            {
+                _logger.LogWarning("[DirectDebit] GenerateMandate: Remita returned non-success. StatusCode={Code}, Message={Msg}",
+                    result?.StatusCode, result?.Message);
+                return result; // Return it so the caller can surface Remita's message
+            }
+
+            _logger.LogInformation("[DirectDebit] GenerateMandate succeeded. MandateId={MandateId}",
+                result.Data?.MandateId);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[DirectDebit] GenerateMandate threw an unexpected error");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Step 2a – Sends an OTP to the mandate holder's phone to initiate activation.
+    /// Endpoint: POST /echannelsvc/echannel/mandate/requestAuthorization
+    /// </summary>
+    public async Task<DirectDebitRequestAuthorizationResponseDto?> RequestMandateAuthorizationAsync(
+        DirectDebitRequestAuthorizationDto request)
+    {
+        try
+        {
+            var payload = new
+            {
+                mandateId   = request.MandateId,
+                phoneNumber = NormalizePhoneNumber(request.PhoneNumber),
+                requestId   = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString()
+            };
+
+            var endpoint = string.IsNullOrEmpty(_settings.ActivateMandateOtpEndpoint)
+                ? "/echannelsvc/echannel/mandate/requestAuthorization"
+                : _settings.ActivateMandateOtpEndpoint;
+
+            var requestUrl = BuildUrl(endpoint);
+            _logger.LogInformation("[DirectDebit] RequestAuthorization → {Url} | MandateId={MandateId}",
+                requestUrl, request.MandateId);
+
+            var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUrl)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+            };
+            AddRemitaHeaders(httpRequest);
+
+            var response = await _httpClient.SendAsync(httpRequest);
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+            _logger.LogInformation("[DirectDebit] RequestAuthorization ← HTTP {StatusCode} | Body: {Body}",
+                (int)response.StatusCode, responseContent);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("[DirectDebit] RequestAuthorization failed. Status: {Status}", response.StatusCode);
+                return null;
+            }
+
+            var result = JsonSerializer.Deserialize<DirectDebitRequestAuthorizationResponseDto>(
+                responseContent,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (result == null || result.StatusCode != "00")
+            {
+                _logger.LogWarning("[DirectDebit] RequestAuthorization: non-success from Remita. StatusCode={Code}, Message={Msg}",
+                    result?.StatusCode, result?.Message);
+            }
+            else
+            {
+                _logger.LogInformation("[DirectDebit] OTP dispatched successfully for MandateId={MandateId}", request.MandateId);
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[DirectDebit] RequestAuthorization threw an unexpected error. MandateId={MandateId}",
+                request.MandateId);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Step 2b – Validates the OTP, completing mandate activation.
+    /// Endpoint: POST /echannelsvc/echannel/mandate/validateAuthorization
+    /// </summary>
+    public async Task<DirectDebitValidateAuthorizationResponseDto?> ValidateMandateAuthorizationAsync(
+        DirectDebitValidateAuthorizationDto request)
+    {
+        try
+        {
+            var payload = new
+            {
+                mandateId   = request.MandateId,
+                otp         = request.Otp,
+                phoneNumber = NormalizePhoneNumber(request.PhoneNumber),
+                requestId   = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString()
+            };
+
+            var endpoint = string.IsNullOrEmpty(_settings.ValidateMandateOtpEndpoint)
+                ? "/echannelsvc/echannel/mandate/validateAuthorization"
+                : _settings.ValidateMandateOtpEndpoint;
+
+            var requestUrl = BuildUrl(endpoint);
+            _logger.LogInformation("[DirectDebit] ValidateAuthorization → {Url} | MandateId={MandateId}",
+                requestUrl, request.MandateId);
+
+            var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUrl)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+            };
+            AddRemitaHeaders(httpRequest);
+
+            var response = await _httpClient.SendAsync(httpRequest);
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+            _logger.LogInformation("[DirectDebit] ValidateAuthorization ← HTTP {StatusCode} | Body: {Body}",
+                (int)response.StatusCode, responseContent);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("[DirectDebit] ValidateAuthorization failed. Status: {Status}", response.StatusCode);
+                return null;
+            }
+
+            var result = JsonSerializer.Deserialize<DirectDebitValidateAuthorizationResponseDto>(
+                responseContent,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (result == null || result.StatusCode != "00")
+            {
+                _logger.LogWarning("[DirectDebit] ValidateAuthorization: non-success from Remita. StatusCode={Code}, Message={Msg}",
+                    result?.StatusCode, result?.Message);
+            }
+            else
+            {
+                _logger.LogInformation("[DirectDebit] Mandate activated successfully. MandateId={MandateId}, MandateRef={Ref}",
+                    request.MandateId, result.MandateRef);
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[DirectDebit] ValidateAuthorization threw an unexpected error. MandateId={MandateId}",
+                request.MandateId);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Cancels an active Direct Debit mandate.
+    /// Endpoint: POST /echannelsvc/echannel/mandate/stop
+    /// </summary>
+    public async Task<DirectDebitStopMandateResponseDto?> StopDirectDebitMandateAsync(
+        DirectDebitStopMandateRequestDto request)
+    {
+        try
+        {
+            var payload = new
+            {
+                mandateId = request.MandateId,
+                requestId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString()
+            };
+
+            var endpoint = string.IsNullOrEmpty(_settings.StopDirectDebitMandateEndpoint)
+                ? "/echannelsvc/echannel/mandate/stop"
+                : _settings.StopDirectDebitMandateEndpoint;
+
+            var requestUrl = BuildUrl(endpoint);
+            _logger.LogInformation("[DirectDebit] StopMandate → {Url} | MandateId={MandateId}",
+                requestUrl, request.MandateId);
+
+            var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUrl)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+            };
+            AddRemitaHeaders(httpRequest);
+
+            var response = await _httpClient.SendAsync(httpRequest);
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+            _logger.LogInformation("[DirectDebit] StopMandate ← HTTP {StatusCode} | Body: {Body}",
+                (int)response.StatusCode, responseContent);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("[DirectDebit] StopMandate failed. Status: {Status}", response.StatusCode);
+                return null;
+            }
+
+            var result = JsonSerializer.Deserialize<DirectDebitStopMandateResponseDto>(
+                responseContent,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (result == null || result.StatusCode != "00")
+            {
+                _logger.LogWarning("[DirectDebit] StopMandate: non-success from Remita. StatusCode={Code}, Message={Msg}",
+                    result?.StatusCode, result?.Message);
+            }
+            else
+            {
+                _logger.LogInformation("[DirectDebit] Mandate stopped successfully. MandateId={MandateId}",
+                    request.MandateId);
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[DirectDebit] StopMandate threw an unexpected error. MandateId={MandateId}",
+                request.MandateId);
+            return null;
+        }
+    }
+
     /// <summary>
     /// Processes and saves loan collection notification from Remita webhook
     /// </summary>
