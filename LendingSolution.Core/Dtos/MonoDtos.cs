@@ -652,3 +652,63 @@ public class MonoCreditworthinessResponseDto
     [JsonPropertyName("data")]
     public object? Data { get; set; }
 }
+
+// ─── Initiate Debit ────────────────────────────────────────────────────────
+
+/// <summary>
+/// Request to manually trigger a debit collection on an active Mono mandate.
+/// POST /v3/payments/mandates/{mandateId}/debit
+/// </summary>
+public class MonoInitiateDebitRequestDto
+{
+    /// <summary>
+    /// Amount in kobo (i.e. multiply Naira by 100).
+    /// For variable mandates this can be any amount up to the mandate cap.
+    /// Leave null to debit the mandate's default amount.
+    /// </summary>
+    [JsonPropertyName("amount")]
+    public int? Amount { get; set; }
+
+    /// <summary>
+    /// Optional narration / description that appears on the bank statement.
+    /// </summary>
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+}
+
+/// <summary>Top-level response after initiating a debit on a Mono mandate.</summary>
+public class MonoInitiateDebitResponseDto
+{
+    [JsonPropertyName("status")]
+    public string? Status { get; set; }
+
+    [JsonPropertyName("message")]
+    public string? Message { get; set; }
+
+    [JsonPropertyName("data")]
+    public MonoInitiateDebitDataDto? Data { get; set; }
+}
+
+public class MonoInitiateDebitDataDto
+{
+    [JsonPropertyName("id")]
+    public string? Id { get; set; }
+
+    [JsonPropertyName("status")]
+    public string? Status { get; set; }
+
+    [JsonPropertyName("amount")]
+    public int Amount { get; set; }
+
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+
+    [JsonPropertyName("reference")]
+    public string? Reference { get; set; }
+
+    [JsonPropertyName("mandate")]
+    public string? Mandate { get; set; }
+
+    [JsonPropertyName("created_at")]
+    public DateTime? CreatedAt { get; set; }
+}

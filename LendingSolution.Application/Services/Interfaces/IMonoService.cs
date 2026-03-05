@@ -10,7 +10,8 @@ public interface IMonoService
     Task<MonoCancelMandateResponseDto?> CancelMandateAsync(string mandateId, string? userId = null);
     Task<MonoPauseMandateResponseDto?> PauseMandateAsync(string mandateId, string? userId = null);
     Task<MonoReinstateMandateResponseDto?> ReinstateMandateAsync(string mandateId, string? userId = null);
-    
+    Task<MonoInitiateDebitResponseDto?> InitiateDebitAsync(string mandateId, MonoInitiateDebitRequestDto request, string? userId = null);
+
     // Data Services
     Task<MonoBanksResponseDto?> GetBanksAsync();
     

@@ -258,6 +258,72 @@ public class MonoService : IMonoService
         }
     }
 
+    /// <summary>
+    /// Manually triggers a collection debit against an active mandate.
+    /// Endpoint: POST /v3/payments/mandates/{mandateId}/debit
+    /// </summary>
+    public async Task<MonoInitiateDebitResponseDto?> InitiateDebitAsync(
+        string mandateId,
+        MonoInitiateDebitRequestDto request,
+        string? userId = null)
+    {
+        try
+        {
+            var requestUri = $"/v3/payments/mandates/{mandateId}/debit";
+
+            // Only include fields that are set — amount is optional for fixed mandates
+            object payload = request.Amount.HasValue
+                ? new { amount = request.Amount.Value, description = request.Description ?? string.Empty }
+                : new { description = request.Description ?? string.Empty };
+
+            var httpRequest = new HttpRequestMessage(HttpMethod.Post, BuildUrl(requestUri))
+            {
+                Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+            };
+
+            AddMonoHeaders(httpRequest);
+
+            _logger.LogInformation("[Mono] InitiateDebit → {Uri} | MandateId={MandateId}, Amount={Amount}",
+                requestUri, mandateId, request.Amount?.ToString() ?? "default");
+
+            var response = await _httpClient.SendAsync(httpRequest);
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+            _logger.LogInformation("[Mono] InitiateDebit ← HTTP {StatusCode} | MandateId={MandateId} | Body: {Body}",
+                (int)response.StatusCode, mandateId, responseContent);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("[Mono] InitiateDebit failed for mandate {MandateId}: {StatusCode} - {Content}",
+                    mandateId, response.StatusCode, responseContent);
+
+                try
+                {
+                    var errorResponse = JsonSerializer.Deserialize<MonoErrorResponseDto>(responseContent);
+                    _logger.LogError("[Mono] InitiateDebit API error: {Message}", errorResponse?.Message);
+                }
+                catch { /* ignore parse failure */ }
+
+                return null;
+            }
+
+            var result = JsonSerializer.Deserialize<MonoInitiateDebitResponseDto>(responseContent, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+            _logger.LogInformation("[Mono] InitiateDebit succeeded for MandateId={MandateId}, DebitId={DebitId}, Status={Status}",
+                mandateId, result?.Data?.Id, result?.Data?.Status);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Mono] InitiateDebit threw an unexpected error for mandate {MandateId}", mandateId);
+            return null;
+        }
+    }
+
     public async Task<MonoBanksResponseDto?> GetBanksAsync()
     {
         try

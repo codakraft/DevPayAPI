@@ -628,6 +628,71 @@ public class MonoController : ControllerBase
         return $"{bvn[..3]}***{bvn[^1]}";
     }
 
+    // ======================== Banks Endpoint ========================
+
+    /// <summary>
+    /// Returns the list of banks supported by Mono for mandate creation.
+    /// </summary>
+    [HttpGet("banks")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    public async Task<IActionResult> GetBanks()
+    {
+        try
+        {
+            var result = await _monoService.GetBanksAsync();
+
+            if (result == null)
+                return BadRequest(ApiResponse.Fail("Failed to retrieve banks from Mono"));
+
+            return Ok(ApiResponse.Ok("Banks retrieved successfully", result));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving Mono banks list");
+            return StatusCode(500, ApiResponse.Fail("An error occurred while retrieving banks"));
+        }
+    }
+
+    // ======================== Initiate Debit Endpoint ========================
+
+    /// <summary>
+    /// Manually triggers a one-off debit collection against an active mandate.
+    /// For <c>variable</c> mandates you can supply a custom <c>amount</c> (in kobo).
+    /// For <c>fixed</c> mandates omit <c>amount</c> and Mono uses the mandate amount.
+    /// </summary>
+    /// <param name="mandateId">The Mono mandate ID to debit</param>
+    /// <param name="request">Optional amount (kobo) and description</param>
+    [HttpPost("mandate/{mandateId}/debit")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    public async Task<IActionResult> InitiateDebit(string mandateId, [FromBody] MonoInitiateDebitRequestDto request)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        try
+        {
+            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+            _logger.LogInformation("InitiateDebit called for MandateId={MandateId}, Amount={Amount}, UserId={UserId}",
+                mandateId, request.Amount, userId);
+
+            var result = await _monoService.InitiateDebitAsync(mandateId, request, userId);
+
+            if (result == null)
+                return BadRequest(ApiResponse.Fail("Failed to initiate debit. Check that the mandate is active and ready to debit."));
+
+            if (result.Status?.ToLower() == "success" || result.Status?.ToLower() == "successful")
+                return Ok(ApiResponse.Ok("Debit initiated successfully", result));
+
+            return BadRequest(ApiResponse.Fail(result.Message ?? "Mono returned a non-success status"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error initiating debit for mandate {MandateId}", mandateId);
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred while initiating the debit"));
+        }
+    }
+
     /// <summary>
     /// Get Mono service status (for health checks)
     /// </summary>
