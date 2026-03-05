@@ -10,13 +10,10 @@ namespace LendingSolution.Core.Dtos;
 
 /// <summary>
 /// Request to create a new Direct Debit mandate via Remita's echannel API.
+/// merchantId, serviceTypeId, requestId, hash are injected server-side from settings.
 /// </summary>
 public class DirectDebitGenerateMandateRequestDto
 {
-    /// <summary>Your system's unique reference for this mandate.</summary>
-    [Required]
-    public string MandateRef { get; set; } = string.Empty;
-
     /// <summary>Full name of the account holder.</summary>
     [Required]
     public string PayerName { get; set; } = string.Empty;
@@ -55,6 +52,12 @@ public class DirectDebitGenerateMandateRequestDto
     /// Defaults to "DD".
     /// </summary>
     public string MandateType { get; set; } = "DD";
+
+    /// <summary>
+    /// Debit frequency: DAILY, WEEKLY, MONTHLY, QUARTERLY, ANNUALLY, etc.
+    /// Defaults to "MONTHLY".
+    /// </summary>
+    public string Frequency { get; set; } = "MONTHLY";
 
     /// <summary>Optional description / narration.</summary>
     public string? Description { get; set; }

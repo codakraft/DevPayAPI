@@ -563,6 +563,7 @@ public class RemitaService : IRemitaService
     /// <summary>
     /// Step 1 – Creates a new Direct Debit mandate in Remita.
     /// Endpoint: POST /echannelsvc/echannel/mandate/setup
+    /// Hash = SHA-512(merchantId + serviceTypeId + requestId + amount + apiKey)
     /// </summary>
     public async Task<DirectDebitGenerateMandateResponseDto?> GenerateDirectDebitMandateAsync(
         DirectDebitGenerateMandateRequestDto request)
@@ -571,20 +572,32 @@ public class RemitaService : IRemitaService
         {
             var normalizedPhone = NormalizePhoneNumber(request.PayerPhone);
 
+            // requestId is a unique timestamp-based value, same pattern used across the service
+            var requestId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+
+            // Amount must be sent as a plain string (no decimals) per Remita's spec
+            var amountStr = request.Amount.ToString("F2");
+
+            // hash = SHA-512(merchantId + serviceTypeId + requestId + amount + apiKey)
+            var hashInput  = $"{_settings.MerchantId}{_settings.ServiceTypeId}{requestId}{amountStr}{_settings.ApiKey}";
+            var hash       = ComputeSha512Hash(hashInput);
+
             var payload = new
             {
-                requestId     = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString(),
-                mandateType   = request.MandateType,
+                merchantId    = _settings.MerchantId,
+                serviceTypeId = _settings.ServiceTypeId,
+                requestId,
+                hash,
                 payerName     = request.PayerName,
                 payerEmail    = request.PayerEmail,
                 payerPhone    = normalizedPhone,
                 payerBankCode = request.PayerBankCode,
                 payerAccount  = request.PayerAccountNumber,
-                amount        = request.Amount,
+                amount        = amountStr,
                 startDate     = request.StartDate,
                 endDate       = request.EndDate,
-                narration     = request.Description ?? string.Empty,
-                addedBy       = _settings.MerchantId
+                mandateType   = request.MandateType,
+                frequency     = request.Frequency
             };
 
             var endpoint = string.IsNullOrEmpty(_settings.GenerateMandateEndpoint)
@@ -592,8 +605,8 @@ public class RemitaService : IRemitaService
                 : _settings.GenerateMandateEndpoint;
 
             var requestUrl = BuildUrl(endpoint);
-            _logger.LogInformation("[DirectDebit] GenerateMandate → {Url} | Payload: {Payload}",
-                requestUrl, JsonSerializer.Serialize(payload));
+            _logger.LogInformation("[DirectDebit] GenerateMandate → {Url} | MerchantId={MerchantId}, ServiceTypeId={ServiceTypeId}, RequestId={RequestId}, Amount={Amount}, PayerAccount={Account}",
+                requestUrl, _settings.MerchantId, _settings.ServiceTypeId, requestId, amountStr, request.PayerAccountNumber);
 
             var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUrl)
             {
