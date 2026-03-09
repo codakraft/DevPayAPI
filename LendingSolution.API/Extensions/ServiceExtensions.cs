@@ -332,6 +332,12 @@ public static class ServiceExtensions
                     client.Timeout = TimeSpan.FromSeconds(30); // 30 seconds timeout
                 });
             });
+
+        // Named client for Remita — demo server can be slow, so use a longer timeout
+        services.AddHttpClient("RemitaClient", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(200);
+        });
     }
 
     public static void ConfigureEndpointExplorer(this IServiceCollection services)

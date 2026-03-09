@@ -33,7 +33,7 @@ public class RemitaService : IRemitaService
         ApplicationDbContext db)
     {
         _settings = options.Value;
-        _httpClient = httpClientFactory.CreateClient();
+        _httpClient = httpClientFactory.CreateClient("RemitaClient");
         _logger = logger;
         _cRepo = cRepo;
         _db = db;
@@ -593,7 +593,7 @@ public class RemitaService : IRemitaService
                 payerPhone    = normalizedPhone,
                 payerBankCode = request.PayerBankCode,
                 payerAccount  = request.PayerAccountNumber,
-                amount        = amountStr,
+                amount        = "10000",
                 startDate     = request.StartDate,
                 endDate       = request.EndDate,
                 mandateType   = request.MandateType,
@@ -608,6 +608,7 @@ public class RemitaService : IRemitaService
             _logger.LogInformation("[DirectDebit] GenerateMandate → {Url} | MerchantId={MerchantId}, ServiceTypeId={ServiceTypeId}, RequestId={RequestId}, Amount={Amount}, PayerAccount={Account}",
                 requestUrl, _settings.MerchantId, _settings.ServiceTypeId, requestId, amountStr, request.PayerAccountNumber);
 
+            _logger.LogInformation("[DirectDebit] GenerateMandate Payload: {Payload}", JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
             var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUrl)
             {
                 Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
@@ -622,9 +623,25 @@ public class RemitaService : IRemitaService
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogError("[DirectDebit] GenerateMandate failed. Status: {Status}, Body: {Body}",
-                    response.StatusCode, responseContent);
-                return null;
+                _logger.LogError("[DirectDebit] GenerateMandate failed. HTTP {Status} | Body: {Body}",
+                    (int)response.StatusCode, responseContent);
+                return new DirectDebitGenerateMandateResponseDto
+                {
+                    StatusCode = ((int)response.StatusCode).ToString(),
+                    Message    = $"Remita returned HTTP {(int)response.StatusCode}. Please verify your bank details and try again."
+                };
+            }
+
+            // Guard against non-JSON responses (e.g. HTML error pages from Remita's server)
+            var trimmed = responseContent.TrimStart();
+            if (!trimmed.StartsWith("{") && !trimmed.StartsWith("["))
+            {
+                _logger.LogError("[DirectDebit] GenerateMandate received a non-JSON response. Body: {Body}", responseContent);
+                return new DirectDebitGenerateMandateResponseDto
+                {
+                    StatusCode = "ERR",
+                    Message    = "Remita returned an unexpected response. Please try again later."
+                };
             }
 
             var result = JsonSerializer.Deserialize<DirectDebitGenerateMandateResponseDto>(

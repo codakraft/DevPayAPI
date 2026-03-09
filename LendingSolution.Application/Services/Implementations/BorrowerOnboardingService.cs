@@ -4,8 +4,10 @@ using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Models;
 using LendingSolution.Core.Enum;
+using LendingSolution.Core.Settings;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using System.Text.Json;
 
 namespace LendingSolution.Application.Services.Implementations;
@@ -30,6 +32,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     private readonly INotificationOrchestrationService _notificationOrchestrator;
     private readonly IOtpService _otpService;
     private readonly IAuditService _auditService;
+    private readonly RemitaSettings _remitaSettings;
 
     public BorrowerOnboardingService(
         IBorrowerApplicationRepository borrowerRepository,
@@ -49,7 +52,8 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         IOtpService otpService,
         IConfiguration configuration,
         ILogger<BorrowerOnboardingService> logger,
-        IAuditService auditService)
+        IAuditService auditService,
+        IOptions<RemitaSettings> remitaSettings)
     {
         _borrowerRepository = borrowerRepository;
         _companyRepository = companyRepository;
@@ -69,6 +73,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         _configuration = configuration;
         _logger = logger;
         _auditService = auditService;
+        _remitaSettings = remitaSettings.Value;
     }
 
     public async Task<BorrowerStep1ResponseDto> Step1_SaveBorrowerInfoAsync(BorrowerStep1RequestDto request)
@@ -236,6 +241,8 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         
         _logger.LogInformation("Mono BVN lookup successful. SessionId: {SessionId}, Using method: alternate_phone", 
             application.MonoBvnSessionId);
+        
+
 
         // Step 2: Verify - Send OTP to user using alternate_phone method
         _logger.LogInformation("Sending Mono BVN OTP for application {ApplicationId}, Method: alternate_phone", 
@@ -472,17 +479,33 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         SalaryEligibilityDto eligibilityResult;
         eligibilityResult = await _salaryEligibilityService.CalculateLoanEligibilityAsync(salaryHistoryResponse, product);
 
-        // Check if borrower is eligible (FinalMaxEligible > 0 means eligible)
-        if (eligibilityResult.FinalMaxEligible <= 0)
+        // When NOT using live data (dev/test mode), bypass eligibility check and use
+        // a default eligible amount of ₦50,000 so test flows are not blocked by
+        // dummy salary figures returned by Remita sandbox.
+        if (!_remitaSettings.UseLiveData && eligibilityResult.FinalMaxEligible <= 0)
         {
-            _logger.LogWarning("Borrower not eligible for loan product {ProductId}. Reason: {Reason}",
-                product.Id, eligibilityResult.EligibilityReason);
-            throw new AppException(eligibilityResult.EligibilityReason, 400);
-        }
+            _logger.LogWarning(
+                "Non-live mode: Remita eligibility check failed for application {ApplicationId} " +
+                "(Reason: {Reason}). Applying default test eligibility of ₦50,000.",
+                application.Id, eligibilityResult.EligibilityReason);
 
-        // Use calculated eligibility amounts
-        minLoanEligible = eligibilityResult.FinalMinEligible;
-        maxLoanEligible = eligibilityResult.FinalMaxEligible;
+            minLoanEligible = product.MinAmount > 0 ? product.MinAmount : 1_000m;
+            maxLoanEligible = 50_000m;
+        }
+        else
+        {
+            // Check if borrower is eligible (FinalMaxEligible > 0 means eligible)
+            if (eligibilityResult.FinalMaxEligible <= 0)
+            {
+                _logger.LogWarning("Borrower not eligible for loan product {ProductId}. Reason: {Reason}",
+                    product.Id, eligibilityResult.EligibilityReason);
+                throw new AppException(eligibilityResult.EligibilityReason, 400);
+            }
+
+            // Use calculated eligibility amounts
+            minLoanEligible = eligibilityResult.FinalMinEligible;
+            maxLoanEligible = eligibilityResult.FinalMaxEligible;
+        }
 
         // Log the eligibility calculation for debugging
         _logger.LogInformation("Salary-based eligibility calculated for application {ApplicationId}: Min={MinEligible}, Max={MaxEligible}, Reason={Reason}",
@@ -659,6 +682,110 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
         // Since the loan entity now has the generated ID, we can use it
         application.LoanId = loan.Id;
+
+        // ── REMITA DIRECT DEBIT (commented out — using Mono instead) ────────────
+        // var ddStartDate = DateTime.UtcNow.AddDays(1).ToString("dd/MM/yyyy");
+        // var ddEndDate   = DateTime.UtcNow.AddMonths(request.Tenor + 1).ToString("dd/MM/yyyy");
+        // var directDebitRequest = new DirectDebitGenerateMandateRequestDto
+        // {
+        //     PayerName          = $"{application.FirstName} {application.LastName}",
+        //     PayerEmail         = application.Email,
+        //     PayerPhone         = application.PhoneNumber ?? string.Empty,
+        //     PayerBankCode      = "057",
+        //     PayerAccountNumber = "0100034932",
+        //     Amount             = monthlyRepayment,
+        //     StartDate          = "03/07/2025",
+        //     EndDate            = "03/01/2026",
+        //     MandateType        = "SO",
+        //     Frequency          = "Month",
+        //     Description        = $"Loan repayment mandate for {application.FirstName} {application.LastName} — Loan ID: {loan.Id}"
+        // };
+        // _logger.LogInformation(
+        //     "Initiating Remita Direct Debit mandate for loan {LoanId} — Borrower: {Email}, Amount: {Amount:C}, Period: {Start} to {End}",
+        //     loan.Id, application.Email, monthlyRepayment, ddStartDate, ddEndDate);
+        // var directDebitResult = await _remitaService.GenerateDirectDebitMandateAsync(directDebitRequest);
+        // if (directDebitResult?.Data?.MandateId != null)
+        // {
+        //     _logger.LogInformation(
+        //         "Remita Direct Debit mandate created for loan {LoanId}: MandateId={MandateId}, RequestId={RequestId}, Status={Status}",
+        //         loan.Id, directDebitResult.Data.MandateId, directDebitResult.Data.RequestId, directDebitResult.Status);
+        // }
+        // else
+        // {
+        //     _logger.LogError(
+        //         "Remita Direct Debit mandate failed for loan {LoanId}. StatusCode={StatusCode}, Message={Message}. Cancelling loan record.",
+        //         loan.Id, directDebitResult?.StatusCode, directDebitResult?.Message);
+        //     await _loanRepository.UpdateLoanStatus(loan.Id, LoanStatus.Cancelled);
+        //     application.LoanId    = null;
+        //     application.UpdatedAt = DateTime.UtcNow;
+        //     await _borrowerRepository.UpdateAsync(application);
+        //     var remitaMessage = !string.IsNullOrWhiteSpace(directDebitResult?.Message)
+        //         ? directDebitResult.Message
+        //         : "Unable to set up Direct Debit mandate with Remita.";
+        //     throw new AppException(
+        //         $"Loan application could not be completed: {remitaMessage} Please verify your bank details and try again.", 502);
+        // }
+        // ── END REMITA ────────────────────────────────────────────────────────────
+
+        // ── MONO DIRECT DEBIT MANDATE ─────────────────────────────────────────────
+        // Amount sent to Mono must be in kobo (smallest currency unit)
+        var monoStartDate = DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-dd");
+        var monoEndDate   = DateTime.UtcNow.AddMonths(request.Tenor + 1).ToString("yyyy-MM-dd");
+        var amountInKobo  = (int)(monthlyRepayment * 100);
+
+        var monoMandateRequest = new MonoGenerateMandateRequestDto
+        {
+            DebitType     = "variable",
+            Customer      = $"{application.FirstName} {application.LastName}",
+            MandateType   = "emandate",
+            Amount        = amountInKobo,
+            Reference     = $"LOAN-{loan.Id}",
+            AccountNumber = application.AccountNo  ?? string.Empty,
+            BankCode      = application.BankCode   ?? string.Empty,
+            FeeBearer     = "BUSINESS",
+            Description   = $"Loan repayment mandate for {application.FirstName} {application.LastName} — Loan ID: {loan.Id}",
+            StartDate     = monoStartDate,
+            EndDate       = monoEndDate,
+            Meta          = new { loan_id = loan.Id }
+        };
+
+        _logger.LogInformation(
+            "Initiating Mono Direct Debit mandate for loan {LoanId} — Borrower: {Email}, Amount: {AmountKobo} kobo, Period: {Start} to {End}",
+            loan.Id, application.Email, amountInKobo, monoStartDate, monoEndDate);
+
+        var monoMandateResult = await _monoService.GenerateMandateAsync(loan.Id, monoMandateRequest, application.Email);
+
+        _logger.LogInformation(
+            "Mono Direct Debit mandate response",
+             monoMandateResult);
+
+        if (monoMandateResult?.Data?.Id != null)
+        {
+            _logger.LogInformation(
+                "Mono Direct Debit mandate created for loan {LoanId}: MandateId={MandateId}, Status={Status}",
+                loan.Id, monoMandateResult.Data.Id, monoMandateResult.Data.Status);
+        }
+        else
+        {
+            // Mandate setup failed — cancel the loan record and block submission
+            _logger.LogError(
+                "Mono Direct Debit mandate failed for loan {LoanId}. Status={Status}, Message={Message}. Cancelling loan record.",
+                loan.Id, monoMandateResult?.Status, monoMandateResult?.Message);
+
+            await _loanRepository.UpdateLoanStatus(loan.Id, LoanStatus.Cancelled);
+            application.LoanId    = null;
+            application.UpdatedAt = DateTime.UtcNow;
+            await _borrowerRepository.UpdateAsync(application);
+
+            var monoMessage = !string.IsNullOrWhiteSpace(monoMandateResult?.Message)
+                ? monoMandateResult.Message
+                : "Unable to set up Direct Debit mandate.";
+
+            throw new AppException(
+                $"Loan application could not be completed: {monoMessage} Please verify your bank details and try again.",
+                502);
+        }
+        // ── END MONO ──────────────────────────────────────────────────────────────
 
         // Update application with offer letter acceptance (always true at this point due to validation)
         application.CurrentStep = BorrowerOnboardingStep.Step4_LoanSubmitted;
