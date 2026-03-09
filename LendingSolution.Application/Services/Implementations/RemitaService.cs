@@ -33,7 +33,7 @@ public class RemitaService : IRemitaService
         ApplicationDbContext db)
     {
         _settings = options.Value;
-        _httpClient = httpClientFactory.CreateClient();
+        _httpClient = httpClientFactory.CreateClient("RemitaClient");
         _logger = logger;
         _cRepo = cRepo;
         _db = db;

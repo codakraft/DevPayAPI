@@ -4,8 +4,10 @@ using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Models;
 using LendingSolution.Core.Enum;
+using LendingSolution.Core.Settings;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using System.Text.Json;
 
 namespace LendingSolution.Application.Services.Implementations;
@@ -30,6 +32,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     private readonly INotificationOrchestrationService _notificationOrchestrator;
     private readonly IOtpService _otpService;
     private readonly IAuditService _auditService;
+    private readonly RemitaSettings _remitaSettings;
 
     public BorrowerOnboardingService(
         IBorrowerApplicationRepository borrowerRepository,
@@ -49,7 +52,8 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         IOtpService otpService,
         IConfiguration configuration,
         ILogger<BorrowerOnboardingService> logger,
-        IAuditService auditService)
+        IAuditService auditService,
+        IOptions<RemitaSettings> remitaSettings)
     {
         _borrowerRepository = borrowerRepository;
         _companyRepository = companyRepository;
@@ -69,6 +73,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         _configuration = configuration;
         _logger = logger;
         _auditService = auditService;
+        _remitaSettings = remitaSettings.Value;
     }
 
     public async Task<BorrowerStep1ResponseDto> Step1_SaveBorrowerInfoAsync(BorrowerStep1RequestDto request)
@@ -472,17 +477,33 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         SalaryEligibilityDto eligibilityResult;
         eligibilityResult = await _salaryEligibilityService.CalculateLoanEligibilityAsync(salaryHistoryResponse, product);
 
-        // Check if borrower is eligible (FinalMaxEligible > 0 means eligible)
-        if (eligibilityResult.FinalMaxEligible <= 0)
+        // When NOT using live data (dev/test mode), bypass eligibility check and use
+        // a default eligible amount of ₦50,000 so test flows are not blocked by
+        // dummy salary figures returned by Remita sandbox.
+        if (!_remitaSettings.UseLiveData && eligibilityResult.FinalMaxEligible <= 0)
         {
-            _logger.LogWarning("Borrower not eligible for loan product {ProductId}. Reason: {Reason}",
-                product.Id, eligibilityResult.EligibilityReason);
-            throw new AppException(eligibilityResult.EligibilityReason, 400);
-        }
+            _logger.LogWarning(
+                "Non-live mode: Remita eligibility check failed for application {ApplicationId} " +
+                "(Reason: {Reason}). Applying default test eligibility of ₦50,000.",
+                application.Id, eligibilityResult.EligibilityReason);
 
-        // Use calculated eligibility amounts
-        minLoanEligible = eligibilityResult.FinalMinEligible;
-        maxLoanEligible = eligibilityResult.FinalMaxEligible;
+            minLoanEligible = product.MinAmount > 0 ? product.MinAmount : 1_000m;
+            maxLoanEligible = 50_000m;
+        }
+        else
+        {
+            // Check if borrower is eligible (FinalMaxEligible > 0 means eligible)
+            if (eligibilityResult.FinalMaxEligible <= 0)
+            {
+                _logger.LogWarning("Borrower not eligible for loan product {ProductId}. Reason: {Reason}",
+                    product.Id, eligibilityResult.EligibilityReason);
+                throw new AppException(eligibilityResult.EligibilityReason, 400);
+            }
+
+            // Use calculated eligibility amounts
+            minLoanEligible = eligibilityResult.FinalMinEligible;
+            maxLoanEligible = eligibilityResult.FinalMaxEligible;
+        }
 
         // Log the eligibility calculation for debugging
         _logger.LogInformation("Salary-based eligibility calculated for application {ApplicationId}: Min={MinEligible}, Max={MaxEligible}, Reason={Reason}",
