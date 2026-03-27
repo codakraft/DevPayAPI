@@ -110,6 +110,31 @@ public class DirectDebitRequestAuthorizationDto
 }
 
 /// <summary>
+/// A single auth parameter descriptor returned by Remita for requestAuthorization.
+/// Tells the frontend which inputs are required (e.g. OTP, card digits).
+/// </summary>
+public class RemitaAuthParamDescriptorDto
+{
+    [JsonPropertyName("param1")]
+    public string? Param1 { get; set; }
+
+    [JsonPropertyName("label1")]
+    public string? Label1 { get; set; }
+
+    [JsonPropertyName("description1")]
+    public string? Description1 { get; set; }
+
+    [JsonPropertyName("param2")]
+    public string? Param2 { get; set; }
+
+    [JsonPropertyName("label2")]
+    public string? Label2 { get; set; }
+
+    [JsonPropertyName("description2")]
+    public string? Description2 { get; set; }
+}
+
+/// <summary>
 /// Response after requesting OTP from Remita.
 /// </summary>
 public class DirectDebitRequestAuthorizationResponseDto
@@ -125,6 +150,12 @@ public class DirectDebitRequestAuthorizationResponseDto
 
     [JsonPropertyName("requestId")]
     public string? RequestId { get; set; }
+
+    /// <summary>
+    /// Describes the auth inputs the borrower must supply (e.g. OTP, last 4 card digits).
+    /// </summary>
+    [JsonPropertyName("authParams")]
+    public List<RemitaAuthParamDescriptorDto>? AuthParams { get; set; }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -133,21 +164,37 @@ public class DirectDebitRequestAuthorizationResponseDto
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// <summary>
+/// A single auth param value submitted to Remita for validateAuthorization.
+/// </summary>
+public class RemitaAuthParamValueDto
+{
+    [JsonPropertyName("param1")]
+    public string? Param1 { get; set; }
+
+    [JsonPropertyName("param2")]
+    public string? Param2 { get; set; }
+
+    [JsonPropertyName("value")]
+    [Required]
+    public string Value { get; set; } = string.Empty;
+}
+
+/// <summary>
 /// Request to validate the OTP entered by the mandate holder, activating the mandate.
+/// Matches Remita's validateAuthorization payload format.
 /// </summary>
 public class DirectDebitValidateAuthorizationDto
 {
-    /// <summary>Mandate ID returned from the setup call.</summary>
+    /// <summary>
+    /// Transaction reference returned from the requestAuthorization step
+    /// (the requestId sent during the OTP request).
+    /// </summary>
     [Required]
-    public string MandateId { get; set; } = string.Empty;
+    public string RemitaTransRef { get; set; } = string.Empty;
 
-    /// <summary>OTP received by the payer.</summary>
+    /// <summary>Auth param values provided by the mandate holder (OTP, card digits, etc.).</summary>
     [Required]
-    public string Otp { get; set; } = string.Empty;
-
-    /// <summary>Payer's registered phone number.</summary>
-    [Required]
-    public string PhoneNumber { get; set; } = string.Empty;
+    public List<RemitaAuthParamValueDto> AuthParams { get; set; } = new();
 }
 
 /// <summary>

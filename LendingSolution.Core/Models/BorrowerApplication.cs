@@ -9,7 +9,10 @@ public enum BorrowerOnboardingStep
     Step2_BvnSent = 3,
     Step2B_BvnValidated = 4,
     Step3_DocumentsUploaded = 5,
-    Step4_LoanSubmitted = 6
+    Step4_LoanSubmitted = 6,
+    Step5_MandateGenerated = 7,
+    Step6_MandateActivationPending = 8,
+    Step6B_MandateActivated = 9
 }
 
 public class BorrowerApplication : Base
@@ -69,7 +72,12 @@ public class BorrowerApplication : Base
     // Offer Letter Acceptance
     public bool IsOfferLetterAccepted { get; set; } = false;
     public DateTime? OfferLetterAcceptedAt { get; set; }
-    
+
+    // Direct Debit Mandate (set in Step 5)
+    public string? DirectDebitMandateId { get; set; }
+    public DateTime? MandateGeneratedAt { get; set; }
+    public DateTime? MandateActivatedAt { get; set; }
+
     // Status
     public bool IsCompleted { get; set; } = false;
     public bool IsActive { get; set; } = true;

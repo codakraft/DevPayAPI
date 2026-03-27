@@ -102,7 +102,7 @@ public class RemitaController(
 
         try
         {
-            _logger.LogInformation("[RemitaController] ValidateActivationOtp for MandateId: {MandateId}", request.MandateId);
+            _logger.LogInformation("[RemitaController] ValidateActivationOtp for TransRef: {TransRef}", request.RemitaTransRef);
 
             var result = await _remitaService.ValidateMandateAuthorizationAsync(request);
 

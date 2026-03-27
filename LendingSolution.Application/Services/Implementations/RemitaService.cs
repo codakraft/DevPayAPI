@@ -741,12 +741,18 @@ public class RemitaService : IRemitaService
     {
         try
         {
+            // Build the authParams array in the format Remita expects
+            var authParams = request.AuthParams.Select(p => new
+            {
+                param1 = p.Param1,
+                param2 = p.Param2,
+                value  = p.Value
+            }).ToList();
+
             var payload = new
             {
-                mandateId   = request.MandateId,
-                otp         = request.Otp,
-                phoneNumber = NormalizePhoneNumber(request.PhoneNumber),
-                requestId   = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString()
+                remitaTransRef = request.RemitaTransRef,
+                authParams
             };
 
             var endpoint = string.IsNullOrEmpty(_settings.ValidateMandateOtpEndpoint)
@@ -754,8 +760,8 @@ public class RemitaService : IRemitaService
                 : _settings.ValidateMandateOtpEndpoint;
 
             var requestUrl = BuildUrl(endpoint);
-            _logger.LogInformation("[DirectDebit] ValidateAuthorization → {Url} | MandateId={MandateId}",
-                requestUrl, request.MandateId);
+            _logger.LogInformation("[DirectDebit] ValidateAuthorization → {Url} | RemitaTransRef={TransRef}",
+                requestUrl, request.RemitaTransRef);
 
             var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUrl)
             {
@@ -786,16 +792,16 @@ public class RemitaService : IRemitaService
             }
             else
             {
-                _logger.LogInformation("[DirectDebit] Mandate activated successfully. MandateId={MandateId}, MandateRef={Ref}",
-                    request.MandateId, result.MandateRef);
+                _logger.LogInformation("[DirectDebit] Mandate activated successfully. MandateRef={Ref}",
+                    result.MandateRef);
             }
 
             return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[DirectDebit] ValidateAuthorization threw an unexpected error. MandateId={MandateId}",
-                request.MandateId);
+            _logger.LogError(ex, "[DirectDebit] ValidateAuthorization threw an unexpected error. RemitaTransRef={TransRef}",
+                request.RemitaTransRef);
             return null;
         }
     }

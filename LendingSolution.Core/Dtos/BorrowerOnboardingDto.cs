@@ -189,6 +189,99 @@ public class BorrowerStep4ResponseDto
     public string Message { get; set; } = "Loan application submitted successfully";
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Step 5: Generate Direct Debit Mandate
+// ─────────────────────────────────────────────────────────────────────────────
+
+public class BorrowerStep5RequestDto
+{
+    [Required]
+    public Guid LoanId { get; set; }
+}
+
+public class BorrowerStep5ResponseDto
+{
+    public string MandateId { get; set; } = string.Empty;
+    public string Message { get; set; } = "Mandate generated successfully. Please proceed to activate the mandate.";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Step 6: Request OTP to activate the mandate
+// ─────────────────────────────────────────────────────────────────────────────
+
+public class BorrowerStep6RequestDto
+{
+    [Required]
+    public Guid LoanId { get; set; }
+}
+
+/// <summary>
+/// Describes an input the borrower must supply (e.g. OTP, last 4 digits of card).
+/// Mirrors Remita's authParams array entries.
+/// </summary>
+public class MandateAuthParamDto
+{
+    public string? Param1 { get; set; }
+    public string? Label1 { get; set; }
+    public string? Description1 { get; set; }
+    public string? Param2 { get; set; }
+    public string? Label2 { get; set; }
+    public string? Description2 { get; set; }
+}
+
+public class BorrowerStep6ResponseDto
+{
+    /// <summary>The transaction reference to be echoed back in Step 6B.</summary>
+    public string RemitaTransRef { get; set; } = string.Empty;
+    /// <summary>Auth params from Remita that describe what the borrower must input.</summary>
+    public List<MandateAuthParamDto> AuthParams { get; set; } = new();
+    public string Message { get; set; } = "OTP sent. Please enter the required details to activate your mandate.";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Step 6B: Validate OTP to activate the mandate
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// <summary>
+/// A single auth param value submitted by the borrower (e.g. OTP or card digits).
+/// </summary>
+public class MandateAuthParamValueDto
+{
+    /// <summary>Param key from the authParams descriptor (e.g. "OTP").</summary>
+    public string? Param1 { get; set; }
+    /// <summary>Param key from the authParams descriptor (e.g. "CARD").</summary>
+    public string? Param2 { get; set; }
+    /// <summary>Borrower's input value for this param.</summary>
+    [Required]
+    public string Value { get; set; } = string.Empty;
+}
+
+public class BorrowerStep6BRequestDto
+{
+    [Required]
+    public Guid LoanId { get; set; }
+
+    /// <summary>
+    /// The transaction reference returned in Step 6 (mirrors Remita's remitaTransRef).
+    /// </summary>
+    [Required]
+    public string RemitaTransRef { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The borrower's inputs matching the authParams from Step 6
+    /// (e.g. OTP value and last 4 digits of bank card).
+    /// </summary>
+    [Required]
+    public List<MandateAuthParamValueDto> AuthParams { get; set; } = new();
+}
+
+public class BorrowerStep6BResponseDto
+{
+    public string MandateId { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public string Message { get; set; } = "Mandate activated successfully. Your loan application is complete.";
+}
+
 // Email OTP endpoints
 public class GenerateEmailOtpRequestDto
 {
