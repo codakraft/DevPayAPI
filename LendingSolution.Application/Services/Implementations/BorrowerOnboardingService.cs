@@ -776,6 +776,10 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             }
         }
 
+        // Automatically generate mandate and dispatch activation OTP after Step 4 is completed.
+        await EnsureMandateGeneratedAsync(application, loan);
+        await RequestMandateOtpAsync(application, request.LoanId);
+
         return new BorrowerStep4ResponseDto
         {
             LoanPrincipal = loanPrincipal,
@@ -784,62 +788,39 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             AppliedInterest = appliedInterest,
             RepaymentAmount = totalRepayment,
             Tenor = request.Tenor,
-            MonthlyRepaymentAmount = monthlyRepayment
+            MonthlyRepaymentAmount = monthlyRepayment,
+            Message = "Loan submitted successfully. Mandate OTP has been sent for activation."
         };
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Step 5: Generate Direct Debit Mandate
-    // ─────────────────────────────────────────────────────────────────────────
-
-    public async Task<BorrowerStep5ResponseDto> Step5_GenerateMandateAsync(BorrowerStep5RequestDto request)
+    private async Task EnsureMandateGeneratedAsync(BorrowerApplication application, Loan loan)
     {
-        var application = await _borrowerRepository.GetByIdAsync(request.LoanId)
-            ?? throw new AppException("Application not found", 404);
-
-        if (application.CurrentStep < BorrowerOnboardingStep.Step4_LoanSubmitted)
-            throw new AppException("Please complete the loan application (Step 4) first", 400);
-
-        if (application.CurrentStep > BorrowerOnboardingStep.Step5_MandateGenerated)
-            throw new AppException("Mandate has already been generated. Please proceed to mandate activation (Step 6)", 400);
-
-        if (application.LoanId == null)
-            throw new AppException("No loan record found for this application", 400);
-
-        var loan = await _loanRepository.GetLoanById(application.LoanId.Value)
-            ?? throw new AppException("Loan record not found", 404);
-
         if (loan.IsMandateCreated && !string.IsNullOrEmpty(application.DirectDebitMandateId))
         {
-            // Idempotent — already generated
-            return new BorrowerStep5ResponseDto
-            {
-                MandateId = application.DirectDebitMandateId,
-                Message   = "Mandate already generated. Please proceed to Step 6 to activate it."
-            };
+            return;
         }
 
         // Dates must be in dd/MM/yyyy format as required by Remita echannel API
         var ddStartDate = DateTime.UtcNow.AddDays(1).ToString("dd/MM/yyyy");
-        var ddEndDate   = DateTime.UtcNow.AddMonths(loan.DurationInMonths + 1).ToString("dd/MM/yyyy");
+        var ddEndDate = DateTime.UtcNow.AddMonths(loan.DurationInMonths + 1).ToString("dd/MM/yyyy");
 
         var directDebitRequest = new DirectDebitGenerateMandateRequestDto
         {
-            PayerName          = $"{application.FirstName} {application.LastName}",
-            PayerEmail         = application.Email,
-            PayerPhone         = application.PhoneNumber ?? string.Empty,
-            PayerBankCode      = application.BankCode ?? string.Empty,
+            PayerName = $"{application.FirstName} {application.LastName}",
+            PayerEmail = application.Email,
+            PayerPhone = application.PhoneNumber ?? string.Empty,
+            PayerBankCode = application.BankCode ?? string.Empty,
             PayerAccountNumber = application.AccountNo ?? string.Empty,
-            Amount             = loan.MonthlyRepayment ?? loan.Amount,
-            StartDate          = ddStartDate,
-            EndDate            = ddEndDate,
-            MandateType        = "SO",
-            Frequency          = "MONTHLY",
-            Description        = $"Loan repayment mandate for {application.FirstName} {application.LastName} — Loan ID: {loan.Id}"
+            Amount = loan.MonthlyRepayment ?? loan.Amount,
+            StartDate = ddStartDate,
+            EndDate = ddEndDate,
+            MandateType = "SO",
+            Frequency = "MONTHLY",
+            Description = $"Loan repayment mandate for {application.FirstName} {application.LastName} — Loan ID: {loan.Id}"
         };
 
         _logger.LogInformation(
-            "[Step5] Generating Remita Direct Debit mandate for loan {LoanId} — Borrower: {Email}, Amount: {Amount:C}, Period: {Start} to {End}",
+            "[Mandate] Generating Remita Direct Debit mandate for loan {LoanId} — Borrower: {Email}, Amount: {Amount:C}, Period: {Start} to {End}",
             loan.Id, application.Email, directDebitRequest.Amount, ddStartDate, ddEndDate);
 
         var result = await _remitaService.GenerateDirectDebitMandateAsync(directDebitRequest);
@@ -851,134 +832,108 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
                 : "Unable to set up Direct Debit mandate with Remita.";
 
             _logger.LogError(
-                "[Step5] Mandate generation failed for loan {LoanId}. StatusCode={Code}, Message={Msg}",
+                "[Mandate] Mandate generation failed for loan {LoanId}. StatusCode={Code}, Message={Msg}",
                 loan.Id, result?.StatusCode, result?.Message);
 
             throw new AppException($"Mandate generation failed: {remitaMessage} Please verify your bank details and try again.", 502);
         }
 
-        // Persist the mandate ID on both the application and the loan
         application.DirectDebitMandateId = result.Data.MandateId;
-        application.MandateGeneratedAt   = DateTime.UtcNow;
-        application.CurrentStep          = BorrowerOnboardingStep.Step5_MandateGenerated;
-        application.UpdatedAt            = DateTime.UtcNow;
+        application.MandateGeneratedAt = DateTime.UtcNow;
+        application.CurrentStep = BorrowerOnboardingStep.Step5_MandateGenerated;
+        application.UpdatedAt = DateTime.UtcNow;
         await _borrowerRepository.UpdateAsync(application);
 
-        loan.MandateRef       = result.Data.MandateId;
+        loan.MandateRef = result.Data.MandateId;
         loan.IsMandateCreated = true;
         loan.MandateCreatedAt = DateTime.UtcNow;
         await _loanRepository.UpdateLoan(loan);
-
-        _logger.LogInformation(
-            "[Step5] Mandate generated for loan {LoanId}: MandateId={MandateId}",
-            loan.Id, result.Data.MandateId);
-
-        return new BorrowerStep5ResponseDto
-        {
-            MandateId = result.Data.MandateId,
-            Message   = "Mandate generated successfully. Please proceed to Step 6 to activate it."
-        };
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Step 6: Request OTP to initiate mandate activation
-    // ─────────────────────────────────────────────────────────────────────────
-
-    public async Task<BorrowerStep6ResponseDto> Step6_RequestMandateOtpAsync(BorrowerStep6RequestDto request)
+    private async Task<string> RequestMandateOtpAsync(BorrowerApplication application, Guid loanId)
     {
-        var application = await _borrowerRepository.GetByIdAsync(request.LoanId)
-            ?? throw new AppException("Application not found", 404);
-
-        if (application.CurrentStep < BorrowerOnboardingStep.Step5_MandateGenerated)
-            throw new AppException("Please generate the mandate (Step 5) first", 400);
-
-        if (application.CurrentStep > BorrowerOnboardingStep.Step6_MandateActivationPending)
-            throw new AppException("Mandate has already been activated", 400);
-
         if (string.IsNullOrEmpty(application.DirectDebitMandateId))
-            throw new AppException("Mandate ID not found. Please regenerate the mandate (Step 5).", 400);
+            throw new AppException("Mandate ID not found. Please regenerate the mandate.", 400);
 
         var otpRequest = new DirectDebitRequestAuthorizationDto
         {
-            MandateId   = application.DirectDebitMandateId,
+            MandateId = application.DirectDebitMandateId,
             PhoneNumber = application.PhoneNumber ?? string.Empty
         };
 
         _logger.LogInformation(
-            "[Step6] Requesting mandate activation OTP for loan {LoanId}, MandateId={MandateId}",
-            request.LoanId, application.DirectDebitMandateId);
+            "[Mandate] Requesting activation OTP for loan {LoanId}, MandateId={MandateId}",
+            loanId, application.DirectDebitMandateId);
 
         var result = await _remitaService.RequestMandateAuthorizationAsync(otpRequest);
 
         if (result == null || result.StatusCode != "00")
         {
             var msg = result?.Message ?? "Failed to request OTP from Remita.";
-            _logger.LogError("[Step6] OTP request failed for MandateId={MandateId}. StatusCode={Code}, Message={Msg}",
+            _logger.LogError("[Mandate] OTP request failed for MandateId={MandateId}. StatusCode={Code}, Message={Msg}",
                 application.DirectDebitMandateId, result?.StatusCode, msg);
             throw new AppException($"OTP request failed: {msg}", 502);
         }
 
-        // Advance step to indicate OTP has been dispatched
+        if (string.IsNullOrWhiteSpace(result.RequestId))
+        {
+            _logger.LogError("[Mandate] OTP request succeeded but requestId was empty for MandateId={MandateId}",
+                application.DirectDebitMandateId);
+            throw new AppException("Failed to retrieve activation reference from Remita. Please request OTP again.", 502);
+        }
+
+        application.RemitaTransRef = result.RequestId;
         application.CurrentStep = BorrowerOnboardingStep.Step6_MandateActivationPending;
-        application.UpdatedAt   = DateTime.UtcNow;
+        application.UpdatedAt = DateTime.UtcNow;
         await _borrowerRepository.UpdateAsync(application);
 
-        // Map Remita's authParams to our DTO
-        var authParams = (result.AuthParams ?? new())
-            .Select(p => new MandateAuthParamDto
-            {
-                Param1       = p.Param1,
-                Label1       = p.Label1,
-                Description1 = p.Description1,
-                Param2       = p.Param2,
-                Label2       = p.Label2,
-                Description2 = p.Description2
-            }).ToList();
-
-        return new BorrowerStep6ResponseDto
-        {
-            // The requestId we sent becomes remitaTransRef in the validate call
-            RemitaTransRef = result.RequestId ?? string.Empty,
-            AuthParams     = authParams,
-            Message        = "OTP sent. Please enter the required details to activate your mandate."
-        };
+        return result.RequestId ?? string.Empty;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Step 6B: Validate OTP and activate the mandate
-    // ─────────────────────────────────────────────────────────────────────────
-
-    public async Task<BorrowerStep6BResponseDto> Step6B_ActivateMandateAsync(BorrowerStep6BRequestDto request)
+    public async Task<BorrowerStep4BResponseDto> Step4B_ActivateMandateAsync(BorrowerStep4BRequestDto request)
     {
-        var application = await _borrowerRepository.GetByIdAsync(request.LoanId)
+        return await ActivateMandateAsync(request.LoanId, request.Otp);
+    }
+
+    private async Task<BorrowerStep4BResponseDto> ActivateMandateAsync(Guid loanId, string otp)
+    {
+        var application = await _borrowerRepository.GetByIdAsync(loanId)
             ?? throw new AppException("Application not found", 404);
-
+        
         if (application.CurrentStep < BorrowerOnboardingStep.Step6_MandateActivationPending)
-            throw new AppException("Please request the mandate activation OTP (Step 6) first", 400);
-
+            throw new AppException("Please request the mandate activation OTP first", 400);
+        
         if (application.IsCompleted)
             throw new AppException("Mandate has already been activated and onboarding is complete", 400);
-
+        
         if (string.IsNullOrEmpty(application.DirectDebitMandateId))
-            throw new AppException("Mandate ID not found. Please restart from Step 5.", 400);
-
+            throw new AppException("Mandate ID not found. Please restart from Step 4.", 400);
+        
+        if (string.IsNullOrWhiteSpace(application.RemitaTransRef))
+            throw new AppException("Activation reference not found. Please request OTP again.", 400);
+        
+        if (string.IsNullOrWhiteSpace(otp))
+            throw new AppException("OTP is required to activate mandate.", 400);
+        
         var validateRequest = new DirectDebitValidateAuthorizationDto
         {
-            RemitaTransRef = request.RemitaTransRef,
-            AuthParams     = request.AuthParams.Select(p => new RemitaAuthParamValueDto
+            RemitaTransRef = application.RemitaTransRef,
+            AuthParams = new List<RemitaAuthParamValueDto>
             {
-                Param1 = p.Param1,
-                Param2 = p.Param2,
-                Value  = p.Value
-            }).ToList()
+                new()
+                {
+                    Param1 = "OTP",
+                    Value = otp
+                }
+            }
         };
-
+        
         _logger.LogInformation(
             "[Step6B] Validating mandate activation OTP for loan {LoanId}, MandateId={MandateId}, TransRef={TransRef}",
-            request.LoanId, application.DirectDebitMandateId, request.RemitaTransRef);
-
+            loanId, application.DirectDebitMandateId, application.RemitaTransRef);
+        
         var result = await _remitaService.ValidateMandateAuthorizationAsync(validateRequest);
-
+        
         if (result == null || result.StatusCode != "00")
         {
             var msg = result?.Message ?? "OTP validation failed.";
@@ -986,14 +941,13 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
                 application.DirectDebitMandateId, result?.StatusCode, msg);
             throw new AppException($"Mandate activation failed: {msg}", 502);
         }
-
-        // Mark onboarding as fully complete
-        application.CurrentStep       = BorrowerOnboardingStep.Step6B_MandateActivated;
+        
+        application.CurrentStep = BorrowerOnboardingStep.Step6B_MandateActivated;
         application.MandateActivatedAt = DateTime.UtcNow;
-        application.IsCompleted       = true;
-        application.UpdatedAt         = DateTime.UtcNow;
+        application.IsCompleted = true;
+        application.UpdatedAt = DateTime.UtcNow;
         await _borrowerRepository.UpdateAsync(application);
-
+        
         await _auditService.LogAsync(
             action: "MandateActivated",
             category: "Loan",
@@ -1003,16 +957,16 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             companyId: application.CompanyId,
             details: $"Mandate {application.DirectDebitMandateId} activated for borrower {application.FirstName} {application.LastName} ({application.Email})"
         );
-
+        
         _logger.LogInformation(
             "[Step6B] Mandate activated. Loan {LoanId}, MandateId={MandateId}, MandateRef={MandateRef}",
             application.LoanId, application.DirectDebitMandateId, result.MandateRef);
-
-        return new BorrowerStep6BResponseDto
+        
+        return new BorrowerStep4BResponseDto
         {
             MandateId = application.DirectDebitMandateId,
-            Status    = result.Status ?? "Mandate Activated Successfully",
-            Message   = "Mandate activated successfully. Your loan application is complete."
+            Status = result.Status ?? "Mandate Activated Successfully",
+            Message = "Mandate activated successfully. Your loan application is complete."
         };
     }
 
@@ -1428,7 +1382,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             CreatedAt = borrowerApplication.CreatedAt,
             UpdatedAt = borrowerApplication.UpdatedAt,
             StepNumber = GetStepNumber(borrowerApplication.CurrentStep),
-            TotalSteps = 6,
+            TotalSteps = 7,
             CompanyName = borrowerApplication.Company?.Name ?? "Unknown Company",
             ProductName = borrowerApplication.Product?.Name ?? "Unknown Product",
             RequiredActions = GetRequiredActions(borrowerApplication.CurrentStep)
@@ -1491,6 +1445,9 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             BorrowerOnboardingStep.Step2B_BvnValidated => "BVN Verified",
             BorrowerOnboardingStep.Step3_DocumentsUploaded => "Bank Info & Documents Upload",
             BorrowerOnboardingStep.Step4_LoanSubmitted => "Loan Application",
+            BorrowerOnboardingStep.Step5_MandateGenerated => "Mandate Generated",
+            BorrowerOnboardingStep.Step6_MandateActivationPending => "Mandate OTP Sent",
+            BorrowerOnboardingStep.Step6B_MandateActivated => "Mandate Activated",
             _ => "Unknown Step"
         };
     }
@@ -1504,7 +1461,10 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             BorrowerOnboardingStep.Step2_BvnSent => "Please verify your BVN by entering the OTP sent to your phone.",
             BorrowerOnboardingStep.Step2B_BvnValidated => "BVN verified successfully. Proceed to provide your bank information, address and documents.",
             BorrowerOnboardingStep.Step3_DocumentsUploaded => "Documents uploaded successfully. You can now submit your loan application.",
-            BorrowerOnboardingStep.Step4_LoanSubmitted => "Loan application submitted successfully. Your application is under review.",
+            BorrowerOnboardingStep.Step4_LoanSubmitted => "Loan submitted. Mandate setup and OTP request are being processed.",
+            BorrowerOnboardingStep.Step5_MandateGenerated => "Mandate generated successfully. OTP request is pending.",
+            BorrowerOnboardingStep.Step6_MandateActivationPending => "OTP sent. Enter the OTP to activate your mandate.",
+            BorrowerOnboardingStep.Step6B_MandateActivated => "Mandate activated successfully. Onboarding is complete.",
             _ => "Unknown step description"
         };
     }
@@ -1519,6 +1479,9 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             BorrowerOnboardingStep.Step2B_BvnValidated => 4,
             BorrowerOnboardingStep.Step3_DocumentsUploaded => 5,
             BorrowerOnboardingStep.Step4_LoanSubmitted => 6,
+            BorrowerOnboardingStep.Step5_MandateGenerated => 6,
+            BorrowerOnboardingStep.Step6_MandateActivationPending => 7,
+            BorrowerOnboardingStep.Step6B_MandateActivated => 7,
             _ => 0
         };
     }
@@ -1532,7 +1495,10 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             BorrowerOnboardingStep.Step2_BvnSent => BorrowerOnboardingStep.Step2B_BvnValidated,
             BorrowerOnboardingStep.Step2B_BvnValidated => BorrowerOnboardingStep.Step3_DocumentsUploaded,
             BorrowerOnboardingStep.Step3_DocumentsUploaded => BorrowerOnboardingStep.Step4_LoanSubmitted,
-            BorrowerOnboardingStep.Step4_LoanSubmitted => null, // Final step
+            BorrowerOnboardingStep.Step4_LoanSubmitted => BorrowerOnboardingStep.Step6_MandateActivationPending,
+            BorrowerOnboardingStep.Step5_MandateGenerated => BorrowerOnboardingStep.Step6_MandateActivationPending,
+            BorrowerOnboardingStep.Step6_MandateActivationPending => BorrowerOnboardingStep.Step6B_MandateActivated,
+            BorrowerOnboardingStep.Step6B_MandateActivated => null,
             _ => null
         };
     }
@@ -1546,7 +1512,10 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             BorrowerOnboardingStep.Step2_BvnSent => new List<string> { "Verify your BVN using the OTP sent to your phone" },
             BorrowerOnboardingStep.Step2B_BvnValidated => new List<string> { "Provide your bank account details, address, and upload required documents" },
             BorrowerOnboardingStep.Step3_DocumentsUploaded => new List<string> { "Submit your loan application with desired amount and tenor" },
-            BorrowerOnboardingStep.Step4_LoanSubmitted => new List<string> { "Your application is complete and under review" },
+            BorrowerOnboardingStep.Step4_LoanSubmitted => new List<string> { "Wait for mandate OTP dispatch, then proceed to activate your mandate" },
+            BorrowerOnboardingStep.Step5_MandateGenerated => new List<string> { "Wait for mandate OTP dispatch, then proceed to activate your mandate" },
+            BorrowerOnboardingStep.Step6_MandateActivationPending => new List<string> { "Enter your mandate activation OTP" },
+            BorrowerOnboardingStep.Step6B_MandateActivated => new List<string> { "Onboarding complete" },
             _ => new List<string>()
         };
     }
@@ -1622,6 +1591,10 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         // Clear Step 4 data
         application.LoanId = null;
         application.LoanSubmittedAt = null;
+        application.DirectDebitMandateId = null;
+        application.RemitaTransRef = null;
+        application.MandateGeneratedAt = null;
+        application.MandateActivatedAt = null;
         application.IsCompleted = false;
     }
 

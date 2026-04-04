@@ -193,90 +193,31 @@ public class BorrowerController(
     }
 
     /// <summary>
-    /// Step 5: Generate a Direct Debit mandate for the submitted loan
+    /// Step 4B: Submit OTP to activate the mandate and complete onboarding
     /// </summary>
-    /// <param name="request">Loan application ID</param>
-    /// <returns>Remita mandate ID to use in Step 6</returns>
-    [HttpPost("step5")]
-    public async Task<IActionResult> Step5([FromBody] BorrowerStep5RequestDto request)
-    {
-        try
-        {
-            var result = await _borrowerOnboardingService.Step5_GenerateMandateAsync(request);
-            return Ok(ApiResponse.Ok(result.Message, new
-            {
-                loanId    = request.LoanId,
-                mandateId = result.MandateId
-            }));
-        }
-        catch (AppException ex)
-        {
-            _logger.LogError(ex, "Error during Step 5 (generate mandate) for borrower onboarding");
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unhandled error during Step 5");
-            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
-        }
-    }
-
-    /// <summary>
-    /// Step 6: Request an OTP to initiate mandate activation via Direct Debit
-    /// </summary>
-    /// <param name="request">Loan application ID</param>
-    /// <returns>Auth params describing the inputs the borrower must provide, plus a remitaTransRef to echo in Step 6B</returns>
-    [HttpPost("step6")]
-    public async Task<IActionResult> Step6([FromBody] BorrowerStep6RequestDto request)
-    {
-        try
-        {
-            var result = await _borrowerOnboardingService.Step6_RequestMandateOtpAsync(request);
-            return Ok(ApiResponse.Ok(result.Message, new
-            {
-                loanId         = request.LoanId,
-                remitaTransRef = result.RemitaTransRef,
-                authParams     = result.AuthParams
-            }));
-        }
-        catch (AppException ex)
-        {
-            _logger.LogError(ex, "Error during Step 6 (request mandate OTP) for borrower onboarding");
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unhandled error during Step 6");
-            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
-        }
-    }
-
-    /// <summary>
-    /// Step 6B: Submit OTP inputs to activate the mandate and complete onboarding
-    /// </summary>
-    /// <param name="request">Loan ID, remitaTransRef from Step 6, and the borrower's OTP / card inputs</param>
+    /// <param name="request">Loan ID and borrower OTP</param>
     /// <returns>Confirmation that the mandate is activated and onboarding is complete</returns>
-    [HttpPost("step6b")]
-    public async Task<IActionResult> Step6B([FromBody] BorrowerStep6BRequestDto request)
+    [HttpPost("step4b")]
+    public async Task<IActionResult> Step4B([FromBody] BorrowerStep4BRequestDto request)
     {
         try
         {
-            var result = await _borrowerOnboardingService.Step6B_ActivateMandateAsync(request);
+            var result = await _borrowerOnboardingService.Step4B_ActivateMandateAsync(request);
             return Ok(ApiResponse.Ok(result.Message, new
             {
-                loanId    = request.LoanId,
+                loanId = request.LoanId,
                 mandateId = result.MandateId,
-                status    = result.Status
+                status = result.Status
             }));
         }
         catch (AppException ex)
         {
-            _logger.LogError(ex, "Error during Step 6B (activate mandate) for borrower onboarding");
+            _logger.LogError(ex, "Error during Step 4B (activate mandate) for borrower onboarding");
             return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unhandled error during Step 6B");
+            _logger.LogError(ex, "Unhandled error during Step 4B");
             return StatusCode(500, ApiResponse.Fail("Something went wrong"));
         }
     }

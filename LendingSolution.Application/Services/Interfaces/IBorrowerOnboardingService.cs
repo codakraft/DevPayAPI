@@ -22,14 +22,8 @@ public interface IBorrowerOnboardingService
     // Step 4: Loan application
     Task<BorrowerStep4ResponseDto> Step4_SubmitLoanApplicationAsync(BorrowerStep4RequestDto request);
 
-    // Step 5: Generate Direct Debit mandate
-    Task<BorrowerStep5ResponseDto> Step5_GenerateMandateAsync(BorrowerStep5RequestDto request);
-
-    // Step 6: Request OTP to initiate mandate activation
-    Task<BorrowerStep6ResponseDto> Step6_RequestMandateOtpAsync(BorrowerStep6RequestDto request);
-
-    // Step 6B: Validate OTP to activate the mandate (final onboarding step)
-    Task<BorrowerStep6BResponseDto> Step6B_ActivateMandateAsync(BorrowerStep6BRequestDto request);
+    // Step 4B: Activate mandate with OTP after Step 4 auto-generates mandate and requests OTP
+    Task<BorrowerStep4BResponseDto> Step4B_ActivateMandateAsync(BorrowerStep4BRequestDto request);
     
     // OTP services
     Task<GenerateEmailOtpResponseDto> GenerateEmailOtpAsync(GenerateEmailOtpRequestDto request);

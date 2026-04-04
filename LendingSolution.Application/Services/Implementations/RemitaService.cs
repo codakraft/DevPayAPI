@@ -563,7 +563,7 @@ public class RemitaService : IRemitaService
     /// <summary>
     /// Step 1 – Creates a new Direct Debit mandate in Remita.
     /// Endpoint: POST /echannelsvc/echannel/mandate/setup
-    /// Hash = SHA-512(merchantId + serviceTypeId + requestId + amount + apiKey)
+    /// Hash = SHA-512(apiKey + requestId + apiToken)
     /// </summary>
     public async Task<DirectDebitGenerateMandateResponseDto?> GenerateDirectDebitMandateAsync(
         DirectDebitGenerateMandateRequestDto request)
@@ -593,7 +593,7 @@ public class RemitaService : IRemitaService
                 payerPhone    = normalizedPhone,
                 payerBankCode = request.PayerBankCode,
                 payerAccount  = request.PayerAccountNumber,
-                amount        = "10000",
+                amount        = amountStr,
                 startDate     = request.StartDate,
                 endDate       = request.EndDate,
                 mandateType   = request.MandateType,

@@ -75,6 +75,7 @@ public class BorrowerApplication : Base
 
     // Direct Debit Mandate (set in Step 5)
     public string? DirectDebitMandateId { get; set; }
+    public string? RemitaTransRef { get; set; }
     public DateTime? MandateGeneratedAt { get; set; }
     public DateTime? MandateActivatedAt { get; set; }
 
