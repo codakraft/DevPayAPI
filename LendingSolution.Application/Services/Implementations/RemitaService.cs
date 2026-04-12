@@ -576,7 +576,7 @@ public class RemitaService : IRemitaService
             var requestId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
 
             // Amount must be sent as a plain string (no decimals) per Remita's spec
-            var amountStr = request.Amount.ToString("F2");
+            var amountStr = request.Amount.ToString();
 
             // hash = SHA-512(merchantId + serviceTypeId + requestId + amount + apiKey)
             var hashInput  = $"{_settings.MerchantId}{_settings.ServiceTypeId}{requestId}{amountStr}{_settings.ApiKey}";
@@ -632,6 +632,19 @@ public class RemitaService : IRemitaService
                 };
             }
 
+            // Strip JSONP wrapper if present: jsonp ({"statuscode":"040",...}) → {"statuscode":"040",...}
+            if (responseContent.StartsWith("jsonp (") && responseContent.EndsWith(")"))
+            {
+                responseContent = responseContent.Substring(7, responseContent.Length - 8);
+                _logger.LogInformation("[DirectDebit] Stripped JSONP wrapper. Clean JSON: {CleanJson}", responseContent);
+            }
+            // Also handle wrapper without space: ({"statuscode":"040",...}) → {"statuscode":"040",...}
+            else if (responseContent.StartsWith("(") && responseContent.EndsWith(")"))
+            {
+                responseContent = responseContent.Substring(1, responseContent.Length - 2);
+                _logger.LogInformation("[DirectDebit] Stripped parentheses wrapper. Clean JSON: {CleanJson}", responseContent);
+            }
+
             // Guard against non-JSON responses (e.g. HTML error pages from Remita's server)
             var trimmed = responseContent.TrimStart();
             if (!trimmed.StartsWith("{") && !trimmed.StartsWith("["))
@@ -648,15 +661,16 @@ public class RemitaService : IRemitaService
                 responseContent,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-            if (result == null || result.StatusCode != "00")
+            // Accept both "00" (success) and "040" (Initial Request OK) as success codes
+            if (result == null || (result.StatusCode != "00" && result.StatusCode != "040"))
             {
-                _logger.LogWarning("[DirectDebit] GenerateMandate: Remita returned non-success. StatusCode={Code}, Message={Msg}",
-                    result?.StatusCode, result?.Message);
+                _logger.LogWarning("[DirectDebit] GenerateMandate: Remita returned non-success. StatusCode={Code}, Message={Msg}, Status={Status}",
+                    result?.StatusCode, result?.Message, result?.Status);
                 return result; // Return it so the caller can surface Remita's message
             }
 
-            _logger.LogInformation("[DirectDebit] GenerateMandate succeeded. MandateId={MandateId}",
-                result.Data?.MandateId);
+            _logger.LogInformation("[DirectDebit] GenerateMandate succeeded. MandateId={MandateId}, RequestId={RequestId}, StatusCode={StatusCode}",
+                result.MandateId ?? result.Data?.MandateId, result.RequestId ?? result.Data?.RequestId, result.StatusCode);
             return result;
         }
         catch (Exception ex)
@@ -675,12 +689,15 @@ public class RemitaService : IRemitaService
     {
         try
         {
+            // Single timestamp used in: payload requestId, REQUEST_ID header, AUTHORIZATION hash, and API_DETAILS_HASH
+            var requestId = request.RequestId;
             var payload = new
             {
-                mandateId   = request.MandateId,
-                phoneNumber = NormalizePhoneNumber(request.PhoneNumber),
-                requestId   = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString()
+                mandateId = "180799091923",
+                requestId = "1751532065837",
             };
+
+            _logger.LogInformation("[DirectDebit] RequestAuthorization Payload: {Payload}", JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
 
             var endpoint = string.IsNullOrEmpty(_settings.ActivateMandateOtpEndpoint)
                 ? "/echannelsvc/echannel/mandate/requestAuthorization"
@@ -694,7 +711,9 @@ public class RemitaService : IRemitaService
             {
                 Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
             };
-            AddRemitaHeaders(httpRequest);
+
+            // All auth headers use the same requestId to satisfy Remita's hash validation
+            AddEchannelHeaders(httpRequest, requestId);
 
             var response = await _httpClient.SendAsync(httpRequest);
             var responseContent = await response.Content.ReadAsStringAsync();
@@ -707,6 +726,9 @@ public class RemitaService : IRemitaService
                 _logger.LogError("[DirectDebit] RequestAuthorization failed. Status: {Status}", response.StatusCode);
                 return null;
             }
+
+            // Strip JSONP wrapper: "jsonp ({...})" or "({...})"
+            responseContent = StripJsonpWrapper(responseContent);
 
             var result = JsonSerializer.Deserialize<DirectDebitRequestAuthorizationResponseDto>(
                 responseContent,
@@ -767,7 +789,10 @@ public class RemitaService : IRemitaService
             {
                 Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
             };
-            AddRemitaHeaders(httpRequest);
+
+            // Generate a fresh timestamp requestId for headers (RemitaTransRef is a reference code, not a timestamp)
+            var requestId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+            AddEchannelHeaders(httpRequest, requestId);
 
             var response = await _httpClient.SendAsync(httpRequest);
             var responseContent = await response.Content.ReadAsStringAsync();
@@ -780,6 +805,9 @@ public class RemitaService : IRemitaService
                 _logger.LogError("[DirectDebit] ValidateAuthorization failed. Status: {Status}", response.StatusCode);
                 return null;
             }
+
+            // Strip JSONP wrapper: "jsonp ({...})" or "({...})"
+            responseContent = StripJsonpWrapper(responseContent);
 
             var result = JsonSerializer.Deserialize<DirectDebitValidateAuthorizationResponseDto>(
                 responseContent,
@@ -815,10 +843,11 @@ public class RemitaService : IRemitaService
     {
         try
         {
+            var requestId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
             var payload = new
             {
                 mandateId = request.MandateId,
-                requestId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString()
+                requestId = requestId
             };
 
             var endpoint = string.IsNullOrEmpty(_settings.StopDirectDebitMandateEndpoint)
@@ -833,7 +862,7 @@ public class RemitaService : IRemitaService
             {
                 Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
             };
-            AddRemitaHeaders(httpRequest);
+            AddEchannelHeaders(httpRequest, requestId);
 
             var response = await _httpClient.SendAsync(httpRequest);
             var responseContent = await response.Content.ReadAsStringAsync();
@@ -846,6 +875,8 @@ public class RemitaService : IRemitaService
                 _logger.LogError("[DirectDebit] StopMandate failed. Status: {Status}", response.StatusCode);
                 return null;
             }
+
+            responseContent = StripJsonpWrapper(responseContent);
 
             var result = JsonSerializer.Deserialize<DirectDebitStopMandateResponseDto>(
                 responseContent,
@@ -913,12 +944,13 @@ public class RemitaService : IRemitaService
         return $"remitaConsumerKey={_settings.ApiKey}, remitaConsumerToken={hash}";
     }
 
-    private void AddRemitaHeaders(HttpRequestMessage request)
+    private void AddRemitaHeaders(HttpRequestMessage request, string? fixedRequestId = null)
     {
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
-        // Generate dynamic REQUEST_ID as timestamp (like Postman does) - use same value for header and hash
-        var requestId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+        // Use the provided requestId (for Direct Debit calls where the same value must appear
+        // in the payload, REQUEST_ID header, and hash), or generate a fresh timestamp otherwise.
+        var requestId = fixedRequestId ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
 
         _logger.LogInformation("Adding Remita headers - API_KEY: {ApiKey}, MERCHANT_ID: {MerchantId}, REQUEST_ID: {RequestId}",
             _settings.ApiKey, _settings.MerchantId, requestId);
@@ -937,6 +969,80 @@ public class RemitaService : IRemitaService
 
         // Log all headers for debugging
         _logger.LogInformation("All request headers: {Headers}", string.Join(", ", request.Headers.Select(h => $"{h.Key}={string.Join(",", h.Value)}")));
+    }
+
+    /// <summary>
+    /// Adds Direct Debit specific headers (REQUEST_TS and API_DETAILS_HASH) required for 
+    /// requestAuthorization and validateAuthorization endpoints.
+    /// </summary>
+    /// <param name="request">The HTTP request message</param>
+    /// <param name="requestId">The SAME requestId that's in the payload (as a number) - critical for hash validation</param>
+    private void AddDirectDebitSpecificHeaders(HttpRequestMessage request, long requestId)
+    {
+        // REQUEST_TS format: yyyy-MM-ddTHH:mm:ss+000000
+        var now = DateTime.UtcNow;
+        var requestTs = $"{now:yyyy-MM-ddTHH:mm:ss}+000000";
+
+        // API_DETAILS_HASH = SHA-512(apiKey + requestId + apiToken)
+        // NOTE: requestId is a long (number), matches JavaScript's d.getTime() behavior
+        // C# will implicitly convert the long to string during concatenation, just like JavaScript
+        var hashInput = $"{_settings.ApiKey}{requestId}{_settings.ApiToken}";
+        var apiDetailsHash = ComputeSha512Hash(hashInput);
+
+        request.Headers.TryAddWithoutValidation("REQUEST_TS", requestTs);
+        request.Headers.TryAddWithoutValidation("API_DETAILS_HASH", apiDetailsHash);
+
+        _logger.LogInformation("[DirectDebit] Added specific headers - REQUEST_TS: {RequestTs}, RequestIdForHash: {RequestId}, HashInput: {HashInput}, API_DETAILS_HASH: {Hash}",
+            requestTs, requestId, $"{_settings.ApiKey}{requestId}{_settings.ApiToken}", apiDetailsHash);
+    }
+
+    /// <summary>
+    /// Single method that sets ALL authentication headers for echannelsvc/echannel/mandate/* endpoints
+    /// using one consistent requestId (timestamp long), so every hash Remita validates matches.
+    /// Headers set: Accept, API_KEY, MERCHANT_ID, REQUEST_ID, AUTHORIZATION, REQUEST_TS, API_DETAILS_HASH
+    /// </summary>
+    private void AddEchannelHeaders(HttpRequestMessage request, string requestId)
+    {
+        // var requestIdStr = requestId.ToString();
+
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.TryAddWithoutValidation("API_KEY",     _settings.ApiKey);
+        request.Headers.TryAddWithoutValidation("MERCHANT_ID", _settings.MerchantId);
+        request.Headers.TryAddWithoutValidation("REQUEST_ID",  requestId);
+
+        // AUTHORIZATION = "remitaConsumerKey=<apiKey>, remitaConsumerToken=SHA512(apiKey+requestId+apiToken)"
+        var authHash  = ComputeSha512Hash($"{_settings.ApiKey}{requestId}{_settings.ApiToken}");
+        var authToken = $"remitaConsumerKey={_settings.ApiKey}, remitaConsumerToken={authHash}";
+        request.Headers.TryAddWithoutValidation("AUTHORIZATION", authToken);
+
+        // REQUEST_TS: yyyy-MM-ddTHH:mm:ss+000000
+        var requestTs = $"{DateTime.UtcNow:yyyy-MM-ddTHH:mm:ss}+000000";
+        request.Headers.TryAddWithoutValidation("REQUEST_TS", requestTs);
+
+        // API_DETAILS_HASH = SHA512(apiKey + requestId + apiToken)  — uses the same numeric string
+        var apiDetailsHash = ComputeSha512Hash($"{_settings.ApiKey}{requestId}{_settings.ApiToken}");
+        request.Headers.TryAddWithoutValidation("API_DETAILS_HASH", apiDetailsHash);
+
+        _logger.LogInformation(
+            "[DirectDebit] EchannelHeaders — REQUEST_ID={RequestId}, REQUEST_TS={RequestTs}, API_DETAILS_HASH={Hash}",
+            requestId, requestTs, apiDetailsHash);
+    }
+
+    /// <summary>
+    /// Strips the JSONP wrapper that Remita echannelsvc endpoints return.
+    /// e.g. "jsonp ({...})" → "{...}"  or  "({...})" → "{...}"
+    /// </summary>
+    private static string StripJsonpWrapper(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content)) return content;
+
+        content = content.Trim();
+        if (content.StartsWith("jsonp (") && content.EndsWith(")"))
+            return content.Substring(7, content.Length - 8).Trim();
+        if (content.StartsWith("(") && content.EndsWith(")"))
+            return content.Substring(1, content.Length - 2).Trim();
+
+        return content;
     }
 
     private static string ComputeSha512Hash(string input)

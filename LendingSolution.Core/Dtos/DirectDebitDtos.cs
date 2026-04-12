@@ -65,6 +65,7 @@ public class DirectDebitGenerateMandateRequestDto
 
 /// <summary>
 /// Top-level response from Remita's mandate setup endpoint.
+/// Remita returns fields both at root level and nested in 'data'.
 /// </summary>
 public class DirectDebitGenerateMandateResponseDto
 {
@@ -77,6 +78,15 @@ public class DirectDebitGenerateMandateResponseDto
     [JsonPropertyName("message")]
     public string? Message { get; set; }
 
+    /// <summary>Root-level mandateId (actual Remita response format)</summary>
+    [JsonPropertyName("mandateId")]
+    public string? MandateId { get; set; }
+
+    /// <summary>Root-level requestId (actual Remita response format)</summary>
+    [JsonPropertyName("requestId")]
+    public string? RequestId { get; set; }
+
+    /// <summary>Nested data object (for compatibility)</summary>
     [JsonPropertyName("data")]
     public DirectDebitGenerateMandateDataDto? Data { get; set; }
 }
@@ -105,8 +115,8 @@ public class DirectDebitRequestAuthorizationDto
     public string MandateId { get; set; } = string.Empty;
 
     /// <summary>Payer's registered phone number.</summary>
-    [Required]
     public string PhoneNumber { get; set; } = string.Empty;
+    public string RequestId { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -150,6 +160,16 @@ public class DirectDebitRequestAuthorizationResponseDto
 
     [JsonPropertyName("requestId")]
     public string? RequestId { get; set; }
+
+    [JsonPropertyName("mandateId")]
+    public string? MandateId { get; set; }
+
+    /// <summary>
+    /// Remita transaction reference returned alongside the OTP dispatch.
+    /// This is the value that must be submitted as remitaTransRef in validateAuthorization.
+    /// </summary>
+    [JsonPropertyName("remitaTransRef")]
+    public string? RemitaTransRef { get; set; }
 
     /// <summary>
     /// Describes the auth inputs the borrower must supply (e.g. OTP, last 4 card digits).

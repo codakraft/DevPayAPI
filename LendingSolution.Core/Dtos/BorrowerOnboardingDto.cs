@@ -187,6 +187,29 @@ public class BorrowerStep4ResponseDto
     public int Tenor { get; set; }
     public decimal MonthlyRepaymentAmount { get; set; }
     public string Message { get; set; } = "Loan application submitted successfully";
+
+    // Mandate OTP fields — populated after requestAuthorization succeeds
+    public string? MandateId { get; set; }
+    public string? RemitaTransRef { get; set; }
+
+    /// <summary>
+    /// Auth parameter descriptors from Remita — tells the frontend which inputs
+    /// the borrower must supply (e.g. OTP, last 4 card digits) for Step 4B.
+    /// </summary>
+    public List<MandateAuthParamDto>? AuthParams { get; set; }
+}
+
+/// <summary>
+/// Describes a single input the borrower must supply to activate the mandate.
+/// </summary>
+public class MandateAuthParamDto
+{
+    public string? Param1 { get; set; }
+    public string? Label1 { get; set; }
+    public string? Description1 { get; set; }
+    public string? Param2 { get; set; }
+    public string? Label2 { get; set; }
+    public string? Description2 { get; set; }
 }
 
 public class BorrowerStep4BRequestDto

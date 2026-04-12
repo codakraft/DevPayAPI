@@ -78,6 +78,7 @@ public class BorrowerApplication : Base
     public string? RemitaTransRef { get; set; }
     public DateTime? MandateGeneratedAt { get; set; }
     public DateTime? MandateActivatedAt { get; set; }
+    // public string? DirectDebitMandateRequestId { get; set; }
 
     // Status
     public bool IsCompleted { get; set; } = false;

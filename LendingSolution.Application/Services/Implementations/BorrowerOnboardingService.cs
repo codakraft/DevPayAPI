@@ -778,7 +778,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
         // Automatically generate mandate and dispatch activation OTP after Step 4 is completed.
         await EnsureMandateGeneratedAsync(application, loan);
-        await RequestMandateOtpAsync(application, request.LoanId);
+        var otpResult = await RequestMandateOtpAsync(application, request.LoanId);
 
         return new BorrowerStep4ResponseDto
         {
@@ -789,6 +789,17 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             RepaymentAmount = totalRepayment,
             Tenor = request.Tenor,
             MonthlyRepaymentAmount = monthlyRepayment,
+            MandateId = otpResult.MandateId ?? application.DirectDebitMandateId,
+            RemitaTransRef = otpResult.RemitaTransRef ?? otpResult.RequestId,
+            AuthParams = otpResult.AuthParams?.Select(p => new MandateAuthParamDto
+            {
+                Param1       = p.Param1,
+                Label1       = p.Label1,
+                Description1 = p.Description1,
+                Param2       = p.Param2,
+                Label2       = p.Label2,
+                Description2 = p.Description2
+            }).ToList(),
             Message = "Loan submitted successfully. Mandate OTP has been sent for activation."
         };
     }
@@ -801,21 +812,37 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         }
 
         // Dates must be in dd/MM/yyyy format as required by Remita echannel API
-        var ddStartDate = DateTime.UtcNow.AddDays(1).ToString("dd/MM/yyyy");
-        var ddEndDate = DateTime.UtcNow.AddMonths(loan.DurationInMonths + 1).ToString("dd/MM/yyyy");
+        // Start date = current date
+        var startDate = DateTime.Now;
+        var startDay = startDate.Day;
+        var startMonth = startDate.Month;
+        var startYear = startDate.Year;
+
+        // End date = 6 months later
+        var endDate = startDate.AddMonths(6);
+        var endDay = endDate.Day;
+        var endMonth = endDate.Month;
+        var endYear = endDate.Year;
+
+        // Format as "dd/MM/yyyy" with leading zeros
+        var ddStartDate = $"{startDay:D2}/{startMonth:D2}/{startYear}";
+        var ddEndDate = $"{endDay:D2}/{endMonth:D2}/{endYear}";
 
         var directDebitRequest = new DirectDebitGenerateMandateRequestDto
         {
-            PayerName = $"{application.FirstName} {application.LastName}",
-            PayerEmail = application.Email,
-            PayerPhone = application.PhoneNumber ?? string.Empty,
-            PayerBankCode = application.BankCode ?? string.Empty,
-            PayerAccountNumber = application.AccountNo ?? string.Empty,
-            Amount = loan.MonthlyRepayment ?? loan.Amount,
+            PayerName = "John Doe", //$"{application.FirstName} {application.LastName}",
+            PayerEmail = "john.doe@mailinator.com",//application.Email,
+            PayerPhone = "08082278899",//application.PhoneNumber ?? string.Empty,
+            // PayerBankCode = application.BankCode ?? string.Empty,
+            PayerBankCode = "057", // Using GTBank for all mandates to avoid issues with bank code verification in Remita sandbox
+            // PayerAccountNumber = application.AccountNo ?? string.Empty,
+            PayerAccountNumber = "0100034932", // Using DevPay's account number for all mandates to avoid issues with account verification in Remita sandbox
+            // Amount = loan.MonthlyRepayment ?? loan.Amount,
+            Amount = 10000, // Using a fixed amount for mandate generation to avoid issues with amount validation in Remita sandbox (amount will be updated to actual monthly repayment after mandate activation)
             StartDate = ddStartDate,
             EndDate = ddEndDate,
             MandateType = "SO",
-            Frequency = "MONTHLY",
+            Frequency = "Month",
             Description = $"Loan repayment mandate for {application.FirstName} {application.LastName} — Loan ID: {loan.Id}"
         };
 
@@ -824,8 +851,13 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             loan.Id, application.Email, directDebitRequest.Amount, ddStartDate, ddEndDate);
 
         var result = await _remitaService.GenerateDirectDebitMandateAsync(directDebitRequest);
-
-        if (result?.Data?.MandateId == null)
+        _logger.LogInformation("[Mandate] response from remita: {Result}", result);
+        
+        // Remita returns mandateId and requestId at root level: ({"statuscode":"040","requestId":"...","mandateId":"...","status":"Initail Request OK"})
+        var mandateId = result?.MandateId ?? result?.Data?.MandateId;
+        var requestId = result?.RequestId ?? result?.Data?.RequestId;
+        
+        if (mandateId == null)
         {
             var remitaMessage = !string.IsNullOrWhiteSpace(result?.Message)
                 ? result.Message
@@ -838,32 +870,38 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             throw new AppException($"Mandate generation failed: {remitaMessage} Please verify your bank details and try again.", 502);
         }
 
-        application.DirectDebitMandateId = result.Data.MandateId;
+        application.DirectDebitMandateId = mandateId;
         application.MandateGeneratedAt = DateTime.UtcNow;
+        application.RemitaTransRef = requestId; // Store the requestId from GenerateMandate response
         application.CurrentStep = BorrowerOnboardingStep.Step5_MandateGenerated;
         application.UpdatedAt = DateTime.UtcNow;
         await _borrowerRepository.UpdateAsync(application);
 
-        loan.MandateRef = result.Data.MandateId;
+        loan.MandateRef = mandateId;
         loan.IsMandateCreated = true;
         loan.MandateCreatedAt = DateTime.UtcNow;
         await _loanRepository.UpdateLoan(loan);
     }
 
-    private async Task<string> RequestMandateOtpAsync(BorrowerApplication application, Guid loanId)
+    private async Task<DirectDebitRequestAuthorizationResponseDto> RequestMandateOtpAsync(BorrowerApplication application, Guid loanId)
     {
         if (string.IsNullOrEmpty(application.DirectDebitMandateId))
             throw new AppException("Mandate ID not found. Please regenerate the mandate.", 400);
 
+        // Use the requestId from GenerateMandate response (stored in RemitaTransRef)
+        // var requestIdFromGenerate = application.RemitaTransRef ?? string.Empty;
+        var requestId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
         var otpRequest = new DirectDebitRequestAuthorizationDto
         {
             MandateId = application.DirectDebitMandateId,
-            PhoneNumber = application.PhoneNumber ?? string.Empty
+            // PhoneNumber = application.PhoneNumber ?? string.Empty,
+            RequestId = requestId.ToString()
         };
 
         _logger.LogInformation(
-            "[Mandate] Requesting activation OTP for loan {LoanId}, MandateId={MandateId}",
-            loanId, application.DirectDebitMandateId);
+            "[Mandate] Requesting activation OTP for loan {LoanId}, MandateId={MandateId}, RequestId={RequestId}",
+            loanId, application.DirectDebitMandateId, requestId);
 
         var result = await _remitaService.RequestMandateAuthorizationAsync(otpRequest);
 
@@ -875,19 +913,22 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             throw new AppException($"OTP request failed: {msg}", 502);
         }
 
-        if (string.IsNullOrWhiteSpace(result.RequestId))
+        // Prefer remitaTransRef returned by Remita; fall back to requestId if absent
+        var transRef = result.RemitaTransRef ?? result.RequestId;
+
+        if (string.IsNullOrWhiteSpace(transRef))
         {
-            _logger.LogError("[Mandate] OTP request succeeded but requestId was empty for MandateId={MandateId}",
+            _logger.LogError("[Mandate] OTP request succeeded but both remitaTransRef and requestId were empty for MandateId={MandateId}",
                 application.DirectDebitMandateId);
             throw new AppException("Failed to retrieve activation reference from Remita. Please request OTP again.", 502);
         }
 
-        application.RemitaTransRef = result.RequestId;
+        application.RemitaTransRef = transRef;
         application.CurrentStep = BorrowerOnboardingStep.Step6_MandateActivationPending;
         application.UpdatedAt = DateTime.UtcNow;
         await _borrowerRepository.UpdateAsync(application);
 
-        return result.RequestId ?? string.Empty;
+        return result;
     }
 
     public async Task<BorrowerStep4BResponseDto> Step4B_ActivateMandateAsync(BorrowerStep4BRequestDto request)

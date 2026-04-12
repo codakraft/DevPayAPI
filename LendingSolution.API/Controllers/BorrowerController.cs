@@ -175,9 +175,16 @@ public class BorrowerController(
             return Ok(ApiResponse.Ok(result.Message, new
             {
                 loanId = request.LoanId,
+                loanPrincipal = result.LoanPrincipal,
+                applicableFees = result.ApplicableFees,
+                disbursementAmount = result.DisbursementAmount,
+                appliedInterest = result.AppliedInterest,
                 repaymentAmount = result.RepaymentAmount,
                 tenor = result.Tenor,
-                monthlyRepaymentAmount = result.MonthlyRepaymentAmount
+                monthlyRepaymentAmount = result.MonthlyRepaymentAmount,
+                mandateId = result.MandateId,
+                remitaTransRef = result.RemitaTransRef,
+                authParams = result.AuthParams
             }));
         }
         catch (AppException ex)
