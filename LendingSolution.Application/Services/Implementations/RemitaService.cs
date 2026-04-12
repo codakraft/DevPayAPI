@@ -693,8 +693,8 @@ public class RemitaService : IRemitaService
             var requestId = request.RequestId;
             var payload = new
             {
-                mandateId = "180799091923",
-                requestId = "1751532065837",
+                mandateId = _settings.UseLiveData ? request.MandateId : "180799091923",
+                requestId = _settings.UseLiveData ? request.RequestId : "1751532065837",
             };
 
             _logger.LogInformation("[DirectDebit] RequestAuthorization Payload: {Payload}", JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
