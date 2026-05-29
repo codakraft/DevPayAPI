@@ -763,12 +763,13 @@ public class RemitaService : IRemitaService
     {
         try
         {
-            // Build the authParams array in the format Remita expects
+            // Build the authParams array in the format Remita expects.
+            // Trim values so stray whitespace from client input doesn't fail OTP validation upstream.
             var authParams = request.AuthParams.Select(p => new
             {
                 param1 = p.Param1,
                 param2 = p.Param2,
-                value  = p.Value
+                value  = p.Value?.Trim() ?? string.Empty
             }).ToList();
 
             var payload = new
@@ -782,16 +783,20 @@ public class RemitaService : IRemitaService
                 : _settings.ValidateMandateOtpEndpoint;
 
             var requestUrl = BuildUrl(endpoint);
-            _logger.LogInformation("[DirectDebit] ValidateAuthorization → {Url} | RemitaTransRef={TransRef}",
-                requestUrl, request.RemitaTransRef);
+
+            // Fresh timestamp requestId for headers (RemitaTransRef is a reference code, not a timestamp).
+            var requestId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+
+            _logger.LogInformation(
+                "[DirectDebit] ValidateAuthorization → {Url} | RemitaTransRef={TransRef}, RequestId={RequestId}",
+                requestUrl, request.RemitaTransRef, requestId);
+            _logger.LogInformation("[DirectDebit] ValidateAuthorization Payload: {Payload}",
+                JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
 
             var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUrl)
             {
                 Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
             };
-
-            // Generate a fresh timestamp requestId for headers (RemitaTransRef is a reference code, not a timestamp)
-            var requestId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
             AddEchannelHeaders(httpRequest, requestId);
 
             var response = await _httpClient.SendAsync(httpRequest);
@@ -809,6 +814,18 @@ public class RemitaService : IRemitaService
             // Strip JSONP wrapper: "jsonp ({...})" or "({...})"
             responseContent = StripJsonpWrapper(responseContent);
 
+            // Remita's gateway occasionally returns HTML error pages on outages — guard before deserializing.
+            var trimmedBody = responseContent.TrimStart();
+            if (!trimmedBody.StartsWith('{') && !trimmedBody.StartsWith('['))
+            {
+                _logger.LogError("[DirectDebit] ValidateAuthorization received a non-JSON response. Body: {Body}", responseContent);
+                return new DirectDebitValidateAuthorizationResponseDto
+                {
+                    StatusCode = "ERR",
+                    Message    = "Remita returned an unexpected response. Please try again."
+                };
+            }
+
             var result = JsonSerializer.Deserialize<DirectDebitValidateAuthorizationResponseDto>(
                 responseContent,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
@@ -820,8 +837,9 @@ public class RemitaService : IRemitaService
             }
             else
             {
-                _logger.LogInformation("[DirectDebit] Mandate activated successfully. MandateRef={Ref}",
-                    result.MandateRef);
+                _logger.LogInformation(
+                    "[DirectDebit] Mandate activated successfully. RemitaTransRef={TransRef}, MandateRef={Ref}",
+                    request.RemitaTransRef, result.MandateRef);
             }
 
             return result;
