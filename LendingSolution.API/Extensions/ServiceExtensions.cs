@@ -276,6 +276,7 @@ public static class ServiceExtensions
         services.AddScoped<ISalaryHistoryViewService, SalaryHistoryViewService>();
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IProvidusDisbursementService, ProvidusDisbursementService>();
+        services.AddScoped<IEmbedlyWalletService, EmbedlyWalletService>();
     }
 
     public static void RegisterRepositories(this IServiceCollection services)
@@ -302,12 +303,15 @@ public static class ServiceExtensions
         services.AddScoped<IRemitaSalaryHistoryRepository, RemitaSalaryHistoryRepository>();
         services.AddScoped<IRemitaSalaryHistoryRepository, RemitaSalaryHistoryRepository>();
         services.AddScoped<IMfaSessionRepository, MfaSessionRepository>();
+        services.AddScoped<IEWalletRepository, EWalletRepository>();
+        services.AddScoped<IEWalletTransactionRepository, EWalletTransactionRepository>();
     }
 
     public static void ConfigureServices(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<RemitaSettings>(configuration.GetSection("Remita"));
         services.Configure<ProvidusSettings>(configuration.GetSection("Providus"));
+        services.Configure<EmbedlySettings>(configuration.GetSection("Embedly"));
         // services.AddScoped<IRemitaService, RemitaService>();
         // services.AddScoped<IAuthService, AuthService>();
         // services.AddScoped<IProfileService, ProfileService>();
@@ -337,6 +341,11 @@ public static class ServiceExtensions
         services.AddHttpClient("RemitaClient", client =>
         {
             client.Timeout = TimeSpan.FromSeconds(200);
+        });
+
+        services.AddHttpClient("EmbedlyWalletClient", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(60);
         });
     }
 
