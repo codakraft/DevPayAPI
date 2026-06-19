@@ -25,6 +25,135 @@ public class MonoController : ControllerBase
     }
 
     /// <summary>
+    /// Create a Mono customer
+    /// </summary>
+    /// <param name="request">Customer details</param>
+    /// <returns>Created Mono customer with ID</returns>
+    [HttpPost("customers")]
+    [AllowAnonymous]
+    public async Task<ActionResult<MonoCreateCustomerResponseDto>> CreateCustomer([FromBody] MonoCreateCustomerRequestDto request)
+    {
+        try
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            _logger.LogInformation("Creating Mono customer for email: {Email} by user: {UserId}", request.Email, userId);
+
+            var result = await _monoService.CreateCustomerAsync(request, userId);
+
+            if (result == null)
+                return BadRequest(ApiResponse.Fail("Failed to create Mono customer"));
+
+            if (result.Data != null)
+            {
+                _logger.LogInformation("Mono customer created successfully. Id: {CustomerId}", result.Data.Id);
+                return StatusCode(201, ApiResponse.Ok("Mono customer created successfully", result));
+            }
+
+            _logger.LogWarning("Mono customer creation returned no data. Message: {Message}", result.Message);
+            return BadRequest(ApiResponse.Fail(result.Message ?? "Failed to create Mono customer"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating Mono customer for email: {Email}", request.Email);
+            return StatusCode(500, ApiResponse.Fail("An error occurred while creating the customer"));
+        }
+    }
+
+    /// <summary>
+    /// Get a Mono customer by ID
+    /// </summary>
+    /// <param name="customerId">The Mono customer ID</param>
+    /// <returns>Customer details</returns>
+    [HttpGet("customers/{customerId}")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    public async Task<ActionResult<MonoGetCustomerResponseDto>> GetCustomerById(string customerId)
+    {
+        try
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            _logger.LogInformation("Fetching Mono customer {CustomerId} by user: {UserId}", customerId, userId);
+
+            var result = await _monoService.GetCustomerByIdAsync(customerId, userId);
+
+            if (result == null)
+                return BadRequest(ApiResponse.Fail("Failed to retrieve Mono customer"));
+
+            if (result.Data != null)
+                return Ok(ApiResponse.Ok("Mono customer retrieved successfully", result));
+
+            return BadRequest(ApiResponse.Fail(result.Message ?? "Customer not found"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching Mono customer: {CustomerId}", customerId);
+            return StatusCode(500, ApiResponse.Fail("An error occurred while retrieving the customer"));
+        }
+    }
+
+    /// <summary>
+    /// Get all Mono customers
+    /// </summary>
+    /// <param name="page">Page number (default: 1)</param>
+    /// <param name="limit">Page size (default: 20)</param>
+    /// <returns>Paginated list of customers</returns>
+    [HttpGet("customers")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    public async Task<ActionResult<MonoGetAllCustomersResponseDto>> GetAllCustomers(
+        [FromQuery] int page = 1,
+        [FromQuery] int limit = 20)
+    {
+        try
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            _logger.LogInformation("Fetching all Mono customers. Page: {Page}, Limit: {Limit}, by user: {UserId}", page, limit, userId);
+
+            var result = await _monoService.GetAllCustomersAsync(page, limit, userId);
+
+            if (result == null)
+                return BadRequest(ApiResponse.Fail("Failed to retrieve Mono customers"));
+
+            return Ok(ApiResponse.Ok("Mono customers retrieved successfully", result));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching all Mono customers");
+            return StatusCode(500, ApiResponse.Fail("An error occurred while retrieving customers"));
+        }
+    }
+
+    /// <summary>
+    /// Get all linked accounts for a Mono customer
+    /// </summary>
+    /// <param name="customerId">The Mono customer ID</param>
+    /// <returns>List of linked bank accounts</returns>
+    [HttpGet("customers/{customerId}/accounts")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    public async Task<ActionResult<MonoGetLinkedAccountsResponseDto>> GetCustomerLinkedAccounts(string customerId)
+    {
+        try
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            _logger.LogInformation("Fetching linked accounts for Mono customer: {CustomerId} by user: {UserId}", customerId, userId);
+
+            var result = await _monoService.GetCustomerLinkedAccountsAsync(customerId, userId);
+
+            if (result == null)
+                return BadRequest(ApiResponse.Fail("Failed to retrieve linked accounts"));
+
+            return Ok(ApiResponse.Ok("Linked accounts retrieved successfully", result));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching linked accounts for Mono customer: {CustomerId}", customerId);
+            return StatusCode(500, ApiResponse.Fail("An error occurred while retrieving linked accounts"));
+        }
+    }
+
+    /// <summary>
     /// Generate mandate using Mono for a loan
     /// </summary>
     /// <param name="loanId">The loan ID to generate mandate for</param>
@@ -197,12 +326,47 @@ public class MonoController : ControllerBase
     }
 
     /// <summary>
+    /// Lookup NIN using Mono
+    /// </summary>
+    /// <param name="nin">The National Identification Number to verify</param>
+    /// <returns>NIN details from Mono</returns>
+    [HttpPost("nin-lookup")]
+    [AllowAnonymous]
+    public async Task<ActionResult<MonoNinLookupResponseDto>> NinLookup([FromQuery] string nin)
+    {
+        try
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            _logger.LogInformation("NIN lookup requested for NIN: {Nin} by user: {UserId}", nin, userId);
+
+            if (string.IsNullOrWhiteSpace(nin))
+                return BadRequest(ApiResponse.Fail("NIN is required"));
+
+            var result = await _monoService.NinLookupAsync(nin, userId);
+
+            if (result == null)
+                return BadRequest(ApiResponse.Fail("NIN lookup failed"));
+
+            if (result.Data != null)
+                return Ok(ApiResponse.Ok("NIN lookup successful", result));
+
+            return BadRequest(ApiResponse.Fail(result.Message ?? "NIN lookup returned no data"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error performing NIN lookup for NIN: {Nin}", nin);
+            return StatusCode(500, ApiResponse.Fail("An error occurred during NIN lookup"));
+        }
+    }
+
+    /// <summary>
     /// Initiate BVN lookup using Mono
     /// </summary>
     /// <param name="request">BVN lookup request containing BVN and scope</param>
     /// <returns>Mono BVN lookup response</returns>
     [HttpPost("bvn-lookup")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [AllowAnonymous]
     public async Task<ActionResult<MonoBvnLookupResponseDto>> BvnLookup([FromBody] MonoBvnLookupRequestDto request)
     {
         try
@@ -396,16 +560,16 @@ public class MonoController : ControllerBase
     /// <returns>Credit history response from Mono</returns>
     [HttpPost("credit-history")]
     [Authorize(Roles = "SuperAdmin,Admin")]
-    public async Task<ActionResult<MonoCreditHistoryResponseDto>> GetCreditHistory([FromBody] MonoCreditHistoryRequestDto request)
+    public async Task<ActionResult<MonoCreditHistoryResponseDto>> GetCreditHistory([FromBody] MonoCreditHistoryRequestDto request, [FromQuery] string provider = "xds")
     {
         try
         {
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            
-            _logger.LogInformation("Getting credit history for BVN: {BvnMasked} with provider: {Provider} by user: {UserId}", 
-                MaskBvn(request.Bvn), request.Provider, userId);
-            
-            var result = await _monoService.GetCreditHistoryAsync(request.Bvn, request.Provider, userId);
+
+            _logger.LogInformation("Getting credit history for BVN: {BvnMasked} with provider: {Provider} by user: {UserId}",
+                MaskBvn(request.Bvn), provider, userId);
+
+            var result = await _monoService.GetCreditHistoryAsync(request.Bvn, provider, userId);
 
             if (result == null)
             {
@@ -415,8 +579,8 @@ public class MonoController : ControllerBase
 
             if (result.Status?.ToLower() == "successful")
             {
-                _logger.LogInformation("Successfully retrieved credit history for BVN: {BvnMasked} with provider: {Provider}", 
-                    MaskBvn(request.Bvn), request.Provider);
+                _logger.LogInformation("Successfully retrieved credit history for BVN: {BvnMasked} with provider: {Provider}",
+                    MaskBvn(request.Bvn), provider);
                 return Ok(ApiResponse.Ok("Credit history retrieved successfully", result));
             }
             else
@@ -440,16 +604,16 @@ public class MonoController : ControllerBase
     /// <returns>Complete credit analysis with risk assessment and loan recommendations</returns>
     [HttpPost("credit-analysis")]
     [Authorize(Roles = "SuperAdmin,Admin")]
-    public async Task<ActionResult<MonoCreditAnalysisResultDto>> GetCreditAnalysis([FromBody] MonoCreditHistoryRequestDto request)
+    public async Task<ActionResult<MonoCreditAnalysisResultDto>> GetCreditAnalysis([FromBody] MonoCreditHistoryRequestDto request, [FromQuery] string provider = "xds")
     {
         try
         {
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            
-            _logger.LogInformation("Performing credit analysis for BVN: {BvnMasked} with provider: {Provider} by user: {UserId}", 
-                MaskBvn(request.Bvn), request.Provider, userId);
-            
-            var result = await _monoService.AnalyzeCreditHistoryAsync(request.Bvn, request.Provider, userId);
+
+            _logger.LogInformation("Performing credit analysis for BVN: {BvnMasked} with provider: {Provider} by user: {UserId}",
+                MaskBvn(request.Bvn), provider, userId);
+
+            var result = await _monoService.AnalyzeCreditHistoryAsync(request.Bvn, provider, userId);
 
             if (result == null)
             {
@@ -626,6 +790,73 @@ public class MonoController : ControllerBase
             return "****";
         
         return $"{bvn[..3]}***{bvn[^1]}";
+    }
+
+    // ======================== Banks Endpoint ========================
+
+    /// <summary>
+    /// Returns the list of banks supported by Mono for mandate creation.
+    /// </summary>
+    [HttpGet("banks")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetBanks()
+    {
+        try
+        {
+            var result = await _monoService.GetBanksAsync();
+
+            if (result == null)
+                return BadRequest(ApiResponse.Fail("Failed to retrieve banks from Mono"));
+
+            result.Data = result.Data.Where(b => b.DirectDebit).ToList();
+
+            return Ok(ApiResponse.Ok("Banks retrieved successfully", result));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving Mono banks list");
+            return StatusCode(500, ApiResponse.Fail("An error occurred while retrieving banks"));
+        }
+    }
+
+    // ======================== Initiate Debit Endpoint ========================
+
+    /// <summary>
+    /// Manually triggers a one-off debit collection against an active mandate.
+    /// For <c>variable</c> mandates you can supply a custom <c>amount</c> (in kobo).
+    /// For <c>fixed</c> mandates omit <c>amount</c> and Mono uses the mandate amount.
+    /// </summary>
+    /// <param name="mandateId">The Mono mandate ID to debit</param>
+    /// <param name="request">Optional amount (kobo) and description</param>
+    [HttpPost("mandate/{mandateId}/debit")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    public async Task<IActionResult> InitiateDebit(string mandateId, [FromBody] MonoInitiateDebitRequestDto request)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        try
+        {
+            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+            _logger.LogInformation("InitiateDebit called for MandateId={MandateId}, Amount={Amount}, UserId={UserId}",
+                mandateId, request.Amount, userId);
+
+            var result = await _monoService.InitiateDebitAsync(mandateId, request, userId);
+
+            if (result == null)
+                return BadRequest(ApiResponse.Fail("Failed to initiate debit. Check that the mandate is active and ready to debit."));
+
+            if (result.Status?.ToLower() == "success" || result.Status?.ToLower() == "successful")
+                return Ok(ApiResponse.Ok("Debit initiated successfully", result));
+
+            return BadRequest(ApiResponse.Fail(result.Message ?? "Mono returned a non-success status"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error initiating debit for mandate {MandateId}", mandateId);
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred while initiating the debit"));
+        }
     }
 
     /// <summary>

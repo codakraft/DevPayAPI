@@ -146,7 +146,8 @@ public class BorrowerController(
                 maxLoanEligible = result.MaxLoanEligible,
                 minLoanEligible = result.MinLoanEligible,
                 maxTenor = result.MaxTenor,
-                minTenor = result.MinTenor
+                minTenor = result.MinTenor,
+                monoCustomerId = result.MonoCustomerId
             }));
         }
         catch (AppException ex)
@@ -175,9 +176,16 @@ public class BorrowerController(
             return Ok(ApiResponse.Ok(result.Message, new
             {
                 loanId = request.LoanId,
+                loanPrincipal = result.LoanPrincipal,
+                applicableFees = result.ApplicableFees,
+                disbursementAmount = result.DisbursementAmount,
+                appliedInterest = result.AppliedInterest,
                 repaymentAmount = result.RepaymentAmount,
                 tenor = result.Tenor,
-                monthlyRepaymentAmount = result.MonthlyRepaymentAmount
+                monthlyRepaymentAmount = result.MonthlyRepaymentAmount,
+                mandateId = result.MandateId,
+                remitaTransRef = result.RemitaTransRef,
+                authParams = result.AuthParams
             }));
         }
         catch (AppException ex)
@@ -188,6 +196,36 @@ public class BorrowerController(
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled error during Step 4");
+            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
+        }
+    }
+
+    /// <summary>
+    /// Step 4B: Submit OTP to activate the mandate and complete onboarding
+    /// </summary>
+    /// <param name="request">Loan ID and borrower OTP</param>
+    /// <returns>Confirmation that the mandate is activated and onboarding is complete</returns>
+    [HttpPost("step4b")]
+    public async Task<IActionResult> Step4B([FromBody] BorrowerStep4BRequestDto request)
+    {
+        try
+        {
+            var result = await _borrowerOnboardingService.Step4B_ActivateMandateAsync(request);
+            return Ok(ApiResponse.Ok(result.Message, new
+            {
+                loanId = request.LoanId,
+                mandateId = result.MandateId,
+                status = result.Status
+            }));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error during Step 4B (activate mandate) for borrower onboarding");
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error during Step 4B");
             return StatusCode(500, ApiResponse.Fail("Something went wrong"));
         }
     }

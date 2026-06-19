@@ -5,8 +5,7 @@ namespace LendingSolution.Core.Dtos;
 // Step 1: Initial borrower information
 public class BorrowerStep1RequestDto
 {
-    [Required]
-    public required string Employer { get; set; }
+    public string? Employer { get; set; }
 
     [Required]
     public required string FirstName { get; set; }
@@ -68,17 +67,22 @@ public class BorrowerStep2RequestDto
     [Required]
     public required string AccountNo { get; set; }
 
-    [Required]
-    public required string BVN { get; set; }
+    public string? BVN { get; set; }
+    public string? Nin { get; set; }
+    public string? IdentityNumber { get; set; }
 
     [Required]
     public Guid LoanId { get; set; }
+
+    [Required]
+    public required string IdentityType { get; set; }
 }
 
 public class BorrowerStep2ResponseDto
 {
     public string Message { get; set; } = "BVN verification initiated successfully";
-    public string? OtpHint { get; set; } // Hint for where OTP will be sent
+    public string? OtpHint { get; set; }
+    public bool RequiresOtp { get; set; } = true;
 }
 
 // Step 2B: BVN OTP validation
@@ -122,6 +126,8 @@ public class BorrowerStep3RequestDto
 
     [Required]
     public Guid LoanId { get; set; }
+
+    public string? Bvn { get; set; }
 }
 
 public class BorrowerStep3ResponseDto
@@ -130,6 +136,7 @@ public class BorrowerStep3ResponseDto
     public decimal MinLoanEligible { get; set; }
     public int MaxTenor { get; set; }
     public int MinTenor { get; set; }
+    public string? MonoCustomerId { get; set; }
     public string Message { get; set; } = "Information added successfully";
 }
 
@@ -175,6 +182,9 @@ public class BorrowerStep4RequestDto
 
     [Required]
     public bool AcceptOfferLetter { get; set; }
+
+    // Only used when ActiveDataProvider is Mono
+    public string? MonoCustomerId { get; set; }
 }
 
 public class BorrowerStep4ResponseDto
@@ -187,6 +197,45 @@ public class BorrowerStep4ResponseDto
     public int Tenor { get; set; }
     public decimal MonthlyRepaymentAmount { get; set; }
     public string Message { get; set; } = "Loan application submitted successfully";
+
+    // Mandate OTP fields — populated after requestAuthorization succeeds
+    public string? MandateId { get; set; }
+    public string? RemitaTransRef { get; set; }
+
+    /// <summary>
+    /// Auth parameter descriptors from Remita — tells the frontend which inputs
+    /// the borrower must supply (e.g. OTP, last 4 card digits) for Step 4B.
+    /// </summary>
+    public List<MandateAuthParamDto>? AuthParams { get; set; }
+}
+
+/// <summary>
+/// Describes a single input the borrower must supply to activate the mandate.
+/// </summary>
+public class MandateAuthParamDto
+{
+    public string? Param1 { get; set; }
+    public string? Label1 { get; set; }
+    public string? Description1 { get; set; }
+    public string? Param2 { get; set; }
+    public string? Label2 { get; set; }
+    public string? Description2 { get; set; }
+}
+
+public class BorrowerStep4BRequestDto
+{
+    [Required]
+    public Guid LoanId { get; set; }
+
+    [Required]
+    public string Otp { get; set; } = string.Empty;
+}
+
+public class BorrowerStep4BResponseDto
+{
+    public string MandateId { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public string Message { get; set; } = "Mandate activated successfully. Your loan application is complete.";
 }
 
 // Email OTP endpoints
