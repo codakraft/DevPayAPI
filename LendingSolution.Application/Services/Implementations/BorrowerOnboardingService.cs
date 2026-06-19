@@ -5,8 +5,10 @@ using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Models;
 using LendingSolution.Core.Enum;
 using LendingSolution.Core.Settings;
+using LendingSolution.Core.Settings;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
 
@@ -33,6 +35,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     private readonly IOtpService _otpService;
     private readonly IAuditService _auditService;
     private readonly RemitaSettings _remitaSettings;
+    private readonly RemitaSettings _remitaSettings;
 
     public BorrowerOnboardingService(
         IBorrowerApplicationRepository borrowerRepository,
@@ -54,6 +57,8 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         ILogger<BorrowerOnboardingService> logger,
         IAuditService auditService,
         IOptions<RemitaSettings> remitaSettings)
+        IAuditService auditService,
+        IOptions<RemitaSettings> remitaSettings)
     {
         _borrowerRepository = borrowerRepository;
         _companyRepository = companyRepository;
@@ -73,6 +78,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         _configuration = configuration;
         _logger = logger;
         _auditService = auditService;
+        _remitaSettings = remitaSettings.Value;
         _remitaSettings = remitaSettings.Value;
     }
 
