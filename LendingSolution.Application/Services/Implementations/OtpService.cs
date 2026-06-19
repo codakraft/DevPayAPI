@@ -70,7 +70,8 @@ public class OtpService : IOtpService
             var otpLength = request.CodeLengthOverride ?? 
                            (IsSensitiveOperation(request.Type) ? SensitiveOtpLength : StandardOtpLength);
             var code = GenerateSecureOtp(otpLength);
-            var expiryMinutes = request.ExpiryMinutesOverride ?? 
+            _logger.LogWarning("[DEV] OTP for {Recipient} ({Type}): {Code}", request.RecipientIdentifier, request.Type, code);
+            var expiryMinutes = request.ExpiryMinutesOverride ??
                                (IsTransactionOperation(request.Type) ? TransactionOtpExpiryMinutes : VerificationOtpExpiryMinutes);
 
             // 4. Create OTP entity

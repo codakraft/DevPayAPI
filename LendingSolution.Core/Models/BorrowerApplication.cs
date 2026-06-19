@@ -62,6 +62,9 @@ public class BorrowerApplication : Base
     public string? LastBvnOtp { get; set; }
     public DateTime? BvnOtpGeneratedAt { get; set; }
     
+    // Mono Customer
+    public string? MonoCustomerId { get; set; }
+
     // Mono BVN Verification
     public string? MonoBvnSessionId { get; set; }
     public string? MonoBvnMethod { get; set; } // Selected method: phone, phone_1, email, alternate_phone

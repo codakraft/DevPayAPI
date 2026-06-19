@@ -42,6 +42,156 @@ public class MonoService : IMonoService
         _logger.LogInformation("  PublicKey loaded: {HasKey}", !string.IsNullOrEmpty(_settings?.PublicKey));
     }
 
+    public async Task<MonoCreateCustomerResponseDto?> CreateCustomerAsync(MonoCreateCustomerRequestDto request, string? userId = null)
+    {
+        try
+        {
+            var httpRequest = new HttpRequestMessage(HttpMethod.Post, BuildUrl("/v2/customers"))
+            {
+                Content = new StringContent(JsonSerializer.Serialize(request), Encoding.UTF8, "application/json")
+            };
+
+            AddMonoHeaders(httpRequest);
+
+            _logger.LogInformation("Creating Mono customer for email: {Email}", request.Email);
+
+            var response = await _httpClient.SendAsync(httpRequest);
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+            _logger.LogInformation("Mono create customer response: {StatusCode} - {Content}", response.StatusCode, responseContent);
+
+            var result = JsonSerializer.Deserialize<MonoCreateCustomerResponseDto>(responseContent, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("Mono customer created successfully. Id: {CustomerId}", result?.Data?.Id);
+                return result;
+            }
+
+            // Handle "customer already exists" conflict — extract and reuse the existing customer ID
+            var conflictResponse = JsonSerializer.Deserialize<MonoCustomerConflictResponseDto>(responseContent, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+            var existingId = conflictResponse?.Data?.ExistingCustomer?.Id;
+            if (!string.IsNullOrEmpty(existingId))
+            {
+                _logger.LogInformation("Mono customer already exists. Reusing existing customer ID: {CustomerId}", existingId);
+                return new MonoCreateCustomerResponseDto
+                {
+                    Status = "successful",
+                    Message = "Customer already exists — existing customer reused",
+                    Data = new MonoCustomerDataDto { Id = existingId }
+                };
+            }
+
+            _logger.LogError("Mono customer creation failed: {StatusCode} - {Content}", response.StatusCode, responseContent);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating Mono customer for email: {Email}", request.Email);
+            return null;
+        }
+    }
+
+    public async Task<MonoGetCustomerResponseDto?> GetCustomerByIdAsync(string customerId, string? userId = null)
+    {
+        try
+        {
+            var httpRequest = new HttpRequestMessage(HttpMethod.Get, BuildUrl($"/v2/customers/{customerId}"));
+            AddMonoHeaders(httpRequest);
+
+            _logger.LogInformation("Fetching Mono customer: {CustomerId}", customerId);
+
+            var response = await _httpClient.SendAsync(httpRequest);
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+            _logger.LogInformation("Mono get customer response: {StatusCode} - {Content}", response.StatusCode, responseContent);
+
+            var result = JsonSerializer.Deserialize<MonoGetCustomerResponseDto>(responseContent, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+            if (!response.IsSuccessStatusCode)
+                _logger.LogError("Mono get customer failed: {StatusCode} - {Content}", response.StatusCode, responseContent);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching Mono customer: {CustomerId}", customerId);
+            return null;
+        }
+    }
+
+    public async Task<MonoGetAllCustomersResponseDto?> GetAllCustomersAsync(int page = 1, int limit = 20, string? userId = null)
+    {
+        try
+        {
+            var httpRequest = new HttpRequestMessage(HttpMethod.Get, BuildUrl($"/v2/customers?page={page}&limit={limit}"));
+            AddMonoHeaders(httpRequest);
+
+            _logger.LogInformation("Fetching all Mono customers. Page: {Page}, Limit: {Limit}", page, limit);
+
+            var response = await _httpClient.SendAsync(httpRequest);
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+            _logger.LogInformation("Mono get all customers response: {StatusCode} - {Content}", response.StatusCode, responseContent);
+
+            var result = JsonSerializer.Deserialize<MonoGetAllCustomersResponseDto>(responseContent, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+            if (!response.IsSuccessStatusCode)
+                _logger.LogError("Mono get all customers failed: {StatusCode} - {Content}", response.StatusCode, responseContent);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching all Mono customers");
+            return null;
+        }
+    }
+
+    public async Task<MonoGetLinkedAccountsResponseDto?> GetCustomerLinkedAccountsAsync(string customerId, string? userId = null)
+    {
+        try
+        {
+            var httpRequest = new HttpRequestMessage(HttpMethod.Get, BuildUrl($"/v2/customers/{customerId}/accounts"));
+            AddMonoHeaders(httpRequest);
+
+            _logger.LogInformation("Fetching linked accounts for Mono customer: {CustomerId}", customerId);
+
+            var response = await _httpClient.SendAsync(httpRequest);
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+            _logger.LogInformation("Mono linked accounts response: {StatusCode} - {Content}", response.StatusCode, responseContent);
+
+            var result = JsonSerializer.Deserialize<MonoGetLinkedAccountsResponseDto>(responseContent, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+            if (!response.IsSuccessStatusCode)
+                _logger.LogError("Mono get linked accounts failed: {StatusCode} - {Content}", response.StatusCode, responseContent);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching linked accounts for Mono customer: {CustomerId}", customerId);
+            return null;
+        }
+    }
+
     public async Task<MonoGenerateMandateResponseDto?> GenerateMandateAsync(Guid loanId, MonoGenerateMandateRequestDto request, string? userId = null)
     {
         try
@@ -64,25 +214,34 @@ public class MonoService : IMonoService
                 return null;
             }
 
+            // reference: ≤24 alphanumeric chars (no hyphens)
+            var rawRef = !string.IsNullOrEmpty(request.Reference) ? request.Reference : Guid.NewGuid().ToString("N");
+            var safeReference = new string(rawRef.Where(char.IsLetterOrDigit).ToArray())[..Math.Min(24, rawRef.Length)];
+
             // Build the request payload
             var payload = new MonoGenerateMandateRequestDto
             {
+                Type = "recurring-debit",
+                Method = "mandate",
+                MandateType = "emandate",
                 DebitType = request.DebitType ?? "variable",
-                Customer = !string.IsNullOrEmpty(request.Customer) ? request.Customer : $"{borrowerApplication.FirstName} {borrowerApplication.LastName}",
-                MandateType = request.MandateType,
+                Customer = new MonoMandateCustomerDto
+                {
+                    Id = !string.IsNullOrEmpty(request.Customer?.Id) ? request.Customer.Id : _settings.TestCustomerId
+                },
                 Amount = request.Amount,
-                Reference = !string.IsNullOrEmpty(request.Reference) ? request.Reference : Guid.NewGuid().ToString(),
+                Reference = safeReference,
                 AccountNumber = !string.IsNullOrEmpty(request.AccountNumber) ? request.AccountNumber : borrowerApplication.AccountNo ?? string.Empty,
                 BankCode = !string.IsNullOrEmpty(request.BankCode) ? request.BankCode : borrowerApplication.BankCode ?? string.Empty,
-                FeeBearer = "BUSINESS", // Default as specified
                 Description = !string.IsNullOrEmpty(request.Description) ? request.Description : $"Loan mandate for {loan.User?.Email ?? "borrower"}",
                 StartDate = request.StartDate,
                 EndDate = request.EndDate,
-                Meta = request.Meta ?? new { }
+                RedirectUrl = request.RedirectUrl,
+                Meta = new { source = "devpay", loanId = loanId.ToString() }
             };
 
             // Create HTTP request
-            var httpRequest = new HttpRequestMessage(HttpMethod.Post, BuildUrl("/v3/payments/mandates"))
+            var httpRequest = new HttpRequestMessage(HttpMethod.Post, BuildUrl("/v2/payments/initiate"))
             {
                 Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
             };
@@ -379,6 +538,42 @@ public class MonoService : IMonoService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error fetching banks from Mono: {Message}", ex.Message);
+            return null;
+        }
+    }
+
+    public async Task<MonoNinLookupResponseDto?> NinLookupAsync(string nin, string? userId = null)
+    {
+        try
+        {
+            var payload = new MonoNinLookupRequestDto { Nin = nin };
+            var httpRequest = new HttpRequestMessage(HttpMethod.Post, BuildUrl("/v3/lookup/nin"))
+            {
+                Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+            };
+
+            AddMonoHeaders(httpRequest);
+
+            _logger.LogInformation("[Mono NIN Lookup] Initiating lookup for NIN: {Nin}", nin);
+
+            var response = await _httpClient.SendAsync(httpRequest);
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+            _logger.LogInformation("[Mono NIN Lookup] Response: {StatusCode} - {Content}", response.StatusCode, responseContent);
+
+            var result = JsonSerializer.Deserialize<MonoNinLookupResponseDto>(responseContent, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+            if (!response.IsSuccessStatusCode)
+                _logger.LogError("[Mono NIN Lookup] Failed: {StatusCode} - {Content}", response.StatusCode, responseContent);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Mono NIN Lookup] Error performing NIN lookup for: {Nin}", nin);
             return null;
         }
     }
@@ -682,12 +877,13 @@ public class MonoService : IMonoService
     }
 
     // Credit History Methods
-    public async Task<MonoCreditHistoryResponseDto?> GetCreditHistoryAsync(string bvn, string provider = "xds", string? userId = null)
+    public async Task<MonoCreditHistoryResponseDto?> GetCreditHistoryAsync(string bvn, string provider = "cdc", string? userId = null)
     {
+        _logger.LogInformation("Getting credit history for BVN: {BvnMasked} with provider: {Provider}", bvn, provider);
         try
         {
             // Validate provider
-            if (provider != "xds" && provider != "cdc")
+            if (provider != "xds" && provider != "cdc" && provider != "all")
             {
                 _logger.LogError("Invalid credit history provider: {Provider}. Must be 'xds' or 'cdc'", provider);
                 return null;

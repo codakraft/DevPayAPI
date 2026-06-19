@@ -113,7 +113,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             Email = request.Email,
             FirstName = request.FirstName,
             LastName = request.LastName,
-            Employer = request.Employer,
+            Employer = request.Employer ?? string.Empty,
             PhoneNumber = request.PhoneNumber,
             CompanyId = product.CompanyId, // Get CompanyId from the product
             ProductId = request.ProductId,
@@ -208,46 +208,83 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             throw new AppException("Complete bank details are required.", 400);
         }
 
-        // Validate BVN format (11 digits)
-        if (string.IsNullOrWhiteSpace(request.BVN) || request.BVN.Length != 11 || !request.BVN.All(char.IsDigit))
+        // Resolve identity number — accepts nin / identityNumber / bvn (in priority order)
+        var identityNumber = !string.IsNullOrWhiteSpace(request.Nin) ? request.Nin
+            : !string.IsNullOrWhiteSpace(request.IdentityNumber) ? request.IdentityNumber
+            : request.BVN ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(identityNumber) || identityNumber.Length != 11 || !identityNumber.All(char.IsDigit))
         {
-            throw new AppException("Invalid BVN format. BVN must be 11 digits.", 400);
+            throw new AppException($"Invalid {request.IdentityType.ToUpper()} format. Must be 11 digits.", 400);
         }
 
-        // Save BVN and bank details to application
-        application.BVN = request.BVN;
+        // Save bank details to application
+        application.BVN = identityNumber;
         application.BankCode = request.BankCode;
         application.AccountNo = request.AccountNo;
         application.UpdatedAt = DateTime.UtcNow;
 
-        // Step 1: Initiate Mono BVN lookup
+        var identityType = request.IdentityType.ToLower();
+        var activeProvider = _configuration["ActiveDataProvider"] ?? "Remita";
+
+        // ── NIN path ──────────────────────────────────────────────────────────
+        if (identityType == "nin")
+        {
+            _logger.LogInformation("Initiating Mono NIN lookup for application {ApplicationId}", application.Id);
+
+            var ninResult = await _monoService.NinLookupAsync(identityNumber);
+
+            if (ninResult?.Data == null)
+            {
+                _logger.LogError("Mono NIN lookup failed for application {ApplicationId}: {Message}",
+                    application.Id, ninResult?.Message ?? "No response from Mono");
+                throw new AppException(ninResult?.Message ?? "NIN verification failed. Please check your NIN and try again.", 400);
+            }
+
+            _logger.LogInformation("Mono NIN lookup successful for application {ApplicationId}", application.Id);
+
+            // NIN verification is a direct lookup — no OTP needed, advance immediately
+            application.BVN = GenerateBvnHash(identityNumber);
+            application.BankCode = request.BankCode;
+            application.AccountNo = request.AccountNo;
+            application.CurrentStep = BorrowerOnboardingStep.Step2B_BvnValidated;
+            application.BvnVerifiedAt = DateTime.UtcNow;
+            application.IsBvnVerified = true;
+            application.UpdatedAt = DateTime.UtcNow;
+
+            if (activeProvider.Equals("Mono", StringComparison.OrdinalIgnoreCase))
+                await CreateMonoCustomerIfAbsentAsync(application, "nin", identityNumber, request.AccountNo);
+
+            await _borrowerRepository.UpdateAsync(application);
+
+            return new BorrowerStep2ResponseDto
+            {
+                Message = "NIN verified successfully.",
+                OtpHint = null,
+                RequiresOtp = false
+            };
+        }
+
+        // ── BVN path (default) ────────────────────────────────────────────────
         _logger.LogInformation("Initiating Mono BVN lookup for application {ApplicationId}", application.Id);
-        
+
         var monoLookupResult = await _monoService.BvnLookupAsync(new MonoBvnLookupRequestDto
         {
-            Bvn = request.BVN,
+            Bvn = identityNumber,
             Scope = "identity"
         });
 
         if (monoLookupResult?.Status?.ToLower() != "successful" || monoLookupResult.Data == null)
         {
-            _logger.LogError("Mono BVN lookup failed for application {ApplicationId}: {Message}", 
+            _logger.LogError("Mono BVN lookup failed for application {ApplicationId}: {Message}",
                 application.Id, monoLookupResult?.Message ?? "No response from Mono");
             throw new AppException("Failed to initiate BVN verification. Please try again later.", 500);
         }
 
-        // Save Mono session details - always use alternate_phone method
         application.MonoBvnSessionId = monoLookupResult.Data.SessionId;
-        
-        _logger.LogInformation("Mono BVN lookup successful. SessionId: {SessionId}, Using method: alternate_phone", 
-            application.MonoBvnSessionId);
-        
 
+        _logger.LogInformation("Mono BVN lookup successful. SessionId: {SessionId}", application.MonoBvnSessionId);
 
-        // Step 2: Verify - Send OTP to user using alternate_phone method
-        _logger.LogInformation("Sending Mono BVN OTP for application {ApplicationId}, Method: alternate_phone", 
-            application.Id);
-        
         var monoVerifyResult = await _monoService.BvnVerifyAsync(new MonoBvnVerifyRequestDto
         {
             Method = "alternate_phone",
@@ -256,28 +293,31 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
         if (monoVerifyResult?.Status?.ToLower() != "successful")
         {
-            _logger.LogError("Mono BVN verify failed for application {ApplicationId}: {Message}", 
+            _logger.LogError("Mono BVN verify failed for application {ApplicationId}: {Message}",
                 application.Id, monoVerifyResult?.Message ?? "No response from Mono");
             throw new AppException(monoVerifyResult?.Message ?? "Failed to send OTP. Please try again.", 500);
         }
 
-        // Update application status
         application.CurrentStep = BorrowerOnboardingStep.Step2_BvnSent;
-        application.BVN = GenerateBvnHash(request.BVN);
+        application.BVN = GenerateBvnHash(identityNumber);
         application.BankCode = request.BankCode;
         application.AccountNo = request.AccountNo;
         application.BvnOtpGeneratedAt = DateTime.UtcNow;
         application.UpdatedAt = DateTime.UtcNow;
-        
+
+        if (activeProvider.Equals("Mono", StringComparison.OrdinalIgnoreCase))
+            await CreateMonoCustomerIfAbsentAsync(application, "bvn", identityNumber, request.AccountNo);
+
         await _borrowerRepository.UpdateAsync(application);
 
-        _logger.LogInformation("BVN verification OTP sent for application {ApplicationId}. Message: {Message}", 
+        _logger.LogInformation("BVN verification OTP sent for application {ApplicationId}. Message: {Message}",
             application.Id, monoVerifyResult.Message);
 
         return new BorrowerStep2ResponseDto
         {
             Message = monoVerifyResult.Message ?? "OTP sent successfully. Please check your phone.",
-            OtpHint = $"OTP sent to {application.PhoneNumber}"
+            OtpHint = $"OTP sent to {application.PhoneNumber}",
+            RequiresOtp = true
         };
     }
 
@@ -295,6 +335,13 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         if (application.CurrentStep < BorrowerOnboardingStep.Step2_BvnSent)
         {
             throw new AppException("Please complete BVN submission first", 400);
+        }
+
+        // NIN users are already verified in Step 2 — no OTP needed, return success immediately
+        if (application.IsBvnVerified && application.CurrentStep >= BorrowerOnboardingStep.Step2B_BvnValidated)
+        {
+            _logger.LogInformation("Application {ApplicationId} already verified (NIN flow). Skipping Step 2B.", application.Id);
+            return new BorrowerStep2BResponseDto();
         }
 
         // Allow resubmitting this step - clear subsequent step data if going back
@@ -447,69 +494,100 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             throw new AppException("Bank details not found. Please complete Step 2 first.", 400);
         }
 
-        // Fetch salary history from Remita - this is mandatory
-        _logger.LogInformation("Starting salary history retrieval for application {ApplicationId} - Account:{Account}, Bank:{Bank}",
-            application.Id, application.AccountNo, application.BankCode);
+        // Determine active provider and fetch income/eligibility data
+        var activeProvider = _configuration["ActiveDataProvider"] ?? "Remita";
+        _logger.LogInformation("Active data provider for application {ApplicationId}: {Provider}", application.Id, activeProvider);
 
-        var salaryHistoryResponse = await _remitaService.GetSalaryHistoryAsync(
-            application.AccountNo,
-            application.BankCode,
-            application.BVN ?? string.Empty,
-            application.Id); // Pass borrowerApplicationId instead of email
-
-        if (salaryHistoryResponse == null)
+        if (activeProvider.Equals("Mono", StringComparison.OrdinalIgnoreCase))
         {
-            _logger.LogWarning("Salary history response was null for application {ApplicationId}", application.Id);
-            throw new AppException("Unable to retrieve salary history from Remita. Please ensure your bank details are correct and you have salary payment history.", 400);
-        }
+            // Use Mono credit analysis for eligibility
+            _logger.LogInformation("Using Mono credit analysis for application {ApplicationId} - BVN:{BVN}",
+                application.Id, application.BVN);
 
-        _logger.LogDebug("Salary history raw response for application {ApplicationId}: {Response}", application.Id, JsonSerializer.Serialize(salaryHistoryResponse));
+            var monoBvn = _configuration["Mono:monoCreditHistoryBVN"] ?? application.BVN ?? string.Empty;
+            var creditProvider = _configuration["Mono:CreditHistoryProvider"] ?? "xds";
+            var creditAnalysis = await _monoService.AnalyzeCreditHistoryAsync(monoBvn, creditProvider);
 
-        if (salaryHistoryResponse.Status != "success" || !salaryHistoryResponse.HasData)
-        {
-            _logger.LogWarning("Salary history returned no data/failed for application {ApplicationId} - Status:{Status} HasData:{HasData}",
-                application.Id, salaryHistoryResponse.Status, salaryHistoryResponse.HasData);
-            throw new AppException("Unable to retrieve salary history from Remita. Please ensure your bank details are correct and you have salary payment history.", 400);
-        }
+            if (creditAnalysis == null || creditAnalysis.RecommendedAction == "Decline")
+            {
+                _logger.LogWarning(
+                    "Mono credit analysis failed or declined for application {ApplicationId}. Applying default test eligibility.",
+                    application.Id);
+                minLoanEligible = product.MinAmount > 0 ? product.MinAmount : 1_000m;
+                maxLoanEligible = 50_000m;
+            }
+            else
+            {
+                var monoMax = product.MaxAmount > 0
+                    ? Math.Min(creditAnalysis.MaxLoanAmount, product.MaxAmount)
+                    : creditAnalysis.MaxLoanAmount;
+                minLoanEligible = product.MinAmount > 0 ? product.MinAmount : 1_000m;
+                maxLoanEligible = Math.Max(monoMax, minLoanEligible);
 
-        // Save salary history to database
-        await _salaryEligibilityService.SaveSalaryHistoryAsync(application.Id, salaryHistoryResponse);
+                _logger.LogInformation(
+                    "Mono credit eligibility for application {ApplicationId}: Score={Score}, Risk={Risk}, Action={Action}, Max={Max}",
+                    application.Id, creditAnalysis.CreditScore, creditAnalysis.RiskLevel,
+                    creditAnalysis.RecommendedAction, maxLoanEligible);
+            }
 
-        // Calculate eligibility based on salary history
-        SalaryEligibilityDto eligibilityResult;
-        eligibilityResult = await _salaryEligibilityService.CalculateLoanEligibilityAsync(salaryHistoryResponse, product);
-
-        // When NOT using live data (dev/test mode), bypass eligibility check and use
-        // a default eligible amount of ₦50,000 so test flows are not blocked by
-        // dummy salary figures returned by Remita sandbox.
-        if (!_remitaSettings.UseLiveData && eligibilityResult.FinalMaxEligible <= 0)
-        {
-            _logger.LogWarning(
-                "Non-live mode: Remita eligibility check failed for application {ApplicationId} " +
-                "(Reason: {Reason}). Applying default test eligibility of ₦50,000.",
-                application.Id, eligibilityResult.EligibilityReason);
-
-            minLoanEligible = product.MinAmount > 0 ? product.MinAmount : 1_000m;
-            maxLoanEligible = 50_000m;
         }
         else
         {
-            // Check if borrower is eligible (FinalMaxEligible > 0 means eligible)
-            if (eligibilityResult.FinalMaxEligible <= 0)
+            // Fetch salary history from Remita
+            _logger.LogInformation("Starting salary history retrieval for application {ApplicationId} - Account:{Account}, Bank:{Bank}",
+                application.Id, application.AccountNo, application.BankCode);
+
+            var salaryHistoryResponse = await _remitaService.GetSalaryHistoryAsync(
+                application.AccountNo,
+                application.BankCode,
+                application.BVN ?? string.Empty,
+                application.Id);
+
+            if (salaryHistoryResponse == null)
             {
-                _logger.LogWarning("Borrower not eligible for loan product {ProductId}. Reason: {Reason}",
-                    product.Id, eligibilityResult.EligibilityReason);
-                throw new AppException(eligibilityResult.EligibilityReason, 400);
+                _logger.LogWarning("Salary history response was null for application {ApplicationId}", application.Id);
+                throw new AppException("Unable to retrieve salary history from Remita. Please ensure your bank details are correct and you have salary payment history.", 400);
             }
 
-            // Use calculated eligibility amounts
-            minLoanEligible = eligibilityResult.FinalMinEligible;
-            maxLoanEligible = eligibilityResult.FinalMaxEligible;
-        }
+            _logger.LogDebug("Salary history raw response for application {ApplicationId}: {Response}", application.Id, JsonSerializer.Serialize(salaryHistoryResponse));
 
-        // Log the eligibility calculation for debugging
-        _logger.LogInformation("Salary-based eligibility calculated for application {ApplicationId}: Min={MinEligible}, Max={MaxEligible}, Reason={Reason}",
-            application.Id, minLoanEligible, maxLoanEligible, eligibilityResult.EligibilityReason);
+            if (salaryHistoryResponse.Status != "success" || !salaryHistoryResponse.HasData)
+            {
+                _logger.LogWarning("Salary history returned no data/failed for application {ApplicationId} - Status:{Status} HasData:{HasData}",
+                    application.Id, salaryHistoryResponse.Status, salaryHistoryResponse.HasData);
+                throw new AppException("Unable to retrieve salary history from Remita. Please ensure your bank details are correct and you have salary payment history.", 400);
+            }
+
+            await _salaryEligibilityService.SaveSalaryHistoryAsync(application.Id, salaryHistoryResponse);
+
+            var eligibilityResult = await _salaryEligibilityService.CalculateLoanEligibilityAsync(salaryHistoryResponse, product);
+
+            if (!_remitaSettings.UseLiveData && eligibilityResult.FinalMaxEligible <= 0)
+            {
+                _logger.LogWarning(
+                    "Non-live mode: Remita eligibility check failed for application {ApplicationId} " +
+                    "(Reason: {Reason}). Applying default test eligibility of ₦50,000.",
+                    application.Id, eligibilityResult.EligibilityReason);
+
+                minLoanEligible = product.MinAmount > 0 ? product.MinAmount : 1_000m;
+                maxLoanEligible = 50_000m;
+            }
+            else
+            {
+                if (eligibilityResult.FinalMaxEligible <= 0)
+                {
+                    _logger.LogWarning("Borrower not eligible for loan product {ProductId}. Reason: {Reason}",
+                        product.Id, eligibilityResult.EligibilityReason);
+                    throw new AppException(eligibilityResult.EligibilityReason, 400);
+                }
+
+                minLoanEligible = eligibilityResult.FinalMinEligible;
+                maxLoanEligible = eligibilityResult.FinalMaxEligible;
+            }
+
+            _logger.LogInformation("Salary-based eligibility calculated for application {ApplicationId}: Min={MinEligible}, Max={MaxEligible}, Reason={Reason}",
+                application.Id, minLoanEligible, maxLoanEligible, eligibilityResult.EligibilityReason);
+        }
 
         // Final eligibility amounts (already constrained by product limits in the service)
         var finalMinEligible = minLoanEligible;
@@ -522,6 +600,8 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         application.Address = request.Address;
         application.IdNumber = request.IdNumber;
         application.DocumentIds = string.Join(",", request.ImageIds);
+        if (!string.IsNullOrEmpty(request.Bvn))
+            application.BVN = request.Bvn;
         application.MinLoanEligible = finalMinEligible;
         application.MaxLoanEligible = finalMaxEligible;
         application.MinTenor = minTenor;
@@ -537,7 +617,8 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             MinLoanEligible = finalMinEligible,
             MaxLoanEligible = finalMaxEligible,
             MinTenor = minTenor,
-            MaxTenor = maxTenor
+            MaxTenor = maxTenor,
+            MonoCustomerId = application.MonoCustomerId
         };
     }
 
@@ -776,8 +857,56 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             }
         }
 
-        // Automatically generate mandate and dispatch activation OTP after Step 4 is completed.
-        await EnsureMandateGeneratedAsync(application, loan);
+        // If caller supplied a Mono customer ID (and one isn't already stored), persist it now
+        if (!string.IsNullOrEmpty(request.MonoCustomerId) && string.IsNullOrEmpty(application.MonoCustomerId))
+        {
+            application.MonoCustomerId = request.MonoCustomerId;
+            application.UpdatedAt = DateTime.UtcNow;
+            await _borrowerRepository.UpdateAsync(application);
+            _logger.LogInformation("[Step4] MonoCustomerId set from request for application {ApplicationId}: {CustomerId}",
+                application.Id, application.MonoCustomerId);
+        }
+
+        // Generate mandate using the active provider
+        var step4Provider = _configuration["ActiveDataProvider"] ?? "Remita";
+        await EnsureMandateGeneratedAsync(application, loan, step4Provider);
+
+        if (step4Provider.Equals("Mono", StringComparison.OrdinalIgnoreCase))
+        {
+            // Mono mandates don't require OTP — auto-complete the onboarding
+            application.CurrentStep = BorrowerOnboardingStep.Step6B_MandateActivated;
+            application.MandateActivatedAt = DateTime.UtcNow;
+            application.IsCompleted = true;
+            application.UpdatedAt = DateTime.UtcNow;
+            await _borrowerRepository.UpdateAsync(application);
+
+            await _auditService.LogAsync(
+                action: "MandateActivated",
+                category: "Loan",
+                userEmail: application.Email,
+                entityType: "BorrowerApplication",
+                entityId: application.Id.ToString(),
+                companyId: application.CompanyId,
+                details: $"Mono mandate {application.DirectDebitMandateId} auto-activated for borrower {application.FirstName} {application.LastName} ({application.Email})"
+            );
+
+            return new BorrowerStep4ResponseDto
+            {
+                LoanPrincipal = loanPrincipal,
+                ApplicableFees = applicableFees,
+                DisbursementAmount = disbursementAmount,
+                AppliedInterest = appliedInterest,
+                RepaymentAmount = totalRepayment,
+                Tenor = request.Tenor,
+                MonthlyRepaymentAmount = monthlyRepayment,
+                MandateId = application.DirectDebitMandateId,
+                RemitaTransRef = null,
+                AuthParams = null,
+                Message = "Loan submitted and Mono mandate created. Your loan application is complete."
+            };
+        }
+
+        // Remita flow — request activation OTP
         var otpResult = await RequestMandateOtpAsync(application, request.LoanId);
 
         return new BorrowerStep4ResponseDto
@@ -804,29 +933,75 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         };
     }
 
-    private async Task EnsureMandateGeneratedAsync(BorrowerApplication application, Loan loan)
+    private async Task EnsureMandateGeneratedAsync(BorrowerApplication application, Loan loan, string provider = "Remita")
     {
         if (loan.IsMandateCreated && !string.IsNullOrEmpty(application.DirectDebitMandateId))
         {
             return;
         }
 
+        if (provider.Equals("Mono", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrEmpty(application.MonoCustomerId))
+            {
+                _logger.LogError("[Mandate] No Mono customer ID on application {ApplicationId}. Create a Mono customer first via POST /api/v1/mono/customers and link it before proceeding.",
+                    application.Id);
+                throw new AppException("Mono customer ID is required. Please create a Mono customer first.", 400);
+            }
+
+            var startDate = DateTime.UtcNow;
+            var monoRequest = new MonoGenerateMandateRequestDto
+            {
+                MandateType = "emandate",
+                DebitType = "variable",
+                Customer = new MonoMandateCustomerDto { Id = application.MonoCustomerId },
+                Amount = (int)(loan.MonthlyRepayment ?? loan.Amount),
+                Reference = Guid.NewGuid().ToString("N")[..24], // alphanumeric, max 24 chars
+                AccountNumber = application.AccountNo ?? string.Empty,
+                BankCode = application.BankCode ?? string.Empty,
+                Description = $"Loan repayment mandate — Loan ID: {loan.Id}",
+                StartDate = startDate.ToString("yyyy-MM-dd"),
+                EndDate = startDate.AddMonths(loan.DurationInMonths).ToString("yyyy-MM-dd"),
+                Meta = new { source = "devpay" }
+            };
+
+            _logger.LogInformation(
+                "[Mandate] Generating Mono mandate for loan {LoanId} — Borrower: {Email}, Amount: {Amount}, Period: {Start} to {End}",
+                loan.Id, application.Email, monoRequest.Amount, monoRequest.StartDate, monoRequest.EndDate);
+
+            var monoResult = await _monoService.GenerateMandateAsync(loan.Id, monoRequest);
+
+            _logger.LogInformation("[Mandate] response from Mono for loan {LoanId}: {Result}", loan.Id, monoResult);
+
+            if (monoResult?.Data == null)
+            {
+                _logger.LogError("[Mandate] Mono mandate generation failed for loan {LoanId}. Status={Status}, Message={Msg}",
+                    loan.Id, monoResult?.Status, monoResult?.Message);
+                throw new AppException("Mono mandate generation failed. Please verify your bank details and try again.", 502);
+            }
+
+            application.DirectDebitMandateId = monoResult.Data.Id;
+            application.MandateGeneratedAt = DateTime.UtcNow;
+            application.RemitaTransRef = monoResult.Data.Reference;
+            application.CurrentStep = BorrowerOnboardingStep.Step5_MandateGenerated;
+            application.UpdatedAt = DateTime.UtcNow;
+            await _borrowerRepository.UpdateAsync(application);
+
+            loan.MandateRef = monoResult.Data.Id;
+            loan.IsMandateCreated = true;
+            loan.MandateCreatedAt = DateTime.UtcNow;
+            await _loanRepository.UpdateLoan(loan);
+
+            _logger.LogInformation("[Mandate] Mono mandate created for loan {LoanId}: {MandateId}", loan.Id, monoResult.Data.Id);
+            return;
+        }
+
+        // Remita mandate generation
         // Dates must be in dd/MM/yyyy format as required by Remita echannel API
-        // Start date = current date
-        var startDate = DateTime.Now;
-        var startDay = startDate.Day;
-        var startMonth = startDate.Month;
-        var startYear = startDate.Year;
-
-        // End date = 6 months later
-        var endDate = startDate.AddMonths(6);
-        var endDay = endDate.Day;
-        var endMonth = endDate.Month;
-        var endYear = endDate.Year;
-
-        // Format as "dd/MM/yyyy" with leading zeros
-        var ddStartDate = $"{startDay:D2}/{startMonth:D2}/{startYear}";
-        var ddEndDate = $"{endDay:D2}/{endMonth:D2}/{endYear}";
+        var rdStartDate = DateTime.Now;
+        var ddStartDate = $"{rdStartDate.Day:D2}/{rdStartDate.Month:D2}/{rdStartDate.Year}";
+        var rdEndDate = rdStartDate.AddMonths(6);
+        var ddEndDate = $"{rdEndDate.Day:D2}/{rdEndDate.Month:D2}/{rdEndDate.Year}";
 
         var directDebitRequest = new DirectDebitGenerateMandateRequestDto
         {
@@ -852,11 +1027,11 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
         var result = await _remitaService.GenerateDirectDebitMandateAsync(directDebitRequest);
         _logger.LogInformation("[Mandate] response from remita: {Result}", result);
-        
+
         // Remita returns mandateId and requestId at root level: ({"statuscode":"040","requestId":"...","mandateId":"...","status":"Initail Request OK"})
         var mandateId = result?.MandateId ?? result?.Data?.MandateId;
         var requestId = result?.RequestId ?? result?.Data?.RequestId;
-        
+
         if (mandateId == null)
         {
             var remitaMessage = !string.IsNullOrWhiteSpace(result?.Message)
@@ -945,7 +1120,12 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             throw new AppException("Please request the mandate activation OTP first", 400);
         
         if (application.IsCompleted)
-            throw new AppException("Mandate has already been activated and onboarding is complete", 400);
+            return new BorrowerStep4BResponseDto
+            {
+                MandateId = application.DirectDebitMandateId,
+                Status = "Already Activated",
+                Message = "Mandate has already been activated and your loan application is complete."
+            };
         
         if (string.IsNullOrEmpty(application.DirectDebitMandateId))
             throw new AppException("Mandate ID not found. Please restart from Step 4.", 400);
@@ -1147,6 +1327,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             DeliveryChannel = NotificationChannel.Email,
             CreatedBy = "System"
         });
+        _logger.LogInformation("GeneratedOtpResult: {OtpResult}", otpResult);
 
         if (!otpResult.Success)
         {
@@ -1564,6 +1745,45 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
     /// <summary>
     /// Generates a SHA-256 hash of the BVN for privacy-preserving storage
     /// </summary>
+    private async Task CreateMonoCustomerIfAbsentAsync(BorrowerApplication application, string identityType, string identityNumber, string address)
+    {
+        if (!string.IsNullOrEmpty(application.MonoCustomerId))
+        {
+            _logger.LogInformation("[Step2] Reusing existing Mono customer {CustomerId} for application {ApplicationId}",
+                application.MonoCustomerId, application.Id);
+            return;
+        }
+
+        _logger.LogInformation("[Step2] Creating Mono customer for application {ApplicationId}", application.Id);
+
+        var customerResult = await _monoService.CreateCustomerAsync(new MonoCreateCustomerRequestDto
+        {
+            FirstName = application.FirstName ?? string.Empty,
+            LastName = application.LastName ?? string.Empty,
+            Email = application.Email ?? string.Empty,
+            Phone = application.PhoneNumber ?? string.Empty,
+            Type = "individual",
+            Address = address ?? "Nigeria",
+            Identity = new MonoCustomerIdentityDto
+            {
+                Type = identityType,
+                Number = identityNumber
+            }
+        });
+
+        if (!string.IsNullOrEmpty(customerResult?.Data?.Id))
+        {
+            application.MonoCustomerId = customerResult.Data.Id;
+            application.UpdatedAt = DateTime.UtcNow;
+            _logger.LogInformation("[Step2] Mono customer created and saved: {CustomerId}", application.MonoCustomerId);
+        }
+        else
+        {
+            _logger.LogWarning("[Step2] Mono customer creation returned no ID for application {ApplicationId}. Message: {Message}",
+                application.Id, customerResult?.Message);
+        }
+    }
+
     private static string GenerateBvnHash(string bvn)
     {
         using var sha256 = System.Security.Cryptography.SHA256.Create();

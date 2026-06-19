@@ -146,7 +146,8 @@ public class BorrowerController(
                 maxLoanEligible = result.MaxLoanEligible,
                 minLoanEligible = result.MinLoanEligible,
                 maxTenor = result.MaxTenor,
-                minTenor = result.MinTenor
+                minTenor = result.MinTenor,
+                monoCustomerId = result.MonoCustomerId
             }));
         }
         catch (AppException ex)
