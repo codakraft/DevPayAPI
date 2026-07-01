@@ -2,44 +2,244 @@ using System.Text.Json.Serialization;
 
 namespace LendingSolution.Core.Dtos;
 
-// Request DTOs
-public class MonoGenerateMandateRequestDto
+// ─── Customer DTOs ────────────────────────────────────────────────────────────
+
+public class MonoCustomerIdentityDto
 {
-    [JsonPropertyName("debit_type")]
-    public string DebitType { get; set; } = "variable";
-    
-    [JsonPropertyName("customer")]
-    public string Customer { get; set; } = string.Empty;
-    
-    [JsonPropertyName("mandate_type")]
-    public string MandateType { get; set; } = string.Empty;
-    
-    [JsonPropertyName("amount")]
-    public int Amount { get; set; }
-    
-    [JsonPropertyName("reference")]
-    public string Reference { get; set; } = string.Empty;
-    
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = "BVN";
+
+    [JsonPropertyName("number")]
+    public string Number { get; set; } = string.Empty;
+}
+
+public class MonoCreateCustomerRequestDto
+{
+    [JsonPropertyName("first_name")]
+    public string FirstName { get; set; } = string.Empty;
+
+    [JsonPropertyName("last_name")]
+    public string LastName { get; set; } = string.Empty;
+
+    [JsonPropertyName("email")]
+    public string Email { get; set; } = string.Empty;
+
+    [JsonPropertyName("phone")]
+    public string Phone { get; set; } = string.Empty;
+
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = "individual";
+
+    [JsonPropertyName("address")]
+    public string Address { get; set; } = string.Empty;
+
+    [JsonPropertyName("identity")]
+    public MonoCustomerIdentityDto Identity { get; set; } = new();
+}
+
+public class MonoCreateCustomerResponseDto
+{
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = string.Empty;
+
+    [JsonPropertyName("message")]
+    public string Message { get; set; } = string.Empty;
+
+    [JsonPropertyName("data")]
+    public MonoCustomerDataDto? Data { get; set; }
+}
+
+public class MonoCustomerConflictResponseDto
+{
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = string.Empty;
+
+    [JsonPropertyName("message")]
+    public string Message { get; set; } = string.Empty;
+
+    [JsonPropertyName("data")]
+    public MonoCustomerConflictDataDto? Data { get; set; }
+}
+
+public class MonoCustomerConflictDataDto
+{
+    [JsonPropertyName("existing_customer")]
+    public MonoExistingCustomerDto? ExistingCustomer { get; set; }
+}
+
+public class MonoExistingCustomerDto
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+}
+
+public class MonoCustomerDataDto
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [JsonPropertyName("first_name")]
+    public string FirstName { get; set; } = string.Empty;
+
+    [JsonPropertyName("last_name")]
+    public string LastName { get; set; } = string.Empty;
+
+    [JsonPropertyName("email")]
+    public string Email { get; set; } = string.Empty;
+
+    [JsonPropertyName("phone")]
+    public string Phone { get; set; } = string.Empty;
+
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = string.Empty;
+}
+
+public class MonoGetCustomerResponseDto
+{
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = string.Empty;
+
+    [JsonPropertyName("message")]
+    public string Message { get; set; } = string.Empty;
+
+    [JsonPropertyName("data")]
+    public MonoCustomerDataDto? Data { get; set; }
+}
+
+public class MonoCustomerListMetaDto
+{
+    [JsonPropertyName("total")]
+    public int Total { get; set; }
+
+    [JsonPropertyName("pages")]
+    public int Pages { get; set; }
+
+    [JsonPropertyName("previous")]
+    public string? Previous { get; set; }
+
+    [JsonPropertyName("next")]
+    public string? Next { get; set; }
+}
+
+public class MonoGetAllCustomersResponseDto
+{
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = string.Empty;
+
+    [JsonPropertyName("message")]
+    public string Message { get; set; } = string.Empty;
+
+    [JsonPropertyName("data")]
+    public List<MonoCustomerDataDto> Data { get; set; } = [];
+
+    [JsonPropertyName("meta")]
+    public MonoCustomerListMetaDto? Meta { get; set; }
+}
+
+public class MonoLinkedAccountDto
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("currency")]
+    public string Currency { get; set; } = string.Empty;
+
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = string.Empty;
+
     [JsonPropertyName("account_number")]
     public string AccountNumber { get; set; } = string.Empty;
-    
+
+    [JsonPropertyName("balance")]
+    public long Balance { get; set; }
+
+    [JsonPropertyName("bvn")]
+    public string Bvn { get; set; } = string.Empty;
+
+    [JsonPropertyName("institution")]
+    public MonoLinkedAccountInstitutionDto? Institution { get; set; }
+
+    [JsonPropertyName("created_at")]
+    public string CreatedAt { get; set; } = string.Empty;
+}
+
+public class MonoLinkedAccountInstitutionDto
+{
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
     [JsonPropertyName("bank_code")]
     public string BankCode { get; set; } = string.Empty;
-    
-    [JsonPropertyName("fee_bearer")]
-    public string FeeBearer { get; set; } = "BUSINESS";
-    
+
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = string.Empty;
+}
+
+public class MonoGetLinkedAccountsResponseDto
+{
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = string.Empty;
+
+    [JsonPropertyName("message")]
+    public string Message { get; set; } = string.Empty;
+
+    [JsonPropertyName("data")]
+    public List<MonoLinkedAccountDto> Data { get; set; } = [];
+}
+
+// ─── Request DTOs ─────────────────────────────────────────────────────────────
+public class MonoMandateCustomerDto
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+}
+
+public class MonoGenerateMandateRequestDto
+{
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = "recurring-debit";
+
+    [JsonPropertyName("method")]
+    public string Method { get; set; } = "mandate";
+
+    [JsonPropertyName("mandate_type")]
+    public string MandateType { get; set; } = "emandate";
+
+    [JsonPropertyName("debit_type")]
+    public string DebitType { get; set; } = "variable";
+
+    [JsonPropertyName("customer")]
+    public MonoMandateCustomerDto Customer { get; set; } = new();
+
+    [JsonPropertyName("amount")]
+    public int Amount { get; set; }
+
+    [JsonPropertyName("reference")]
+    public string Reference { get; set; } = string.Empty;
+
+    [JsonPropertyName("account_number")]
+    public string AccountNumber { get; set; } = string.Empty;
+
+    [JsonPropertyName("bank_code")]
+    public string BankCode { get; set; } = string.Empty;
+
     [JsonPropertyName("description")]
     public string Description { get; set; } = string.Empty;
-    
+
     [JsonPropertyName("start_date")]
     public string StartDate { get; set; } = string.Empty;
-    
+
     [JsonPropertyName("end_date")]
     public string EndDate { get; set; } = string.Empty;
-    
+
+    [JsonPropertyName("redirect_url")]
+    public string RedirectUrl { get; set; } = string.Empty;
+
     [JsonPropertyName("meta")]
-    public object Meta { get; set; } = new { };
+    public object Meta { get; set; } = new { source = "devpay" };
 }
 
 // Response DTOs
@@ -216,18 +416,12 @@ public class MonoBanksResponseDto
 {
     [JsonPropertyName("status")]
     public string Status { get; set; } = string.Empty;
-    
+
     [JsonPropertyName("message")]
     public string Message { get; set; } = string.Empty;
-    
-    [JsonPropertyName("data")]
-    public MonoBanksDataDto? Data { get; set; }
-}
 
-public class MonoBanksDataDto
-{
-    [JsonPropertyName("banks")]
-    public List<MonoBankDto> Banks { get; set; } = new();
+    [JsonPropertyName("data")]
+    public List<MonoBankDto> Data { get; set; } = [];
 }
 
 public class MonoBankDto
@@ -246,6 +440,67 @@ public class MonoBankDto
 }
 
 // BVN Lookup DTOs
+// ─── NIN Lookup DTOs ─────────────────────────────────────────────────────────
+
+public class MonoNinLookupRequestDto
+{
+    [JsonPropertyName("nin")]
+    public string Nin { get; set; } = string.Empty;
+}
+
+public class MonoNinLookupResponseDto
+{
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = string.Empty;
+
+    [JsonPropertyName("message")]
+    public string Message { get; set; } = string.Empty;
+
+    [JsonPropertyName("timestamp")]
+    public DateTime Timestamp { get; set; }
+
+    [JsonPropertyName("data")]
+    public MonoNinLookupDataDto? Data { get; set; }
+}
+
+public class MonoNinLookupDataDto
+{
+    [JsonPropertyName("nin")]
+    public string Nin { get; set; } = string.Empty;
+
+    [JsonPropertyName("first_name")]
+    public string FirstName { get; set; } = string.Empty;
+
+    [JsonPropertyName("last_name")]
+    public string LastName { get; set; } = string.Empty;
+
+    [JsonPropertyName("middle_name")]
+    public string MiddleName { get; set; } = string.Empty;
+
+    [JsonPropertyName("date_of_birth")]
+    public string DateOfBirth { get; set; } = string.Empty;
+
+    [JsonPropertyName("gender")]
+    public string Gender { get; set; } = string.Empty;
+
+    [JsonPropertyName("phone")]
+    public string Phone { get; set; } = string.Empty;
+
+    [JsonPropertyName("address")]
+    public string Address { get; set; } = string.Empty;
+
+    [JsonPropertyName("state_of_origin")]
+    public string StateOfOrigin { get; set; } = string.Empty;
+
+    [JsonPropertyName("lga_of_origin")]
+    public string LgaOfOrigin { get; set; } = string.Empty;
+
+    [JsonPropertyName("photo")]
+    public string Photo { get; set; } = string.Empty;
+}
+
+// ─── BVN Lookup DTOs ─────────────────────────────────────────────────────────
+
 public class MonoBvnLookupRequestDto
 {
     [JsonPropertyName("bvn")]
@@ -418,8 +673,6 @@ public class MonoCreditHistoryRequestDto
 {
     [JsonPropertyName("bvn")]
     public string Bvn { get; set; } = string.Empty;
-    
-    public string Provider { get; set; } = "xds"; // Default to xds provider
 }
 
 public class MonoCreditHistoryResponseDto
@@ -651,4 +904,64 @@ public class MonoCreditworthinessResponseDto
     
     [JsonPropertyName("data")]
     public object? Data { get; set; }
+}
+
+// ─── Initiate Debit ────────────────────────────────────────────────────────
+
+/// <summary>
+/// Request to manually trigger a debit collection on an active Mono mandate.
+/// POST /v3/payments/mandates/{mandateId}/debit
+/// </summary>
+public class MonoInitiateDebitRequestDto
+{
+    /// <summary>
+    /// Amount in kobo (i.e. multiply Naira by 100).
+    /// For variable mandates this can be any amount up to the mandate cap.
+    /// Leave null to debit the mandate's default amount.
+    /// </summary>
+    [JsonPropertyName("amount")]
+    public int? Amount { get; set; }
+
+    /// <summary>
+    /// Optional narration / description that appears on the bank statement.
+    /// </summary>
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+}
+
+/// <summary>Top-level response after initiating a debit on a Mono mandate.</summary>
+public class MonoInitiateDebitResponseDto
+{
+    [JsonPropertyName("status")]
+    public string? Status { get; set; }
+
+    [JsonPropertyName("message")]
+    public string? Message { get; set; }
+
+    [JsonPropertyName("data")]
+    public MonoInitiateDebitDataDto? Data { get; set; }
+}
+
+public class MonoInitiateDebitDataDto
+{
+    [JsonPropertyName("id")]
+    public string? Id { get; set; }
+
+    [JsonPropertyName("status")]
+    public string? Status { get; set; }
+
+    [JsonPropertyName("amount")]
+    public int Amount { get; set; }
+
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+
+    [JsonPropertyName("reference")]
+    public string? Reference { get; set; }
+
+    [JsonPropertyName("mandate")]
+    public string? Mandate { get; set; }
+
+    [JsonPropertyName("created_at")]
+    public DateTime? CreatedAt { get; set; }
 }

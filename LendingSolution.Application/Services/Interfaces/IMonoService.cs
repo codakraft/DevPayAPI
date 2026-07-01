@@ -5,15 +5,25 @@ namespace LendingSolution.Application.Services.Interfaces;
 
 public interface IMonoService
 {
+    // Customer Management
+    Task<MonoCreateCustomerResponseDto?> CreateCustomerAsync(MonoCreateCustomerRequestDto request, string? userId = null);
+    Task<MonoGetCustomerResponseDto?> GetCustomerByIdAsync(string customerId, string? userId = null);
+    Task<MonoGetAllCustomersResponseDto?> GetAllCustomersAsync(int page = 1, int limit = 20, string? userId = null);
+    Task<MonoGetLinkedAccountsResponseDto?> GetCustomerLinkedAccountsAsync(string customerId, string? userId = null);
+
     // Mandate Management
     Task<MonoGenerateMandateResponseDto?> GenerateMandateAsync(Guid loanId, MonoGenerateMandateRequestDto request, string? userId = null);
     Task<MonoCancelMandateResponseDto?> CancelMandateAsync(string mandateId, string? userId = null);
     Task<MonoPauseMandateResponseDto?> PauseMandateAsync(string mandateId, string? userId = null);
     Task<MonoReinstateMandateResponseDto?> ReinstateMandateAsync(string mandateId, string? userId = null);
-    
+    Task<MonoInitiateDebitResponseDto?> InitiateDebitAsync(string mandateId, MonoInitiateDebitRequestDto request, string? userId = null);
+
     // Data Services
     Task<MonoBanksResponseDto?> GetBanksAsync();
     
+    // NIN Lookup
+    Task<MonoNinLookupResponseDto?> NinLookupAsync(string nin, string? userId = null);
+
     // BVN Validation (Original)
     Task<MonoBvnLookupResponseDto?> BvnLookupAsync(MonoBvnLookupRequestDto request, string? userId = null);
     Task<MonoBvnVerifyResponseDto?> BvnVerifyAsync(MonoBvnVerifyRequestDto request, string sessionId, string? userId = null);
