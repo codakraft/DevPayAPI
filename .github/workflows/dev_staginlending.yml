@@ -3,7 +3,7 @@ name: Build and deploy ASP.Net Core app to Azure Web App - staginlending
 on:
   push:
     branches:
-      - prod
+      - dev
   workflow_dispatch:
 
 jobs:
@@ -53,8 +53,7 @@ jobs:
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
         with:
-          app-name: 'devpayProd'
+          app-name: 'staginlending'
           slot-name: 'Production'
           package: .
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_643AE72B84E946139C439C2B0EFA287C }}
-

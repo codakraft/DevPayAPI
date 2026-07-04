@@ -605,43 +605,43 @@ public class MonoBvnDetailsDataDto
     public string? MiddleName { get; set; }
     
     [JsonPropertyName("dob")]
-    public string? DateOfBirth { get; set; }
+    public string DateOfBirth { get; set; } = string.Empty;
     
     [JsonPropertyName("phone_number")]
-    public string? PhoneNumber { get; set; }
+    public string PhoneNumber { get; set; } = string.Empty;
     
     [JsonPropertyName("phone_number_2")]
     public string? PhoneNumber2 { get; set; }
     
     [JsonPropertyName("email")]
-    public string? Email { get; set; }
+    public string Email { get; set; } = string.Empty;
     
     [JsonPropertyName("gender")]
-    public string? Gender { get; set; }
+    public string Gender { get; set; } = string.Empty;
     
     [JsonPropertyName("state_of_origin")]
-    public string? StateOfOrigin { get; set; }
+    public string StateOfOrigin { get; set; } = string.Empty;
     
     [JsonPropertyName("bvn")]
     public string Bvn { get; set; } = string.Empty;
     
     [JsonPropertyName("nin")]
-    public string? Nin { get; set; }
+    public string Nin { get; set; } = string.Empty;
     
     [JsonPropertyName("registration_date")]
-    public string? RegistrationDate { get; set; }
+    public string RegistrationDate { get; set; } = string.Empty;
     
     [JsonPropertyName("lga_of_origin")]
-    public string? LgaOfOrigin { get; set; }
+    public string LgaOfOrigin { get; set; } = string.Empty;
     
     [JsonPropertyName("lga_of_Residence")]
-    public string? LgaOfResidence { get; set; }
+    public string LgaOfResidence { get; set; } = string.Empty;
     
     [JsonPropertyName("marital_status")]
-    public string? MaritalStatus { get; set; }
+    public string MaritalStatus { get; set; } = string.Empty;
     
     [JsonPropertyName("watch_listed")]
-    public bool? WatchListed { get; set; }
+    public bool WatchListed { get; set; }
     
     [JsonPropertyName("photoId")]
     public string? PhotoId { get; set; }
