@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using LendingSolution.Application.Json;
 using LendingSolution.Application.Repositories.Interfaces;
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
@@ -900,7 +901,7 @@ public class MonoService : IMonoService
             AddMonoHeaders(httpRequest);
 
             _logger.LogInformation("Sending Mono credit history request for BVN: {BvnMasked} with provider: {Provider}",
-                MaskBvn(bvn), provider);
+                bvn, provider);
 
             var response = await _httpClient.SendAsync(httpRequest);
             var responseContent = await response.Content.ReadAsStringAsync();
@@ -911,7 +912,14 @@ public class MonoService : IMonoService
             {
                 var creditHistoryResponse = JsonSerializer.Deserialize<MonoCreditHistoryResponseDto>(responseContent, new JsonSerializerOptions
                 {
-                    PropertyNameCaseInsensitive = true
+                    PropertyNameCaseInsensitive = true,
+                    Converters =
+                    {
+                        new FlexibleNumber.DecimalConverter(),
+                        new FlexibleNumber.NullableDecimalConverter(),
+                        new FlexibleNumber.IntConverter(),
+                        new FlexibleNumber.NullableIntConverter()
+                    }
                 });
                 return creditHistoryResponse;
             }
