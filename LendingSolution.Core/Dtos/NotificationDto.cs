@@ -33,9 +33,15 @@ public class SendNotificationRequest
     public string? PhoneNumber { get; set; }
     
     /// <summary>
-    /// Main content: OTP code, message body, etc.
+    /// Main content: full message body (used for SMS and as email fallback).
     /// </summary>
     public required string Content { get; set; }
+
+    /// <summary>
+    /// Raw OTP code only (e.g. "220627"), used to render the email OTP boxes.
+    /// Separate from Content, which is the full human-readable sentence.
+    /// </summary>
+    public string? OtpCode { get; set; }
     
     /// <summary>
     /// Email subject line (optional, auto-generated if not provided)

@@ -104,18 +104,21 @@ public class EmailService : IEmailService
 
     private string GenerateOtpEmailTemplate(string otp, string purpose, string companyName)
     {
-        var code = otp ?? string.Empty;
+        // Defensive: the OTP boxes must only ever contain the numeric code. Strip anything
+        // that isn't a digit (in case a full message is passed) and cap at 8 boxes.
+        var code = new string((otp ?? string.Empty).Where(char.IsDigit).ToArray());
+        if (code.Length > 8) code = code.Substring(0, 8);
 
         // Build the OTP as individual digit cells (email-safe: a single table row of boxes).
         var digitCells = new System.Text.StringBuilder();
         for (int i = 0; i < code.Length; i++)
         {
             if (i > 0)
-                digitCells.Append("<td style='width:8px;'>&nbsp;</td>");
+                digitCells.Append("<td style='width:6px;'>&nbsp;</td>");
             digitCells.Append(
-                "<td align='center' valign='middle' style='width:52px;height:64px;background:#ffffff;" +
+                "<td align='center' valign='middle' style='width:46px;height:60px;background:#ffffff;" +
                 "border:1px solid #d4ddc7;border-radius:12px;font-family:Consolas,Menlo,Monaco,\"Courier New\",monospace;" +
-                $"font-weight:700;font-size:30px;color:#0e3a2a;'>{code[i]}</td>");
+                $"font-weight:700;font-size:28px;color:#0e3a2a;'>{code[i]}</td>");
         }
 
         var year = DateTime.UtcNow.Year;
@@ -147,8 +150,8 @@ public class EmailService : IEmailService
 
                                 <!-- header: deVpay wordmark on dark green -->
                                 <tr>
-                                    <td align='center' style='background:#082019;padding:38px 30px;'>
-                                        <span style='font-size:40px;font-weight:800;letter-spacing:-0.5px;font-family:''Manrope'',Arial,sans-serif;'><span style='color:#d9b44a;'>de</span><span style='color:#c9d19a;'>V</span><span style='color:#d9b44a;'>pay</span></span>
+                                    <td align='center' style='background:#082019;padding:36px 30px;'>
+                                        <span style='font-size:38px;font-weight:800;letter-spacing:-0.5px;color:#d9b44a;font-family:''Manrope'',Arial,sans-serif;'>de<span style='color:#c9d19a;'>V</span>pay</span>
                                     </td>
                                 </tr>
                                 <!-- gold accent rule -->
@@ -164,10 +167,10 @@ public class EmailService : IEmailService
 
                                 <!-- OTP block -->
                                 <tr>
-                                    <td style='padding:28px 48px 8px;'>
+                                    <td style='padding:28px 32px 8px;'>
                                         <table role='presentation' width='100%' cellpadding='0' cellspacing='0' style='background:#f5f7f0;border:1px solid #e2e6db;border-radius:16px;'>
                                             <tr>
-                                                <td align='center' style='padding:30px 24px 26px;'>
+                                                <td align='center' style='padding:30px 12px 26px;'>
                                                     <div style='font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#7b8a72;font-weight:700;margin-bottom:20px;'>Your verification code</div>
                                                     <table role='presentation' cellpadding='0' cellspacing='0' align='center'>
                                                         <tr>{digitCells}</tr>

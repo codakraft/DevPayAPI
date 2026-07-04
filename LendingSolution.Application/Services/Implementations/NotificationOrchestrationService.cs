@@ -152,7 +152,7 @@ public class NotificationOrchestrationService : INotificationOrchestrationServic
             {
                 emailSent = await _emailService.SendOtpEmailAsync(
                     request.EmailAddress!,
-                    request.Content,
+                    request.OtpCode ?? request.Content,
                     purpose,
                     request.SenderName);
             }

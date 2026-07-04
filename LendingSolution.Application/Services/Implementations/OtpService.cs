@@ -111,7 +111,8 @@ public class OtpService : IOtpService
                     ? request.RecipientIdentifier : null,
                 Channel = request.DeliveryChannel,
                 Subject = GetOtpSubject(request.Type),
-                Content = FormatOtpMessage(code, expiryMinutes, request.Type, request.SenderName)
+                Content = FormatOtpMessage(code, expiryMinutes, request.Type, request.SenderName),
+                OtpCode = code
             };
 
             var notificationResult = await _notificationService.SendNotificationAsync(notificationRequest);
