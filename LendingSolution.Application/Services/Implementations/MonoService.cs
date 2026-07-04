@@ -721,7 +721,16 @@ public class MonoService : IMonoService
             {
                 var detailsResponse = JsonSerializer.Deserialize<MonoBvnDetailsResponseDto>(responseContent, new JsonSerializerOptions
                 {
-                    PropertyNameCaseInsensitive = true
+                    PropertyNameCaseInsensitive = true,
+                    Converters =
+                    {
+                        new FlexibleNumber.BooleanConverter(),
+                        new FlexibleNumber.NullableBooleanConverter(),
+                        new FlexibleNumber.DecimalConverter(),
+                        new FlexibleNumber.NullableDecimalConverter(),
+                        new FlexibleNumber.IntConverter(),
+                        new FlexibleNumber.NullableIntConverter()
+                    }
                 });
                 return detailsResponse;
             }

@@ -1237,26 +1237,45 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             throw new AppException("BVN not found for this application", 400);
         }
 
-        // Get company for logging
-        var company = await _companyRepository.GetCompanyById(application.CompanyId);
-        var companyName = company?.Name ?? "Unknown Company";
-
-        // Validate Mono session exists
-        if (string.IsNullOrEmpty(application.MonoBvnSessionId))
-        {
-            throw new AppException("BVN verification session not found. Please restart the process from Step 2.", 400);
-        }
-
         // Validate phone number is required for alternate_phone method
         if (string.IsNullOrEmpty(application.PhoneNumber))
         {
             throw new AppException("Phone number is required for BVN verification", 400);
         }
 
-        // Resend Mono BVN OTP using alternate_phone method
-        _logger.LogInformation("Resending Mono BVN OTP for application {ApplicationId}, SessionId: {SessionId}, Method: alternate_phone", 
+        // The plaintext BVN is required to (re)initiate the Mono lookup, but we only persist its
+        // SHA-256 hash. The client re-sends the BVN; confirm it matches the identity from Step 2.
+        if (string.IsNullOrWhiteSpace(request.BVN) || request.BVN.Length != 11 || !request.BVN.All(char.IsDigit))
+        {
+            throw new AppException("A valid 11-digit BVN is required.", 400);
+        }
+        if (GenerateBvnHash(request.BVN) != application.BVN)
+        {
+            throw new AppException("Provided BVN does not match the verified identity.", 400);
+        }
+
+        // Re-initiate the Mono BVN lookup to obtain a fresh session (the previous one may be stale).
+        _logger.LogInformation("Re-initiating Mono BVN lookup for application {ApplicationId}", application.Id);
+
+        var monoLookupResult = await _monoService.BvnLookupAsync(new MonoBvnLookupRequestDto
+        {
+            Bvn = request.BVN,
+            Scope = "identity"
+        });
+
+        if (monoLookupResult?.Status?.ToLower() != "successful" || monoLookupResult.Data == null)
+        {
+            _logger.LogError("Failed to re-initiate Mono BVN lookup for application {ApplicationId}: {Message}",
+                application.Id, monoLookupResult?.Message ?? "No response from Mono");
+            throw new AppException("Failed to restart BVN verification. Please try again later.", 500);
+        }
+
+        application.MonoBvnSessionId = monoLookupResult.Data.SessionId;
+
+        // Verify against the fresh session to deliver the OTP (alternate_phone method).
+        _logger.LogInformation("Resending Mono BVN OTP for application {ApplicationId}, SessionId: {SessionId}, Method: alternate_phone",
             application.Id, application.MonoBvnSessionId);
-        
+
         var monoVerifyResult = await _monoService.BvnVerifyAsync(new MonoBvnVerifyRequestDto
         {
             Method = "alternate_phone",
@@ -1265,7 +1284,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
         if (monoVerifyResult?.Status?.ToLower() != "successful")
         {
-            _logger.LogError("Failed to resend Mono BVN OTP for application {ApplicationId}: {Message}", 
+            _logger.LogError("Failed to resend Mono BVN OTP for application {ApplicationId}: {Message}",
                 application.Id, monoVerifyResult?.Message ?? "No response from Mono");
             throw new AppException("Failed to resend BVN verification OTP. Please try again later.", 500);
         }
@@ -1398,8 +1417,9 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
     public async Task<GenerateBvnOtpResponseDto> GenerateBvnOtpAsync(GenerateBvnOtpRequestDto request)
     {
-        // Find application by BVN
-        var application = await _borrowerRepository.GetByBvnAsync(request.BVN) ?? throw new AppException("BVN not found", 404);
+        // Find application by BVN. BVN is persisted as a SHA-256 hash (see GenerateBvnHash),
+        // so hash the incoming plaintext BVN before looking it up.
+        var application = await _borrowerRepository.GetByBvnAsync(GenerateBvnHash(request.BVN)) ?? throw new AppException("BVN not found", 404);
 
         // Get company for logging
         var company = await _companyRepository.GetCompanyById(application.CompanyId);

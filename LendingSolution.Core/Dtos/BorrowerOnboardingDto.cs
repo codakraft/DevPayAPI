@@ -105,6 +105,11 @@ public class ResendStep2BvnOtpRequestDto
 {
     [Required]
     public Guid LoanId { get; set; }
+
+    [Required]
+    [StringLength(11, MinimumLength = 11, ErrorMessage = "BVN must be exactly 11 digits")]
+    [RegularExpression(@"^\d{11}$", ErrorMessage = "BVN must contain only digits")]
+    public required string BVN { get; set; }
 }
 
 public class ResendStep2BvnOtpResponseDto

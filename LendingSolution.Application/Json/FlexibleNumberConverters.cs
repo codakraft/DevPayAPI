@@ -75,4 +75,41 @@ public static class FlexibleNumber
             if (value.HasValue) writer.WriteNumberValue(value.Value); else writer.WriteNullValue();
         }
     }
+
+    private static bool? ParseBool(ref Utf8JsonReader reader)
+    {
+        switch (reader.TokenType)
+        {
+            case JsonTokenType.True: return true;
+            case JsonTokenType.False: return false;
+            case JsonTokenType.Null: return null;
+            case JsonTokenType.Number: return reader.GetDecimal() != 0m;
+            case JsonTokenType.String:
+                var s = reader.GetString()?.Trim().ToLowerInvariant();
+                if (string.IsNullOrEmpty(s) || s == "null") return null;
+                if (s is "true" or "1" or "yes" or "y" or "t") return true;
+                if (s is "false" or "0" or "no" or "n" or "f") return false;
+                return null;
+            default:
+                throw new JsonException($"Unexpected token {reader.TokenType} for boolean value.");
+        }
+    }
+
+    public sealed class BooleanConverter : JsonConverter<bool>
+    {
+        public override bool Read(ref Utf8JsonReader reader, Type t, JsonSerializerOptions o)
+            => ParseBool(ref reader) ?? false;
+        public override void Write(Utf8JsonWriter writer, bool value, JsonSerializerOptions o)
+            => writer.WriteBooleanValue(value);
+    }
+
+    public sealed class NullableBooleanConverter : JsonConverter<bool?>
+    {
+        public override bool? Read(ref Utf8JsonReader reader, Type t, JsonSerializerOptions o)
+            => ParseBool(ref reader);
+        public override void Write(Utf8JsonWriter writer, bool? value, JsonSerializerOptions o)
+        {
+            if (value.HasValue) writer.WriteBooleanValue(value.Value); else writer.WriteNullValue();
+        }
+    }
 }

@@ -59,7 +59,10 @@ public class LoanService(
             throw new AppException("A user with this email already exists");
         }
 
-        var existingBvn = await _borrowerApplicationRepository.GetByBvnAsync(body.Bvn);
+        // BVN is persisted as a SHA-256 hash, so hash the incoming plaintext before lookup.
+        var bvnHash = Convert.ToBase64String(
+            System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(body.Bvn ?? string.Empty)));
+        var existingBvn = await _borrowerApplicationRepository.GetByBvnAsync(bvnHash);
 
         if (existingBvn != null)
         {
