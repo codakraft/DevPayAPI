@@ -104,219 +104,115 @@ public class EmailService : IEmailService
 
     private string GenerateOtpEmailTemplate(string otp, string purpose, string companyName)
     {
+        var code = otp ?? string.Empty;
+
+        // Build the OTP as individual digit cells (email-safe: a single table row of boxes).
+        var digitCells = new System.Text.StringBuilder();
+        for (int i = 0; i < code.Length; i++)
+        {
+            if (i > 0)
+                digitCells.Append("<td style='width:8px;'>&nbsp;</td>");
+            digitCells.Append(
+                "<td align='center' valign='middle' style='width:52px;height:64px;background:#ffffff;" +
+                "border:1px solid #d4ddc7;border-radius:12px;font-family:Consolas,Menlo,Monaco,\"Courier New\",monospace;" +
+                $"font-weight:700;font-size:30px;color:#0e3a2a;'>{code[i]}</td>");
+        }
+
+        var year = DateTime.UtcNow.Year;
+
         return $@"
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset='UTF-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-    <style>
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{ 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            line-height: 1.6; 
-            color: #1a1a1a; 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 40px 20px;
-        }}
-        .email-wrapper {{ 
-            max-width: 600px; 
-            margin: 0 auto; 
-            background: white;
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-        }}
-        .header {{ 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 40px 30px;
-            text-align: center;
-            position: relative;
-        }}
-        .header::after {{
-            content: '';
-            position: absolute;
-            bottom: -2px;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, #f093fb 0%, #f5576c 100%);
-        }}
-        .logo {{ 
-            color: white; 
-            font-size: 32px; 
-            font-weight: 700;
-            letter-spacing: 1px;
-            margin: 0;
-            text-shadow: 0 2px 10px rgba(0,0,0,0.2);
-        }}
-        .content {{ 
-            padding: 50px 40px;
-            background: white;
-        }}
-        .greeting {{ 
-            font-size: 24px; 
-            font-weight: 600; 
-            color: #2d3748;
-            margin-bottom: 20px;
-        }}
-        .message {{ 
-            font-size: 16px; 
-            color: #4a5568;
-            margin-bottom: 30px;
-        }}
-        .otp-container {{
-            background: linear-gradient(135deg, #f6f8fb 0%, #e9ecef 100%);
-            border-radius: 12px;
-            padding: 30px;
-            margin: 30px 0;
-            text-align: center;
-            border: 2px solid #e2e8f0;
-        }}
-        .otp-label {{
-            font-size: 14px;
-            color: #718096;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 15px;
-        }}
-        .otp-code {{ 
-            font-size: 80px; 
-            font-weight: 900; 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            letter-spacing: 12px; 
-            padding: 15px 0;
-            font-family: 'Courier New', monospace;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }}
-        .timer-badge {{
-            display: inline-block;
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            color: white;
-            padding: 8px 20px;
-            border-radius: 20px;
-            font-size: 13px;
-            font-weight: 600;
-            margin-top: 15px;
-        }}
-        .security-notice {{
-            background: #fff5f5;
-            border-left: 4px solid #fc8181;
-            padding: 20px;
-            border-radius: 8px;
-            margin: 30px 0;
-        }}
-        .security-notice h3 {{
-            color: #c53030;
-            font-size: 16px;
-            margin-bottom: 12px;
-            display: flex;
-            align-items: center;
-        }}
-        .security-notice h3::before {{
-            content: '🔒';
-            margin-right: 8px;
-            font-size: 20px;
-        }}
-        .security-notice ul {{
-            margin: 0;
-            padding-left: 20px;
-            color: #742a2a;
-        }}
-        .security-notice li {{
-            margin: 8px 0;
-            font-size: 14px;
-        }}
-        .help-section {{
-            background: #f7fafc;
-            padding: 25px;
-            border-radius: 8px;
-            margin-top: 30px;
-            text-align: center;
-        }}
-        .help-section p {{
-            color: #4a5568;
-            font-size: 14px;
-            margin: 5px 0;
-        }}
-        .help-section strong {{
-            color: #2d3748;
-        }}
-        .footer {{ 
-            background: #2d3748;
-            padding: 30px;
-            text-align: center;
-            color: #a0aec0;
-        }}
-        .footer p {{
-            margin: 8px 0;
-            font-size: 13px;
-        }}
-        .footer-links {{
-            margin: 15px 0;
-        }}
-        .footer-links a {{
-            color: #a0aec0;
-            text-decoration: none;
-            margin: 0 10px;
-            font-size: 12px;
-        }}
-        .footer-links a:hover {{
-            color: #cbd5e0;
-        }}
-        @media only screen and (max-width: 600px) {{
-            .content {{ padding: 30px 20px; }}
-            .otp-code {{ font-size: 36px; letter-spacing: 8px; }}
-            .greeting {{ font-size: 20px; }}
-        }}
-    </style>
+    <meta name='color-scheme' content='light'>
+    <title>Your verification code</title>
 </head>
-<body>
-    <div class='email-wrapper'>
-        <div class='header'>
-            <h1 class='logo'>🚀 {companyName}</h1>
-        </div>
-        <div class='content'>
-            <div class='greeting'>Hey there! 👋</div>
-            <p class='message'>
-                Use the code below to complete your continue!
-            </p>
-            
-            <div class='otp-container'>
-                <div class='otp-label'>Your Verification Code</div>
-                <div class='otp-code'>{otp}</div>
-                <div class='timer-badge'>⏱️ Expires in 3 minutes</div>
-            </div>
+<body style='margin:0;padding:0;background:#eef0e8;'>
+    <table role='presentation' width='100%' cellpadding='0' cellspacing='0' style='background:#eef0e8;'>
+        <tr>
+            <td align='center' style='padding:48px 16px;'>
+                <table role='presentation' width='600' cellpadding='0' cellspacing='0' style='max-width:600px;width:100%;font-family:''Manrope'',-apple-system,BlinkMacSystemFont,''Segoe UI'',Roboto,Helvetica,Arial,sans-serif;'>
 
-            <div class='security-notice'>
-                <h3>Security First!</h3>
-                <ul>
-                    <li><strong>Never share</strong> this code with anyone, including our support team</li>
-                    <li>This code works only <strong>once</strong> and expires in 3 minutes</li>
-                    <li>Didn't request this? <strong>Ignore this email</strong> - your account is safe</li>
-                </ul>
-            </div>
+                    <!-- eyebrow -->
+                    <tr>
+                        <td align='center' style='padding-bottom:18px;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#7b8a72;font-weight:600;'>Secure sign-in</td>
+                    </tr>
 
-            <div class='help-section'>
-                <p><strong>Having trouble?</strong></p>
-                <p>If you didn't request this code or need assistance, please contact our support team.</p>
-            </div>
-        </div>
-        <div class='footer'>
-            <p><strong>{companyName}</strong> - Powering Your Financial Future</p>
-            <div class='footer-links'>
-                <a href='#'>Privacy Policy</a> | 
-                <a href='#'>Terms of Service</a> | 
-                <a href='#'>Contact Support</a>
-            </div>
-            <p>&copy; {DateTime.UtcNow.Year} {companyName}. All rights reserved.</p>
-            <p style='margin-top: 15px; font-size: 11px;'>This is an automated message. Please do not reply to this email.</p>
-        </div>
-    </div>
+                    <!-- card -->
+                    <tr>
+                        <td style='background:#ffffff;border-radius:22px;border:1px solid #e2e6db;overflow:hidden;'>
+                            <table role='presentation' width='100%' cellpadding='0' cellspacing='0'>
+
+                                <!-- header: deVpay wordmark on dark green -->
+                                <tr>
+                                    <td align='center' style='background:#082019;padding:38px 30px;'>
+                                        <span style='font-size:40px;font-weight:800;letter-spacing:-0.5px;font-family:''Manrope'',Arial,sans-serif;'><span style='color:#d9b44a;'>de</span><span style='color:#c9d19a;'>V</span><span style='color:#d9b44a;'>pay</span></span>
+                                    </td>
+                                </tr>
+                                <!-- gold accent rule -->
+                                <tr><td style='height:3px;background:#d9b44a;line-height:3px;font-size:0;'>&nbsp;</td></tr>
+
+                                <!-- intro -->
+                                <tr>
+                                    <td style='padding:44px 48px 8px;'>
+                                        <h1 style='margin:0 0 12px;font-size:26px;line-height:1.2;font-weight:800;color:#12241d;'>Confirm it's you</h1>
+                                        <p style='margin:0;font-size:15px;line-height:1.6;color:#55635b;'>Enter this verification code to finish {purpose.ToLowerInvariant()} on your {companyName} account. It keeps your money and data protected.</p>
+                                    </td>
+                                </tr>
+
+                                <!-- OTP block -->
+                                <tr>
+                                    <td style='padding:28px 48px 8px;'>
+                                        <table role='presentation' width='100%' cellpadding='0' cellspacing='0' style='background:#f5f7f0;border:1px solid #e2e6db;border-radius:16px;'>
+                                            <tr>
+                                                <td align='center' style='padding:30px 24px 26px;'>
+                                                    <div style='font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#7b8a72;font-weight:700;margin-bottom:20px;'>Your verification code</div>
+                                                    <table role='presentation' cellpadding='0' cellspacing='0' align='center'>
+                                                        <tr>{digitCells}</tr>
+                                                    </table>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+
+                                <!-- expiry -->
+                                <tr>
+                                    <td align='center' style='padding:20px 48px 0;font-size:13px;color:#55635b;'>
+                                        This code expires in <strong style='color:#12241d;'>10 minutes</strong>.
+                                    </td>
+                                </tr>
+
+                                <!-- security note -->
+                                <tr>
+                                    <td style='padding:28px 48px 40px;'>
+                                        <table role='presentation' width='100%' cellpadding='0' cellspacing='0'>
+                                            <tr><td style='border-top:1px solid #e2e6db;padding-top:24px;font-size:13px;line-height:1.6;color:#6a776f;'>
+                                                <strong style='color:#12241d;'>Didn't request this?</strong> You can safely ignore this email &mdash; your account stays secure and no changes will be made. Never share this code with anyone, including our support team.
+                                            </td></tr>
+                                        </table>
+                                    </td>
+                                </tr>
+
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- footer -->
+                    <tr>
+                        <td align='center' style='padding:30px 24px 8px;font-size:12px;line-height:1.7;color:#8a968d;'>
+                            Need a hand? <a href='mailto:support@devpay.com' style='color:#55635b;font-weight:600;text-decoration:none;'>support@devpay.com</a>
+                            <br>{companyName} &middot; This is an automated message, please do not reply.
+                            <br><span style='color:#a6b1a8;'>&copy; {year} {companyName}. All rights reserved.</span>
+                        </td>
+                    </tr>
+
+                </table>
+            </td>
+        </tr>
+    </table>
 </body>
 </html>";
     }
