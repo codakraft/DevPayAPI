@@ -208,10 +208,16 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             throw new AppException("Complete bank details are required.", 400);
         }
 
-        // Resolve identity number — accepts nin / identityNumber / bvn (in priority order)
-        var identityNumber = !string.IsNullOrWhiteSpace(request.Nin) ? request.Nin
-            : !string.IsNullOrWhiteSpace(request.IdentityNumber) ? request.IdentityNumber
-            : request.BVN ?? string.Empty;
+        // Resolve identity number based on the declared identity type (not blind priority),
+        // so the value we validate always matches the type the caller specified.
+        var identityType = request.IdentityType?.Trim().ToLowerInvariant() ?? string.Empty;
+
+        var identityNumber = identityType switch
+        {
+            "nin" => !string.IsNullOrWhiteSpace(request.Nin) ? request.Nin : request.IdentityNumber,
+            "bvn" => !string.IsNullOrWhiteSpace(request.BVN) ? request.BVN : request.IdentityNumber,
+            _     => request.IdentityNumber
+        } ?? string.Empty;
 
         if (string.IsNullOrWhiteSpace(identityNumber) || identityNumber.Length != 11 || !identityNumber.All(char.IsDigit))
         {
@@ -224,7 +230,6 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         application.AccountNo = request.AccountNo;
         application.UpdatedAt = DateTime.UtcNow;
 
-        var identityType = request.IdentityType.ToLower();
         var activeProvider = _configuration["ActiveDataProvider"] ?? "Remita";
 
         // ── NIN path ──────────────────────────────────────────────────────────
@@ -500,11 +505,36 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
         if (activeProvider.Equals("Mono", StringComparison.OrdinalIgnoreCase))
         {
-            // Use Mono credit analysis for eligibility
-            _logger.LogInformation("Using Mono credit analysis for application {ApplicationId} - BVN:{BVN}",
-                application.Id, application.BVN);
+            // Resolve the BVN used for credit analysis. We never persist the raw BVN
+            // (only its SHA-256 hash), so the client re-sends it on this request.
+            string monoBvn;
+            var configuredTestBvn = _configuration["Mono:monoCreditHistoryBVN"];
+            if (!string.IsNullOrWhiteSpace(configuredTestBvn))
+            {
+                // Dev/sandbox override — use the configured test BVN as-is.
+                monoBvn = configuredTestBvn;
+            }
+            else
+            {
+                // Production: validate the supplied BVN and confirm it matches the
+                // identity verified in Step 2 by comparing against the stored hash.
+                if (string.IsNullOrWhiteSpace(request.Bvn) || request.Bvn.Length != 11 || !request.Bvn.All(char.IsDigit))
+                {
+                    throw new AppException("A valid 11-digit BVN is required for credit analysis.", 400);
+                }
 
-            var monoBvn = _configuration["Mono:monoCreditHistoryBVN"] ?? application.BVN ?? string.Empty;
+                if (GenerateBvnHash(request.Bvn) != application.BVN)
+                {
+                    throw new AppException("Provided BVN does not match the verified identity.", 400);
+                }
+
+                monoBvn = request.Bvn;
+            }
+
+            // Use Mono credit analysis for eligibility (log masked BVN only).
+            _logger.LogInformation("Using Mono credit analysis for application {ApplicationId} - BVN:{BVN}",
+                application.Id, MaskBvn(monoBvn));
+
             var creditProvider = _configuration["Mono:CreditHistoryProvider"] ?? "xds";
             var creditAnalysis = await _monoService.AnalyzeCreditHistoryAsync(monoBvn, creditProvider);
 
@@ -600,8 +630,8 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         application.Address = request.Address;
         application.IdNumber = request.IdNumber;
         application.DocumentIds = string.Join(",", request.ImageIds);
-        if (!string.IsNullOrEmpty(request.Bvn))
-            application.BVN = request.Bvn;
+        // NOTE: application.BVN intentionally keeps the Step 2 hash — never overwrite it with
+        // the plaintext request.Bvn (that would persist raw PII and break the hash-match on retry).
         application.MinLoanEligible = finalMinEligible;
         application.MaxLoanEligible = finalMaxEligible;
         application.MinTenor = minTenor;
@@ -1789,6 +1819,14 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         using var sha256 = System.Security.Cryptography.SHA256.Create();
         var hash = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(bvn));
         return Convert.ToBase64String(hash);
+    }
+
+    private static string MaskBvn(string bvn)
+    {
+        if (string.IsNullOrEmpty(bvn) || bvn.Length < 4)
+            return "****";
+
+        return $"{bvn[..3]}***{bvn[^1]}";
     }
 
     #region Step Data Clearing Methods
