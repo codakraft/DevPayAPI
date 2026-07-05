@@ -956,12 +956,51 @@ public class MonoService : IMonoService
         }
     }
 
-    public async Task<MonoCreditAnalysisResultDto?> AnalyzeCreditHistoryAsync(string bvn, string provider = "xds", string? userId = null)
+    public async Task<MonoCreditAnalysisResultDto?> AnalyzeCreditHistoryAsync(string bvn, string provider = "xds", string? userId = null, Guid? borrowerApplicationId = null)
     {
         try
         {
             _logger.LogInformation("Starting credit analysis for BVN: {BvnMasked} with provider: {Provider}",
                 MaskBvn(bvn), provider);
+
+            var bvnHash = GenerateBvnHash(bvn);
+            var cacheDays = _settings.CreditHistoryCacheDays;
+            var cachingEnabled = cacheDays > 0;
+
+            // Cache-first: return a non-expired stored analysis for this BVN, avoiding a Mono call.
+            if (cachingEnabled)
+            {
+                var cached = await _db.MonoCreditAnalysisRecords
+                    .Where(r => r.BvnHash == bvnHash && r.ExpiresAt > DateTime.UtcNow)
+                    .OrderByDescending(r => r.CreatedAt)
+                    .FirstOrDefaultAsync();
+
+                if (cached != null)
+                {
+                    _logger.LogInformation("Credit analysis cache HIT for BVN: {BvnMasked} (recorded {CreatedAt:u}, expires {ExpiresAt:u})",
+                        MaskBvn(bvn), cached.CreatedAt, cached.ExpiresAt);
+
+                    return new MonoCreditAnalysisResultDto
+                    {
+                        Bvn = bvn,
+                        Provider = cached.Provider,
+                        CreditScore = cached.CreditScore,
+                        MaxLoanAmount = cached.MaxLoanAmount,
+                        RiskLevel = cached.RiskLevel,
+                        ActiveLoansCount = cached.ActiveLoansCount,
+                        TotalOutstandingDebt = cached.TotalOutstandingDebt,
+                        OverallPerformanceStatus = cached.OverallPerformanceStatus,
+                        RecommendedAction = cached.RecommendedAction,
+                        RiskFactors = string.IsNullOrWhiteSpace(cached.RiskFactorsJson)
+                            ? new List<string>()
+                            : JsonSerializer.Deserialize<List<string>>(cached.RiskFactorsJson) ?? new List<string>(),
+                        PositiveFactors = string.IsNullOrWhiteSpace(cached.PositiveFactorsJson)
+                            ? new List<string>()
+                            : JsonSerializer.Deserialize<List<string>>(cached.PositiveFactorsJson) ?? new List<string>(),
+                        AnalyzedAt = cached.CreatedAt
+                    };
+                }
+            }
 
             // Get credit history from Mono
             var creditHistoryResponse = await GetCreditHistoryAsync(bvn, provider, userId);
@@ -977,6 +1016,39 @@ public class MonoService : IMonoService
 
             _logger.LogInformation("Credit analysis completed for BVN: {BvnMasked} - Score: {Score}, Risk: {Risk}, Action: {Action}",
                 MaskBvn(bvn), analysis.CreditScore, analysis.RiskLevel, analysis.RecommendedAction);
+
+            // Persist for future cache hits (only when tied to an application, as the FK is required).
+            if (cachingEnabled && borrowerApplicationId.HasValue)
+            {
+                try
+                {
+                    _db.MonoCreditAnalysisRecords.Add(new MonoCreditAnalysisRecord
+                    {
+                        Id = Guid.NewGuid(),
+                        BorrowerApplicationId = borrowerApplicationId.Value,
+                        BvnHash = bvnHash,
+                        Provider = analysis.Provider,
+                        CreditScore = analysis.CreditScore,
+                        MaxLoanAmount = analysis.MaxLoanAmount,
+                        RiskLevel = analysis.RiskLevel,
+                        ActiveLoansCount = analysis.ActiveLoansCount,
+                        TotalOutstandingDebt = analysis.TotalOutstandingDebt,
+                        OverallPerformanceStatus = analysis.OverallPerformanceStatus,
+                        RecommendedAction = analysis.RecommendedAction,
+                        RiskFactorsJson = JsonSerializer.Serialize(analysis.RiskFactors),
+                        PositiveFactorsJson = JsonSerializer.Serialize(analysis.PositiveFactors),
+                        CreatedAt = DateTime.UtcNow,
+                        ExpiresAt = DateTime.UtcNow.AddDays(cacheDays)
+                    });
+                    await _db.SaveChangesAsync();
+                    _logger.LogInformation("Cached credit analysis for BVN: {BvnMasked} (expires in {Days} days)", MaskBvn(bvn), cacheDays);
+                }
+                catch (Exception cacheEx)
+                {
+                    // Caching is best-effort — never fail the analysis because the write failed.
+                    _logger.LogWarning(cacheEx, "Failed to cache credit analysis for BVN: {BvnMasked}", MaskBvn(bvn));
+                }
+            }
 
             return analysis;
         }

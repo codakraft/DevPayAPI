@@ -507,17 +507,29 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         {
             // Resolve the BVN used for credit analysis. We never persist the raw BVN
             // (only its SHA-256 hash), so the client re-sends it on this request.
-            string monoBvn;
+            // NOTE: the NIN path never creates a Mono BVN session, so a null MonoBvnSessionId
+            // means the identity was verified via NIN and application.BVN holds the NIN hash.
+            string? monoBvn;
             var configuredTestBvn = _configuration["Mono:monoCreditHistoryBVN"];
+            var isNinVerified = string.IsNullOrEmpty(application.MonoBvnSessionId);
+
             if (!string.IsNullOrWhiteSpace(configuredTestBvn))
             {
                 // Dev/sandbox override — use the configured test BVN as-is.
                 monoBvn = configuredTestBvn;
             }
+            else if (isNinVerified)
+            {
+                // Identity verified via NIN — application.BVN is the NIN hash, so there is no
+                // verified BVN to match. Mono credit history needs a BVN: use a valid one if the
+                // borrower supplied it, otherwise skip credit analysis and fall back to defaults.
+                monoBvn = (!string.IsNullOrWhiteSpace(request.Bvn) && request.Bvn.Length == 11 && request.Bvn.All(char.IsDigit))
+                    ? request.Bvn
+                    : null;
+            }
             else
             {
-                // Production: validate the supplied BVN and confirm it matches the
-                // identity verified in Step 2 by comparing against the stored hash.
+                // BVN-verified: the supplied BVN must match the identity verified in Step 2.
                 if (string.IsNullOrWhiteSpace(request.Bvn) || request.Bvn.Length != 11 || !request.Bvn.All(char.IsDigit))
                 {
                     throw new AppException("A valid 11-digit BVN is required for credit analysis.", 400);
@@ -531,12 +543,22 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
                 monoBvn = request.Bvn;
             }
 
-            // Use Mono credit analysis for eligibility (log masked BVN only).
-            _logger.LogInformation("Using Mono credit analysis for application {ApplicationId} - BVN:{BVN}",
-                application.Id, MaskBvn(monoBvn));
+            // Run Mono credit analysis only when we have a usable BVN (log masked BVN only).
+            MonoCreditAnalysisResultDto? creditAnalysis = null;
+            if (!string.IsNullOrWhiteSpace(monoBvn))
+            {
+                _logger.LogInformation("Using Mono credit analysis for application {ApplicationId} - BVN:{BVN}",
+                    application.Id, MaskBvn(monoBvn));
 
-            var creditProvider = _configuration["Mono:CreditHistoryProvider"] ?? "xds";
-            var creditAnalysis = await _monoService.AnalyzeCreditHistoryAsync(monoBvn, creditProvider);
+                var creditProvider = _configuration["Mono:CreditHistoryProvider"] ?? "xds";
+                creditAnalysis = await _monoService.AnalyzeCreditHistoryAsync(monoBvn, creditProvider, borrowerApplicationId: application.Id);
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "No BVN available for NIN-verified application {ApplicationId}; skipping Mono credit analysis and applying default eligibility.",
+                    application.Id);
+            }
 
             if (creditAnalysis == null || creditAnalysis.RecommendedAction == "Decline")
             {

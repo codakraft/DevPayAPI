@@ -1417,85 +1417,91 @@ IF OBJECT_ID(N'[EWalletTransactions]', N'U') IS NOT NULL AND COL_LENGTH('EWallet
 IF OBJECT_ID(N'[EWalletTransactions]', N'U') IS NOT NULL AND COL_LENGTH('EWalletTransactions','UpdatedAt') IS NULL
     ALTER TABLE [EWalletTransactions] ADD [UpdatedAt] datetime2 NOT NULL DEFAULT '0001-01-01T00:00:00.0000000';
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','Id') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [Id] uniqueidentifier NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000';
+IF OBJECT_ID(N'[EWallets]', N'U') IS NOT NULL AND COL_LENGTH('EWallets','PassportUrl') IS NULL
+    ALTER TABLE [EWallets] ADD [PassportUrl] nvarchar(500) NULL;
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','CompanyId') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [CompanyId] uniqueidentifier NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000';
+IF OBJECT_ID(N'[EWallets]', N'U') IS NOT NULL AND COL_LENGTH('EWallets','Address') IS NULL
+    ALTER TABLE [EWallets] ADD [Address] nvarchar(200) NULL;
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','LoanId') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [LoanId] uniqueidentifier NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000';
+IF OBJECT_ID(N'[EWallets]', N'U') IS NOT NULL AND COL_LENGTH('EWallets','Alias') IS NULL
+    ALTER TABLE [EWallets] ADD [Alias] nvarchar(100) NULL;
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','MandateId') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [MandateId] nvarchar(max) NOT NULL DEFAULT N'';
+IF OBJECT_ID(N'[EWallets]', N'U') IS NOT NULL AND COL_LENGTH('EWallets','Bvn') IS NULL
+    ALTER TABLE [EWallets] ADD [Bvn] nvarchar(20) NULL;
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','Reference') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [Reference] nvarchar(max) NOT NULL DEFAULT N'';
+IF OBJECT_ID(N'[EWallets]', N'U') IS NOT NULL AND COL_LENGTH('EWallets','BvnVerified') IS NULL
+    ALTER TABLE [EWallets] ADD [BvnVerified] bit NULL;
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','NibssCode') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [NibssCode] nvarchar(max) NOT NULL DEFAULT N'';
+IF OBJECT_ID(N'[EWallets]', N'U') IS NOT NULL AND COL_LENGTH('EWallets','City') IS NULL
+    ALTER TABLE [EWallets] ADD [City] nvarchar(100) NULL;
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','Status') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [Status] nvarchar(max) NOT NULL DEFAULT N'';
+IF OBJECT_ID(N'[EWallets]', N'U') IS NOT NULL AND COL_LENGTH('EWallets','CustomerRawResponse') IS NULL
+    ALTER TABLE [EWallets] ADD [CustomerRawResponse] nvarchar(4000) NULL;
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','MandateType') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [MandateType] nvarchar(max) NOT NULL DEFAULT N'';
+IF OBJECT_ID(N'[EWallets]', N'U') IS NOT NULL AND COL_LENGTH('EWallets','Dob') IS NULL
+    ALTER TABLE [EWallets] ADD [Dob] nvarchar(20) NULL;
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','DebitType') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [DebitType] nvarchar(max) NOT NULL DEFAULT N'';
+IF OBJECT_ID(N'[EWallets]', N'U') IS NOT NULL AND COL_LENGTH('EWallets','EmailAddress') IS NULL
+    ALTER TABLE [EWallets] ADD [EmailAddress] nvarchar(256) NULL;
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','ReadyToDebit') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [ReadyToDebit] bit NOT NULL DEFAULT 0;
+IF OBJECT_ID(N'[EWallets]', N'U') IS NOT NULL AND COL_LENGTH('EWallets','FirstName') IS NULL
+    ALTER TABLE [EWallets] ADD [FirstName] nvarchar(100) NOT NULL DEFAULT '';
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','Approved') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [Approved] bit NOT NULL DEFAULT 0;
+IF OBJECT_ID(N'[EWallets]', N'U') IS NOT NULL AND COL_LENGTH('EWallets','Gender') IS NULL
+    ALTER TABLE [EWallets] ADD [Gender] nvarchar(20) NULL;
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','AccountName') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [AccountName] nvarchar(max) NOT NULL DEFAULT N'';
+IF OBJECT_ID(N'[EWallets]', N'U') IS NOT NULL AND COL_LENGTH('EWallets','KycTier') IS NULL
+    ALTER TABLE [EWallets] ADD [KycTier] int NULL;
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','AccountNumber') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [AccountNumber] nvarchar(max) NOT NULL DEFAULT N'';
+IF OBJECT_ID(N'[EWallets]', N'U') IS NOT NULL AND COL_LENGTH('EWallets','LastName') IS NULL
+    ALTER TABLE [EWallets] ADD [LastName] nvarchar(100) NOT NULL DEFAULT '';
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','Bank') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [Bank] nvarchar(max) NOT NULL DEFAULT N'';
+IF OBJECT_ID(N'[EWallets]', N'U') IS NOT NULL AND COL_LENGTH('EWallets','MaritalStatus') IS NULL
+    ALTER TABLE [EWallets] ADD [MaritalStatus] nvarchar(50) NULL;
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','BankCode') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [BankCode] nvarchar(max) NOT NULL DEFAULT N'';
+IF OBJECT_ID(N'[EWallets]', N'U') IS NOT NULL AND COL_LENGTH('EWallets','MiddleName') IS NULL
+    ALTER TABLE [EWallets] ADD [MiddleName] nvarchar(100) NULL;
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','Customer') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [Customer] nvarchar(max) NOT NULL DEFAULT N'';
+IF OBJECT_ID(N'[EWallets]', N'U') IS NOT NULL AND COL_LENGTH('EWallets','MothersMaidenName') IS NULL
+    ALTER TABLE [EWallets] ADD [MothersMaidenName] nvarchar(100) NULL;
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','FeeBearer') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [FeeBearer] nvarchar(max) NOT NULL DEFAULT N'';
+IF OBJECT_ID(N'[EWallets]', N'U') IS NOT NULL AND COL_LENGTH('EWallets','NextOfKinAddress') IS NULL
+    ALTER TABLE [EWallets] ADD [NextOfKinAddress] nvarchar(200) NULL;
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','Description') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [Description] nvarchar(max) NOT NULL DEFAULT N'';
+IF OBJECT_ID(N'[EWallets]', N'U') IS NOT NULL AND COL_LENGTH('EWallets','NextOfKinFirstName') IS NULL
+    ALTER TABLE [EWallets] ADD [NextOfKinFirstName] nvarchar(100) NULL;
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','LiveMode') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [LiveMode] bit NOT NULL DEFAULT 0;
+IF OBJECT_ID(N'[EWallets]', N'U') IS NOT NULL AND COL_LENGTH('EWallets','NextOfKinMobileNumber') IS NULL
+    ALTER TABLE [EWallets] ADD [NextOfKinMobileNumber] nvarchar(20) NULL;
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','StartDate') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [StartDate] datetime2 NOT NULL DEFAULT '0001-01-01T00:00:00.0000000';
+IF OBJECT_ID(N'[EWallets]', N'U') IS NOT NULL AND COL_LENGTH('EWallets','NextOfKinOtherNames') IS NULL
+    ALTER TABLE [EWallets] ADD [NextOfKinOtherNames] nvarchar(100) NULL;
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','EndDate') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [EndDate] datetime2 NOT NULL DEFAULT '0001-01-01T00:00:00.0000000';
+IF OBJECT_ID(N'[EWallets]', N'U') IS NOT NULL AND COL_LENGTH('EWallets','NextOfKinRelationship') IS NULL
+    ALTER TABLE [EWallets] ADD [NextOfKinRelationship] nvarchar(100) NULL;
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','InitialDebitDate') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [InitialDebitDate] datetime2 NOT NULL DEFAULT '0001-01-01T00:00:00.0000000';
+IF OBJECT_ID(N'[EWallets]', N'U') IS NOT NULL AND COL_LENGTH('EWallets','NextOfKinSurname') IS NULL
+    ALTER TABLE [EWallets] ADD [NextOfKinSurname] nvarchar(100) NULL;
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','Amount') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [Amount] int NOT NULL DEFAULT 0;
+IF OBJECT_ID(N'[EWallets]', N'U') IS NOT NULL AND COL_LENGTH('EWallets','Nin') IS NULL
+    ALTER TABLE [EWallets] ADD [Nin] nvarchar(20) NULL;
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','InitialDebitAmount') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [InitialDebitAmount] int NOT NULL DEFAULT 0;
+IF OBJECT_ID(N'[EWallets]', N'U') IS NOT NULL AND COL_LENGTH('EWallets','NinVerified') IS NULL
+    ALTER TABLE [EWallets] ADD [NinVerified] bit NULL;
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','TransferDestinationsJson') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [TransferDestinationsJson] nvarchar(max) NOT NULL DEFAULT N'';
+IF OBJECT_ID(N'[EWallets]', N'U') IS NOT NULL AND COL_LENGTH('EWallets','Occupation') IS NULL
+    ALTER TABLE [EWallets] ADD [Occupation] nvarchar(100) NULL;
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','CreatedAt') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [CreatedAt] datetime2 NOT NULL DEFAULT '0001-01-01T00:00:00.0000000';
+IF OBJECT_ID(N'[EWallets]', N'U') IS NOT NULL AND COL_LENGTH('EWallets','WalletRawResponse') IS NULL
+    ALTER TABLE [EWallets] ADD [WalletRawResponse] nvarchar(1000) NULL;
 
-IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','UpdatedAt') IS NULL
-    ALTER TABLE [MonoMandateReferences] ADD [UpdatedAt] datetime2 NOT NULL DEFAULT '0001-01-01T00:00:00.0000000';
+IF OBJECT_ID(N'[BorrowerApplications]', N'U') IS NOT NULL AND COL_LENGTH('BorrowerApplications','MonoCustomerId') IS NULL
+    ALTER TABLE [BorrowerApplications] ADD [MonoCustomerId] nvarchar(max) NULL;
+
+IF OBJECT_ID(N'[MonoCreditAnalysisRecords]', N'U') IS NOT NULL AND COL_LENGTH('MonoCreditAnalysisRecords','PositiveFactorsJson') IS NULL
+    ALTER TABLE [MonoCreditAnalysisRecords] ADD [PositiveFactorsJson] nvarchar(max) NULL;
+
+IF OBJECT_ID(N'[MonoCreditAnalysisRecords]', N'U') IS NOT NULL AND COL_LENGTH('MonoCreditAnalysisRecords','RiskFactorsJson') IS NULL
+    ALTER TABLE [MonoCreditAnalysisRecords] ADD [RiskFactorsJson] nvarchar(max) NULL;
 COMMIT;
 GO

@@ -1656,6 +1656,31 @@ BEGIN
     VALUES (N'20260618094850_CreateMonoMandateReferencesTableFix', N'9.0.6');
 END;
 
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260705093918_AddCreditAnalysisFactorsJson'
+)
+BEGIN
+    ALTER TABLE [MonoCreditAnalysisRecords] ADD [PositiveFactorsJson] nvarchar(max) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260705093918_AddCreditAnalysisFactorsJson'
+)
+BEGIN
+    ALTER TABLE [MonoCreditAnalysisRecords] ADD [RiskFactorsJson] nvarchar(max) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260705093918_AddCreditAnalysisFactorsJson'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20260705093918_AddCreditAnalysisFactorsJson', N'9.0.6');
+END;
+
 COMMIT;
 GO
 

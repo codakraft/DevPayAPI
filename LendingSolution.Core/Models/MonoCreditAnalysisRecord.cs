@@ -35,7 +35,11 @@ public class MonoCreditAnalysisRecord
     
     [MaxLength(20)]
     public string RecommendedAction { get; set; } = string.Empty; // Approve, Review, Decline
-    
+
+    // Computed narrative factors (not raw credit data), stored as JSON arrays.
+    public string? RiskFactorsJson { get; set; }
+    public string? PositiveFactorsJson { get; set; }
+
     // Auto-deletion for data protection compliance
     public DateTime ExpiresAt { get; set; } // Delete after 30 days
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
