@@ -1007,7 +1007,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
                 MandateType = "emandate",
                 DebitType = "variable",
                 Customer = new MonoMandateCustomerDto { Id = application.MonoCustomerId },
-                Amount = (int)(loan.MonthlyRepayment ?? loan.Amount),
+                Amount = (int)((loan.MonthlyRepayment ?? loan.Amount) * 100), // Mono expects amount in kobo
                 Reference = Guid.NewGuid().ToString("N")[..24], // alphanumeric, max 24 chars
                 AccountNumber = application.AccountNo ?? string.Empty,
                 BankCode = application.BankCode ?? string.Empty,

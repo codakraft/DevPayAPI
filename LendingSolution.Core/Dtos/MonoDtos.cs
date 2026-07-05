@@ -214,6 +214,9 @@ public class MonoGenerateMandateRequestDto
     [JsonPropertyName("customer")]
     public MonoMandateCustomerDto Customer { get; set; } = new();
 
+    /// <summary>
+    /// Amount in kobo (i.e. multiply Naira by 100).
+    /// </summary>
     [JsonPropertyName("amount")]
     public int Amount { get; set; }
 
