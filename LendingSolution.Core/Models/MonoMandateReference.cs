@@ -6,6 +6,7 @@ public class MonoMandateReference
     public Guid CompanyId { get; set; }
     public Guid LoanId { get; set; }
     public string MandateId { get; set; } = string.Empty;
+    public string? MonoUrl { get; set; }
     public string Reference { get; set; } = string.Empty;
     public string NibssCode { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;

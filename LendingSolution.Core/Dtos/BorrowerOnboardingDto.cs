@@ -208,6 +208,12 @@ public class BorrowerStep4ResponseDto
     public string? RemitaTransRef { get; set; }
 
     /// <summary>
+    /// Mono e-mandate authorization link — the borrower must visit this to complete mandate setup.
+    /// Populated only when ActiveDataProvider is Mono.
+    /// </summary>
+    public string? MonoUrl { get; set; }
+
+    /// <summary>
     /// Auth parameter descriptors from Remita — tells the frontend which inputs
     /// the borrower must supply (e.g. OTP, last 4 card digits) for Step 4B.
     /// </summary>

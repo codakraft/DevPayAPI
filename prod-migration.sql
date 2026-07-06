@@ -1681,6 +1681,23 @@ BEGIN
     VALUES (N'20260705093918_AddCreditAnalysisFactorsJson', N'9.0.6');
 END;
 
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260706145441_AddMonoUrlToMandateReference'
+)
+BEGIN
+    ALTER TABLE [MonoMandateReferences] ADD [MonoUrl] nvarchar(max) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260706145441_AddMonoUrlToMandateReference'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20260706145441_AddMonoUrlToMandateReference', N'9.0.6');
+END;
+
 COMMIT;
 GO
 

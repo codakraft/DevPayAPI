@@ -263,9 +263,18 @@ public class MonoMandateDataDto
     [JsonPropertyName("meta")]
     public object Meta { get; set; } = new { };
     
-    [JsonPropertyName("id")]
+    /// <summary>
+    /// Mono's mandate creation response uses "mandate_id" (not "id") for this field.
+    /// </summary>
+    [JsonPropertyName("mandate_id")]
     public string Id { get; set; } = string.Empty;
-    
+
+    /// <summary>
+    /// Authorization link the borrower must visit to complete mandate setup (e-mandate transfer verification).
+    /// </summary>
+    [JsonPropertyName("mono_url")]
+    public string? MonoUrl { get; set; }
+
     [JsonPropertyName("status")]
     public string Status { get; set; } = string.Empty;
     

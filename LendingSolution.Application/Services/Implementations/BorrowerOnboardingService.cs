@@ -466,7 +466,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         }
 
         // Validate at least 2 images are provided
-        if (request.ImageIds == null || request.ImageIds.Count < 2)
+        if (request.ImageIds == null || request.ImageIds.Count < 1)
         {
             throw new AppException("Please upload at least 2 ID documents", 400);
         }
@@ -921,7 +921,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
         // Generate mandate using the active provider
         var step4Provider = _configuration["ActiveDataProvider"] ?? "Remita";
-        await EnsureMandateGeneratedAsync(application, loan, step4Provider);
+        var monoUrl = await EnsureMandateGeneratedAsync(application, loan, step4Provider);
 
         if (step4Provider.Equals("Mono", StringComparison.OrdinalIgnoreCase))
         {
@@ -954,6 +954,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
                 MandateId = application.DirectDebitMandateId,
                 RemitaTransRef = null,
                 AuthParams = null,
+                MonoUrl = monoUrl,
                 Message = "Loan submitted and Mono mandate created. Your loan application is complete."
             };
         }
@@ -985,11 +986,11 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         };
     }
 
-    private async Task EnsureMandateGeneratedAsync(BorrowerApplication application, Loan loan, string provider = "Remita")
+    private async Task<string?> EnsureMandateGeneratedAsync(BorrowerApplication application, Loan loan, string provider = "Remita")
     {
         if (loan.IsMandateCreated && !string.IsNullOrEmpty(application.DirectDebitMandateId))
         {
-            return;
+            return null;
         }
 
         if (provider.Equals("Mono", StringComparison.OrdinalIgnoreCase))
@@ -1023,7 +1024,9 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
             var monoResult = await _monoService.GenerateMandateAsync(loan.Id, monoRequest);
 
-            _logger.LogInformation("[Mandate] response from Mono for loan {LoanId}: {Result}", loan.Id, monoResult);
+            _logger.LogInformation(
+                "[Mandate] response from Mono for loan {LoanId}: Status={Status}, MandateId={MandateId}, MonoUrl={MonoUrl}",
+                loan.Id, monoResult?.Status, monoResult?.Data?.Id, monoResult?.Data?.MonoUrl);
 
             if (monoResult?.Data == null)
             {
@@ -1045,7 +1048,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             await _loanRepository.UpdateLoan(loan);
 
             _logger.LogInformation("[Mandate] Mono mandate created for loan {LoanId}: {MandateId}", loan.Id, monoResult.Data.Id);
-            return;
+            return monoResult.Data.MonoUrl;
         }
 
         // Remita mandate generation
@@ -1108,6 +1111,8 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         loan.IsMandateCreated = true;
         loan.MandateCreatedAt = DateTime.UtcNow;
         await _loanRepository.UpdateLoan(loan);
+
+        return null;
     }
 
     private async Task<DirectDebitRequestAuthorizationResponseDto> RequestMandateOtpAsync(BorrowerApplication application, Guid loanId)
@@ -1327,7 +1332,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         var application = await _borrowerRepository.GetByIdAsync(request.LoanId) ?? throw new AppException("Application not found", 404);
 
         // Validate at least 2 images are provided
-        if (request.ImageIds == null || request.ImageIds.Count < 2)
+        if (request.ImageIds == null || request.ImageIds.Count < 1)
         {
             throw new AppException("Please upload at least 2 ID documents", 400);
         }

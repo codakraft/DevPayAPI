@@ -185,7 +185,8 @@ public class BorrowerController(
                 monthlyRepaymentAmount = result.MonthlyRepaymentAmount,
                 mandateId = result.MandateId,
                 remitaTransRef = result.RemitaTransRef,
-                authParams = result.AuthParams
+                authParams = result.AuthParams,
+                monoUrl = result.MonoUrl
             }));
         }
         catch (AppException ex)

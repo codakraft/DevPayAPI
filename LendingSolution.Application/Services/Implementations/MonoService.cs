@@ -274,6 +274,8 @@ public class MonoService : IMonoService
                 return null;
             }
 
+            _logger.LogInformation("Mono mandate raw response for loan {LoanId}: {Response}", loanId, responseContent);
+
             // Parse successful response
             var result = JsonSerializer.Deserialize<MonoGenerateMandateResponseDto>(responseContent, new JsonSerializerOptions
             {
@@ -676,6 +678,13 @@ public class MonoService : IMonoService
             {
                 var errorResponse = JsonSerializer.Deserialize<MonoErrorResponseDto>(responseContent);
                 _logger.LogError("Mono BVN Verify API Error: {Message}", errorResponse?.Message);
+
+                return new MonoBvnVerifyResponseDto
+                {
+                    Status = "failed",
+                    Message = GetFriendlyBvnVerifyErrorMessage(errorResponse?.Message),
+                    Timestamp = DateTime.UtcNow
+                };
             }
             catch (Exception ex)
             {
@@ -689,6 +698,20 @@ public class MonoService : IMonoService
             _logger.LogError(ex, "Error verifying BVN with Mono: {Message}", ex.Message);
             return null;
         }
+    }
+
+    private static string GetFriendlyBvnVerifyErrorMessage(string? monoMessage)
+    {
+        if (string.IsNullOrWhiteSpace(monoMessage))
+            return "We couldn't verify your BVN. Please check your details and try again.";
+
+        if (monoMessage.Contains("phone_number", StringComparison.OrdinalIgnoreCase) &&
+            monoMessage.Contains("fails to match the required pattern", StringComparison.OrdinalIgnoreCase))
+        {
+            return "The phone number provided is not valid. Please enter a valid Nigerian phone number (e.g. 08012345678 or 2348012345678) and try again.";
+        }
+
+        return "We couldn't verify your BVN. Please check the details you provided and try again.";
     }
 
     public async Task<MonoBvnDetailsResponseDto?> BvnGetDetailsAsync(MonoBvnDetailsRequestDto request, string sessionId, string? userId = null)
@@ -1268,6 +1291,7 @@ public class MonoService : IMonoService
                 CompanyId = companyId,
                 LoanId = loanId,
                 MandateId = mandateData.Id,
+                MonoUrl = mandateData.MonoUrl,
                 Reference = mandateData.Reference,
                 NibssCode = mandateData.NibssCode,
                 Status = mandateData.Status,

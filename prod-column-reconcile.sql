@@ -1503,5 +1503,8 @@ IF OBJECT_ID(N'[MonoCreditAnalysisRecords]', N'U') IS NOT NULL AND COL_LENGTH('M
 
 IF OBJECT_ID(N'[MonoCreditAnalysisRecords]', N'U') IS NOT NULL AND COL_LENGTH('MonoCreditAnalysisRecords','RiskFactorsJson') IS NULL
     ALTER TABLE [MonoCreditAnalysisRecords] ADD [RiskFactorsJson] nvarchar(max) NULL;
+
+IF OBJECT_ID(N'[MonoMandateReferences]', N'U') IS NOT NULL AND COL_LENGTH('MonoMandateReferences','MonoUrl') IS NULL
+    ALTER TABLE [MonoMandateReferences] ADD [MonoUrl] nvarchar(max) NULL;
 COMMIT;
 GO
