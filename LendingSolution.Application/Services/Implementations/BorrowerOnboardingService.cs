@@ -874,7 +874,22 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             ExpectedMaturityDate = DateTime.UtcNow.AddMonths(request.Tenor)
         };
 
-        // Send loan application summary email to borrower with attached offer letter
+        // If caller supplied a Mono customer ID (and one isn't already stored), persist it now
+        if (!string.IsNullOrEmpty(request.MonoCustomerId) && string.IsNullOrEmpty(application.MonoCustomerId))
+        {
+            application.MonoCustomerId = request.MonoCustomerId;
+            application.UpdatedAt = DateTime.UtcNow;
+            await _borrowerRepository.UpdateAsync(application);
+            _logger.LogInformation("[Step4] MonoCustomerId set from request for application {ApplicationId}: {CustomerId}",
+                application.Id, application.MonoCustomerId);
+        }
+
+        // Generate mandate using the active provider
+        var step4Provider = _configuration["ActiveDataProvider"] ?? "Remita";
+        var monoUrl = await EnsureMandateGeneratedAsync(application, loan, step4Provider);
+
+        // Send loan application summary email to borrower with attached offer letter —
+        // only after the mandate has been created and persisted
         var borrowerFullName = $"{application.FirstName} {application.LastName}";
         var emailSent = await _emailService.SendLoanApplicationSummaryEmailAsync(
             application.Email,
@@ -908,20 +923,6 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
                 // Don't throw - fee deduction failure shouldn't block loan submission at this point
             }
         }
-
-        // If caller supplied a Mono customer ID (and one isn't already stored), persist it now
-        if (!string.IsNullOrEmpty(request.MonoCustomerId) && string.IsNullOrEmpty(application.MonoCustomerId))
-        {
-            application.MonoCustomerId = request.MonoCustomerId;
-            application.UpdatedAt = DateTime.UtcNow;
-            await _borrowerRepository.UpdateAsync(application);
-            _logger.LogInformation("[Step4] MonoCustomerId set from request for application {ApplicationId}: {CustomerId}",
-                application.Id, application.MonoCustomerId);
-        }
-
-        // Generate mandate using the active provider
-        var step4Provider = _configuration["ActiveDataProvider"] ?? "Remita";
-        var monoUrl = await EnsureMandateGeneratedAsync(application, loan, step4Provider);
 
         if (step4Provider.Equals("Mono", StringComparison.OrdinalIgnoreCase))
         {
@@ -1002,7 +1003,10 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
                 throw new AppException("Mono customer ID is required. Please create a Mono customer first.", 400);
             }
 
-            var startDate = DateTime.UtcNow;
+            // Mono validates start_date against Nigeria (WAT, UTC+1) local time, not UTC — near
+            // midnight UTC, DateTime.UtcNow's date is still "yesterday" in WAT, so Mono rejects it
+            // as being in the past. Nigeria doesn't observe DST, so a fixed +1 hour offset is safe.
+            var startDate = DateTime.UtcNow.AddHours(1);
             var monoRequest = new MonoGenerateMandateRequestDto
             {
                 MandateType = "emandate",
@@ -1032,7 +1036,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             {
                 _logger.LogError("[Mandate] Mono mandate generation failed for loan {LoanId}. Status={Status}, Message={Msg}",
                     loan.Id, monoResult?.Status, monoResult?.Message);
-                throw new AppException("Mono mandate generation failed. Please verify your bank details and try again.", 502);
+                throw new AppException("Failed to submit request. Please try again later.", 502);
             }
 
             application.DirectDebitMandateId = monoResult.Data.Id;
