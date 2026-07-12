@@ -237,7 +237,7 @@ public class MonoService : IMonoService
                 Description = !string.IsNullOrEmpty(request.Description) ? request.Description : $"Loan mandate for {loan.User?.Email ?? "borrower"}",
                 StartDate = request.StartDate,
                 EndDate = request.EndDate,
-                RedirectUrl = request.RedirectUrl,
+                RedirectUrl = !string.IsNullOrEmpty(request.RedirectUrl) ? request.RedirectUrl : _settings.MandateRedirectUrl,
                 Meta = new { source = "devpay", loanId = loanId.ToString() }
             };
 
@@ -1329,5 +1329,126 @@ public class MonoService : IMonoService
                 mandateData.Id);
             // Don't throw - this shouldn't fail the mandate creation
         }
+    }
+
+    /// <summary>
+    /// Processes a verified Mono webhook event and keeps the local
+    /// <see cref="MonoMandateReference"/> in sync with the mandate lifecycle
+    /// (created / approved / ready / paused / cancelled / reinstated / expired)
+    /// and logs debit transaction events. Signature verification is done by the
+    /// controller before this is called.
+    /// </summary>
+    public async Task ProcessWebhookAsync(MonoWebhookPayloadDto payload)
+    {
+        var eventType = payload.Event?.ToLowerInvariant() ?? string.Empty;
+        var data = payload.Data;
+
+        // Mandate lifecycle events carry the mandate id in "id"; action and debit
+        // events reference it via "mandate".
+        var mandateId = GetJsonString(data, "id") ?? GetJsonString(data, "mandate");
+
+        _logger.LogInformation(
+            "Processing Mono webhook. Event: {Event}, EventId: {EventId}, MandateId: {MandateId}",
+            payload.Event, payload.EventId, mandateId);
+
+        if (string.IsNullOrEmpty(mandateId))
+        {
+            _logger.LogWarning("Mono webhook {Event} had no resolvable mandate id; ignoring.", payload.Event);
+            return;
+        }
+
+        var mandate = await _db.MonoMandateReferences
+            .FirstOrDefaultAsync(m => m.MandateId == mandateId);
+
+        // Debit transaction events don't mutate the mandate row's lifecycle flags.
+        if (eventType.Contains("debit."))
+        {
+            _logger.LogInformation(
+                "Mono debit event {Event} for mandate {MandateId}. Status: {Status}, Amount: {Amount}, Ref: {Ref}",
+                payload.Event, mandateId,
+                GetJsonString(data, "status"),
+                GetJsonString(data, "amount"),
+                GetJsonString(data, "reference_number"));
+            return;
+        }
+
+        if (mandate == null)
+        {
+            _logger.LogWarning("No local MonoMandateReference found for mandate {MandateId} (event {Event}).",
+                mandateId, payload.Event);
+            return;
+        }
+
+        switch (eventType)
+        {
+            case "events.mandates.created":
+                mandate.Status = GetJsonString(data, "status") ?? "created";
+                break;
+
+            case "events.mandates.approved":
+                mandate.Approved = true;
+                mandate.Status = GetJsonString(data, "status") ?? "approved";
+                break;
+
+            case "events.mandates.ready":
+                mandate.Approved = true;
+                mandate.ReadyToDebit = true;
+                mandate.Status = GetJsonString(data, "status") ?? "ready";
+                break;
+
+            case "events.mandates.rejected":
+                mandate.Approved = false;
+                mandate.ReadyToDebit = false;
+                mandate.Status = GetJsonString(data, "status") ?? "rejected";
+                break;
+
+            case "events.mandate.action.pause":
+                mandate.ReadyToDebit = false;
+                mandate.Status = "paused";
+                break;
+
+            case "events.mandate.action.cancel":
+                mandate.ReadyToDebit = false;
+                mandate.Status = "cancelled";
+                break;
+
+            case "events.mandate.action.reinstate":
+                mandate.ReadyToDebit = true;
+                mandate.Status = "reinstated";
+                break;
+
+            case "events.mandates.expired":
+                mandate.ReadyToDebit = false;
+                mandate.Status = "expired";
+                break;
+
+            default:
+                _logger.LogInformation("Unhandled Mono webhook event {Event} for mandate {MandateId}.",
+                    payload.Event, mandateId);
+                return;
+        }
+
+        mandate.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "Updated mandate {MandateId} from webhook {Event}. Status: {Status}, Approved: {Approved}, ReadyToDebit: {ReadyToDebit}",
+            mandateId, payload.Event, mandate.Status, mandate.Approved, mandate.ReadyToDebit);
+    }
+
+    private static string? GetJsonString(JsonElement element, string propertyName)
+    {
+        if (element.ValueKind != JsonValueKind.Object ||
+            !element.TryGetProperty(propertyName, out var value))
+            return null;
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString(),
+            JsonValueKind.Number => value.ToString(),
+            JsonValueKind.True or JsonValueKind.False => value.GetBoolean().ToString(),
+            JsonValueKind.Null or JsonValueKind.Undefined => null,
+            _ => value.ToString()
+        };
     }
 }

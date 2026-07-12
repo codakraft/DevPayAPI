@@ -18,6 +18,9 @@ public interface IMonoService
     Task<MonoReinstateMandateResponseDto?> ReinstateMandateAsync(string mandateId, string? userId = null);
     Task<MonoInitiateDebitResponseDto?> InitiateDebitAsync(string mandateId, MonoInitiateDebitRequestDto request, string? userId = null);
 
+    // Webhooks
+    Task ProcessWebhookAsync(MonoWebhookPayloadDto payload);
+
     // Data Services
     Task<MonoBanksResponseDto?> GetBanksAsync();
     

@@ -977,3 +977,25 @@ public class MonoInitiateDebitDataDto
     [JsonPropertyName("created_at")]
     public DateTime? CreatedAt { get; set; }
 }
+
+// ─── Webhook DTOs ─────────────────────────────────────────────────────────────
+
+/// <summary>
+/// Top-level envelope Mono posts to the webhook endpoint for every event.
+/// The <c>data</c> payload shape differs per event, so it is kept as a raw
+/// <see cref="System.Text.Json.JsonElement"/> and parsed per event type.
+/// </summary>
+public class MonoWebhookPayloadDto
+{
+    [JsonPropertyName("event")]
+    public string Event { get; set; } = string.Empty;
+
+    [JsonPropertyName("event_id")]
+    public string? EventId { get; set; }
+
+    [JsonPropertyName("timestamp")]
+    public string? Timestamp { get; set; }
+
+    [JsonPropertyName("data")]
+    public System.Text.Json.JsonElement Data { get; set; }
+}

@@ -6,6 +6,11 @@ public class MonoSettings
     public string SecretKey { get; set; } = string.Empty;
     public string PublicKey { get; set; } = string.Empty;
     public string WebhookSecret { get; set; } = string.Empty;
+
+    /// <summary>
+    /// URL Mono redirects the borrower to after they complete the e-mandate authorization.
+    /// </summary>
+    public string MandateRedirectUrl { get; set; } = string.Empty;
     public string MonoCreditHistoryBVN { get; set; } = string.Empty;
     public string CreditHistoryProvider { get; set; } = "xds";
     public string TestCustomerId { get; set; } = string.Empty;
