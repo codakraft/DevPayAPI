@@ -744,71 +744,13 @@ public class LoanService(
         }
 
         var totalRepayment = loan.TotalRepayment.Value;
-        var monthlyRepayment = loan.MonthlyRepayment.Value;
 
-        // Get phone number for mandate
-        var phoneNumber = loan.BorrowerApplication?.PhoneNumber;
-        if (string.IsNullOrEmpty(phoneNumber))
+        // The repayment mandate is created and activated during borrower onboarding (Step 4),
+        // by whichever provider ActiveDataProvider selects. Disbursement only confirms it exists.
+        if (!loan.IsMandateCreated || string.IsNullOrEmpty(loan.MandateRef))
         {
-            throw new AppException("Borrower phone number not found. Cannot create mandate.", 400);
+            throw new AppException("Loan mandate has not been created. Cannot process disbursement.", 400);
         }
-
-        // Get CustomerId and AuthorisationCode from RemitaSalaryHistory table
-        if (loan.BorrowerApplication == null)
-        {
-            throw new AppException("Borrower application not found. Cannot retrieve salary history.", 400);
-        }
-
-        var salaryHistory = await _remitaSalaryHistoryRepository.GetByBorrowerApplicationIdAsync(loan.BorrowerApplication.Id);
-        if (salaryHistory == null || string.IsNullOrEmpty(salaryHistory.CustomerId) || string.IsNullOrEmpty(salaryHistory.AuthorisationCode))
-        {
-            throw new AppException("Customer ID or authorization code not found in salary history. Cannot create mandate.", 400);
-        }
-
-        // Create Remita mandate before disbursement using the same authorization code from salary history
-        // var customerId = salaryHistory.CustomerId;
-        // var authorisationCode = salaryHistory.AuthorisationCode;
-        // var disbursementDate = DateTime.UtcNow.ToString("dd-MM-yyyy HH:mm:ss") + "+0000";
-        // var firstCollectionDate = DateTime.UtcNow.AddMonths(1).ToString("dd-MM-yyyy HH:mm:ss") + "+0000";
-
-        // _logger.LogInformation("=== PREPARING TO CREATE REMITA MANDATE ===");
-        
-        // var mandateResult = await _remitaService.CreateMandateAsync(
-        //     customerId: customerId,
-        //     phoneNumber: phoneNumber,
-        //     accountNumber: accountNumber,
-        //     loanAmount: loan.Amount.ToString("F2"),
-        //     collectionAmount: monthlyRepayment.ToString("F2"),
-        //     dateOfDisbursement: disbursementDate,
-        //     dateOfCollection: firstCollectionDate,
-        //     totalCollectionAmount: totalRepayment.ToString("F2"),
-        //     numberOfRepayments: loan.DurationInMonths.ToString(),
-        //     bankCode: bankCode,
-        //     authorisationCode
-        // );
-
-        // _logger.LogInformation("Mandate creation response for loan {LoanId}: {@MandateResult}", loanId, mandateResult);
-
-        // if (mandateResult == null || mandateResult.ResponseCode != "00")
-        // {
-        //     var errorMessage = mandateResult?.ResponseMsg ?? "Failed to create Remita mandate";
-        //     _logger.LogError("=== MANDATE CREATION FAILED ===");
-        //     _logger.LogError("Loan ID: {LoanId}", loanId);
-        //     _logger.LogError("Mandate Result is null: {IsNull}", mandateResult == null);
-        //     _logger.LogError("Response Code: {ResponseCode}", mandateResult?.ResponseCode);
-        //     _logger.LogError("Response Message: {ResponseMessage}", mandateResult?.ResponseMsg);
-        //     _logger.LogError("Status: {Status}", mandateResult?.Status);
-        //     _logger.LogError("Has Data: {HasData}", mandateResult?.HasData);
-        //     _logger.LogError("Error Message: {Error}", errorMessage);
-        //     throw new AppException($"Cannot disburse loan. Mandate creation failed: {errorMessage}", 400);
-        // }
-
-        // // Store mandate reference in loan
-        // loan.MandateRef = mandateResult.Data?.MandateReference ?? string.Empty;
-        // loan.IsMandateCreated = true;
-        // loan.MandateCreatedAt = DateTime.UtcNow;
-        // _logger.LogInformation("Mandate created successfully for loan {LoanId}. MandateReference: {MandateReference}",
-        //     loanId, loan.MandateRef);
 
         // Get disbursement amount (Amount to Disburse = Principal - Applicable Fees)
         var disbursementAmount = loan.DisbursementAmount ?? loan.Amount; // Fallback to loan.Amount for legacy loans
