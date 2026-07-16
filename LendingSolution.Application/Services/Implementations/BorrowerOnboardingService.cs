@@ -1012,7 +1012,10 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
                 MandateType = "emandate",
                 DebitType = "variable",
                 Customer = new MonoMandateCustomerDto { Id = application.MonoCustomerId },
-                Amount = (int)((loan.MonthlyRepayment ?? loan.Amount) * 100), // Mono expects amount in kobo
+                // Variable mandate amount is the total ceiling debitable across the whole mandate
+                // period (start_date → end_date), not the per-debit amount. Authorize the full
+                // repayment so every installment can be collected. Mono expects kobo.
+                Amount = (int)((loan.TotalRepayment ?? loan.Amount) * 100),
                 Reference = Guid.NewGuid().ToString("N")[..24], // alphanumeric, max 24 chars
                 AccountNumber = application.AccountNo ?? string.Empty,
                 BankCode = application.BankCode ?? string.Empty,
