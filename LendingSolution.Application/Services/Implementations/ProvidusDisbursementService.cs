@@ -47,11 +47,11 @@ public class ProvidusDisbursementService : IProvidusDisbursementService
     public async Task<DisbursementResultDto> TransferFundsAsync(ProvidusDisbursementInternalRequestDto request)
     {
         var transactionReference = GenerateTransactionReference();
-        var narration = request.Narration ?? $"Loan Disbursement - {request.LoanId}";
+        var narration = request.Narration ?? $"DevPay Loan Disbursement - {request.LoanId}";
 
         _logger.LogInformation(
-            "Initiating fund transfer for Loan {LoanId}. Amount: {Amount}, Account: {Account}, Reference: {Reference}, MockMode: {MockMode}",
-            request.LoanId, request.Amount, request.DestinationAccountNumber, transactionReference, IsMockMode);
+            "Initiating fund transfer for Loan {LoanId}. Amount: {Amount}, Account: {Account}, BankCode: {BankCode}, Reference: {Reference}, MockMode: {MockMode}",
+            request.LoanId, request.Amount, request.DestinationAccountNumber, request.DestinationBankCode, transactionReference, IsMockMode);
 
         try
         {
@@ -200,7 +200,7 @@ public class ProvidusDisbursementService : IProvidusDisbursementService
             var jsonContent = JsonSerializer.Serialize(request, JsonOptions);
             var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
-            _logger.LogDebug("Providus API Request: {Request}", 
+            _logger.LogInformation("Providus API Request: {Request}",
                 JsonSerializer.Serialize(new
                 {
                     request.CreditAccount,
@@ -219,7 +219,7 @@ public class ProvidusDisbursementService : IProvidusDisbursementService
             _logger.LogInformation(
                 "Providus API Response. StatusCode: {StatusCode}, Reference: {Reference}",
                 response.StatusCode, request.TransactionReference);
-            _logger.LogDebug("Providus API Response Body: {Response}", responseContent);
+            _logger.LogInformation("Providus API Response Body: {Response}", responseContent);
 
             if (response.IsSuccessStatusCode)
             {

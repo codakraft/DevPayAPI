@@ -766,6 +766,10 @@ public class LoanService(
             BeneficiaryName = borrowerName
         };
 
+        _logger.LogInformation(
+            "Disbursement beneficiary details for Loan {LoanId}. AccountNo: {AccountNumber}, BankCode: {BankCode}, BeneficiaryName: {BeneficiaryName}, Amount: {Amount}",
+            loanId, accountNumber, bankCode, borrowerName, disbursementAmount);
+
         var disbursementResult = await _providusDisbursementService.TransferFundsAsync(disbursementRequest);
 
         if (!disbursementResult.IsSuccessful)
