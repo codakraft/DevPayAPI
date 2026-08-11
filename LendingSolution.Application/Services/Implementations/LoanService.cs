@@ -752,9 +752,32 @@ public class LoanService(
             throw new AppException("Loan mandate has not been created. Cannot process disbursement.", 400);
         }
 
+        // A previous attempt left the outcome unknown. Re-sending would risk a second
+        // debit, so require the reference to be reconciled with Providus first.
+        if (loan.DisbursementOutcomeUnknown)
+        {
+            throw new AppException(
+                "A previous disbursement attempt for this loan returned an unknown outcome and has not been reconciled. " +
+                $"Verify reference {loan.DisbursementTransactionRef} with Providus before retrying.", 409);
+        }
+
         // Get disbursement amount (Amount to Disburse = Principal - Applicable Fees)
         var disbursementAmount = loan.DisbursementAmount ?? loan.Amount; // Fallback to loan.Amount for legacy loans
-        
+
+        // Persist the transaction reference before the transfer is attempted, and reuse it
+        // on every subsequent attempt. Providus rejects a reference it has already seen
+        // (7709), which is what stops a retry from disbursing a second time — but only if
+        // the reference stays the same across attempts.
+        if (string.IsNullOrWhiteSpace(loan.DisbursementTransactionRef))
+        {
+            loan.DisbursementTransactionRef = _providusDisbursementService.GenerateTransactionReference();
+
+            if (!await _loanRepository.UpdateLoan(loan))
+            {
+                throw new AppException("Failed to record the disbursement reference. Disbursement aborted.", 500);
+            }
+        }
+
         // Initiate fund transfer via Providus
         var disbursementRequest = new ProvidusDisbursementInternalRequestDto
         {
@@ -763,18 +786,42 @@ public class LoanService(
             DestinationBankCode = bankCode,
             Amount = disbursementAmount,
             Narration = $"Loan Disbursement for {borrowerName} - Loan ID: {loanId.ToString()[..8]}",
-            BeneficiaryName = borrowerName
+            BeneficiaryName = borrowerName,
+            TransactionReference = loan.DisbursementTransactionRef
         };
 
         _logger.LogInformation(
-            "Disbursement beneficiary details for Loan {LoanId}. AccountNo: {AccountNumber}, BankCode: {BankCode}, BeneficiaryName: {BeneficiaryName}, Amount: {Amount}",
-            loanId, accountNumber, bankCode, borrowerName, disbursementAmount);
+            "Disbursement beneficiary details for Loan {LoanId}. AccountNo: {AccountNumber}, BankCode: {BankCode}, BeneficiaryName: {BeneficiaryName}, Amount: {Amount}, Reference: {Reference}",
+            loanId, accountNumber, bankCode, borrowerName, disbursementAmount, loan.DisbursementTransactionRef);
 
         var disbursementResult = await _providusDisbursementService.TransferFundsAsync(disbursementRequest);
+
+        if (disbursementResult.IsIndeterminate)
+        {
+            // The funds may or may not have moved. Latch the loan so it cannot be
+            // re-disbursed until someone confirms what happened.
+            loan.DisbursementOutcomeUnknown = true;
+            await _loanRepository.UpdateLoan(loan);
+
+            _logger.LogError(
+                "Disbursement outcome unknown for Loan {LoanId}. Reference: {Reference}, Code: {Code}. Manual reconciliation required.",
+                loanId, loan.DisbursementTransactionRef, disbursementResult.ResponseCode);
+
+            throw new AppException(
+                "Disbursement outcome could not be confirmed. The transfer may have been completed. " +
+                $"Verify reference {loan.DisbursementTransactionRef} with Providus before retrying.", 502);
+        }
 
         if (!disbursementResult.IsSuccessful)
         {
             throw new AppException($"Disbursement failed: {disbursementResult.Message}. {disbursementResult.ErrorDetails}", 500);
+        }
+
+        if (!string.IsNullOrWhiteSpace(disbursementResult.ResolvedBeneficiaryName))
+        {
+            _logger.LogInformation(
+                "Loan {LoanId} disbursed to '{ResolvedName}' (account {AccountNumber}). SessionId: {SessionId}",
+                loanId, disbursementResult.ResolvedBeneficiaryName, accountNumber, disbursementResult.SessionId);
         }
 
         // Update loan to Disbursed status

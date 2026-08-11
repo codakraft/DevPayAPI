@@ -276,6 +276,8 @@ public static class ServiceExtensions
         services.AddScoped<ISalaryHistoryViewService, SalaryHistoryViewService>();
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IProvidusDisbursementService, ProvidusDisbursementService>();
+        // Singleton so the Mono bank list is fetched daily rather than per disbursement.
+        services.AddSingleton<IBankCodeResolver, BankCodeResolver>();
         services.AddScoped<IEmbedlyWalletService, EmbedlyWalletService>();
     }
 

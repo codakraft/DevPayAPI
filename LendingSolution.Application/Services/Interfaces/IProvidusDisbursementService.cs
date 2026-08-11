@@ -29,6 +29,14 @@ public interface IProvidusDisbursementService
         string? transactionReference = null);
     
     /// <summary>
+    /// Resolve the account name held at the beneficiary bank, via NIP name enquiry.
+    /// </summary>
+    /// <param name="accountNumber">The beneficiary account number</param>
+    /// <param name="bankCode">The beneficiary's CBN bank code, as stored on the borrower record</param>
+    /// <returns>The name enquiry result; check IsSuccessful before using AccountName</returns>
+    Task<ProvidusNipAccountEnquiryResponseDto> NameEnquiryAsync(string accountNumber, string bankCode);
+
+    /// <summary>
     /// Verify the status of a previous transaction
     /// </summary>
     /// <param name="transactionReference">The transaction reference to verify</param>

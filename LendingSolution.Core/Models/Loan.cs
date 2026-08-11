@@ -45,6 +45,20 @@ public class Loan : Base
     // Additional properties for Remita integration
     public DateTime? DisbursementDate { get; set; }
     public string? DisbursementReference { get; set; }
+
+    /// <summary>
+    /// The transaction reference sent to Providus, persisted before the transfer is
+    /// attempted and reused on every retry. Providus deduplicates on this value, so a
+    /// stable reference is what prevents a retry after a timeout from paying twice.
+    /// </summary>
+    public string? DisbursementTransactionRef { get; set; }
+
+    /// <summary>
+    /// Set when a disbursement attempt returned an unknown outcome (timeout, connection
+    /// failure). The loan must not be re-disbursed while this is true — requery
+    /// DisbursementTransactionRef with Providus to establish what actually happened.
+    /// </summary>
+    public bool DisbursementOutcomeUnknown { get; set; }
     public DateTime? MandateStoppedDate { get; set; }
     public DateTime? MandateStoppedAt { get; set; }
     public string? MandateStoppedBy { get; set; }
