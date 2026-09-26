@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace LendingSolution.Core.Dtos;
@@ -432,8 +433,40 @@ public class MonoBanksResponseDto
     [JsonPropertyName("message")]
     public string Message { get; set; } = string.Empty;
 
+    // /v3/banks/list nests the list ({"data":{"banks":[...]}}); older responses returned it bare.
     [JsonPropertyName("data")]
+    [JsonConverter(typeof(MonoBankListConverter))]
     public List<MonoBankDto> Data { get; set; } = [];
+}
+
+/// <summary>
+/// Reads the bank list whether <c>data</c> is the array itself or an object wrapping it
+/// (under <c>banks</c>, or failing that the first array-valued property).
+/// </summary>
+public class MonoBankListConverter : JsonConverter<List<MonoBankDto>>
+{
+    public override List<MonoBankDto> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        using var doc = JsonDocument.ParseValue(ref reader);
+        var root = doc.RootElement;
+
+        if (root.ValueKind == JsonValueKind.Object)
+        {
+            if (root.TryGetProperty("banks", out var banks) && banks.ValueKind == JsonValueKind.Array)
+                root = banks;
+            else
+                root = root.EnumerateObject()
+                    .Select(p => p.Value)
+                    .FirstOrDefault(v => v.ValueKind == JsonValueKind.Array);
+        }
+
+        return root.ValueKind == JsonValueKind.Array
+            ? root.Deserialize<List<MonoBankDto>>(options) ?? []
+            : [];
+    }
+
+    public override void Write(Utf8JsonWriter writer, List<MonoBankDto> value, JsonSerializerOptions options)
+        => JsonSerializer.Serialize(writer, value, options);
 }
 
 public class MonoBankDto
