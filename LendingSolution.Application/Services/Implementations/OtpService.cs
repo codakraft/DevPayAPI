@@ -403,6 +403,7 @@ public class OtpService : IOtpService
             OtpType.TransactionAuthorization => "Transaction Authorization",
             OtpType.AccountRecovery => "Account Recovery",
             OtpType.DocumentSigning => "Document Signing",
+            OtpType.ApplicationResume => "Resume Loan Application",
             _ => "Verification"
         };
     }
@@ -419,6 +420,7 @@ public class OtpService : IOtpService
             OtpType.TransactionAuthorization => "Transaction Authorization Code",
             OtpType.AccountRecovery => "Account Recovery Code",
             OtpType.DocumentSigning => "Document Signing Code",
+            OtpType.ApplicationResume => "Resume Your Loan Application",
             _ => "Verification Code"
         };
     }
@@ -435,6 +437,7 @@ public class OtpService : IOtpService
             OtpType.TransactionAuthorization => "authorize this transaction",
             OtpType.AccountRecovery => "recover your account",
             OtpType.DocumentSigning => "sign this document",
+            OtpType.ApplicationResume => "resume your loan application",
             _ => "complete this action"
         };
 

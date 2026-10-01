@@ -48,5 +48,10 @@ public enum OtpType
     /// <summary>
     /// Admin login multi-factor authentication
     /// </summary>
-    AdminLogin = 9
+    AdminLogin = 9,
+
+    /// <summary>
+    /// Borrower resuming an in-progress loan application
+    /// </summary>
+    ApplicationResume = 10
 }

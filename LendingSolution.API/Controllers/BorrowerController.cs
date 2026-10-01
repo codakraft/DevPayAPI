@@ -45,7 +45,7 @@ public class BorrowerController(
         catch (AppException ex)
         {
             _logger.LogError(ex, "Error during Step 1 for borrower onboarding");
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -70,7 +70,7 @@ public class BorrowerController(
         catch (AppException ex)
         {
             _logger.LogError(ex, "Error during Step 1B for borrower onboarding");
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -95,7 +95,7 @@ public class BorrowerController(
         catch (AppException ex)
         {
             _logger.LogError(ex, "Error during Step 2 for borrower onboarding");
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -120,7 +120,7 @@ public class BorrowerController(
         catch (AppException ex)
         {
             _logger.LogError(ex, "Error during Step 2B for borrower onboarding");
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -153,7 +153,7 @@ public class BorrowerController(
         catch (AppException ex)
         {
             _logger.LogError(ex, "Error during Step 3 for borrower onboarding");
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -192,7 +192,7 @@ public class BorrowerController(
         catch (AppException ex)
         {
             _logger.LogError(ex, "Error during Step 4 for borrower onboarding");
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -222,7 +222,7 @@ public class BorrowerController(
         catch (AppException ex)
         {
             _logger.LogError(ex, "Error during Step 4B (activate mandate) for borrower onboarding");
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -249,7 +249,7 @@ public class BorrowerController(
         catch (AppException ex)
         {
             _logger.LogError(ex, "Error resending Step 1 email OTP for loan ID: {LoanId}", request.LoanId);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -274,7 +274,7 @@ public class BorrowerController(
         catch (AppException ex)
         {
             _logger.LogError(ex, "Error resending Step 2 BVN OTP for loan ID: {LoanId}", request.LoanId);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -299,7 +299,7 @@ public class BorrowerController(
         catch (AppException ex)
         {
             _logger.LogError(ex, "Error generating email OTP");
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -324,7 +324,7 @@ public class BorrowerController(
         catch (AppException ex)
         {
             _logger.LogError(ex, "Error validating email OTP");
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -349,7 +349,7 @@ public class BorrowerController(
         catch (AppException ex)
         {
             _logger.LogError(ex, "Error generating BVN OTP");
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -363,22 +363,47 @@ public class BorrowerController(
     #region Application Status Endpoints
 
     /// <summary>
-    /// Gets the current onboarding step status for a borrower application
+    /// Step 1 of resuming an application: emails a verification code to the borrower.
+    /// Always returns the same response so it can't be used to discover who has applied.
     /// </summary>
-    /// <param name="request">Email address or application ID to check status for</param>
+    [HttpPost("resume/request-otp")]
+    public async Task<IActionResult> RequestResumeOtp([FromBody] BorrowerResumeOtpRequestDto request)
+    {
+        try
+        {
+            await _borrowerOnboardingService.RequestResumeOtpAsync(request.Email);
+            return Ok(ApiResponse.Ok("If an application exists for this email, a verification code has been sent."));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, "Error sending resume OTP");
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error sending resume OTP");
+            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
+        }
+    }
+
+    /// <summary>
+    /// Step 2 of resuming an application: verifies the emailed code and returns the current step.
+    /// Requires { email, otp }; the code comes from POST resume/request-otp.
+    /// </summary>
+    /// <param name="request">Borrower email and the emailed verification code</param>
     /// <returns>Current step number, completion status, and next required actions</returns>
     [HttpPost("current-step")]
     public async Task<IActionResult> GetCurrentStep([FromBody] BorrowerCurrentStepRequestDto request)
     {
         try
         {
-            var result = await _borrowerOnboardingService.GetCurrentStepAsync(request);
+            var result = await _borrowerOnboardingService.VerifyResumeOtpAsync(request);
             return Ok(ApiResponse.Ok("Current step retrieved successfully", result));
         }
         catch (AppException ex)
         {
             _logger.LogError(ex, "Error retrieving current step for email {Email}", request.Email);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -392,7 +417,9 @@ public class BorrowerController(
     /// </summary>
     /// <param name="emailOrId">The borrower's email address or unique application ID</param>
     /// <returns>Detailed step information including progress percentage, loan eligibility, and next actions</returns>
+    // Unauthenticated lookup by email exposed application IDs; borrowers resume via the OTP flow above
     [HttpGet("{emailOrId}")]
+    [Authorize(Roles = "SuperAdmin")]
     public async Task<IActionResult> GetCurrentStepByEmail(string emailOrId)
     {
         try
@@ -408,7 +435,7 @@ public class BorrowerController(
         catch (AppException ex)
         {
             _logger.LogError(ex, "Error retrieving current step for {EmailOrId}", emailOrId);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -437,7 +464,7 @@ public class BorrowerController(
         catch (AppException ex)
         {
             _logger.LogError(ex, "Error updating documents for loan {LoanId}", request.LoanId);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -598,7 +625,7 @@ public class BorrowerController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
