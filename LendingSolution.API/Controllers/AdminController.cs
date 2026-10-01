@@ -125,6 +125,33 @@ public class AdminController(
     [HasPermission(Permissions.Users.Manage)]
     public Task<IActionResult> ActivateUser(string userId) => SetUserActive(userId, true);
 
+    /// <summary>
+    /// Updates a user's first and last name. Same scoping rules as role changes: non-SuperAdmins can
+    /// only edit non-admin users in their own company, and nobody can edit themselves here.
+    /// </summary>
+    // [PUT]    /api/admin/users/{userId}
+    [HttpPut("users/{userId}")]
+    [HasPermission(Permissions.Users.Manage)]
+    public async Task<IActionResult> UpdateUser(string userId, [FromBody] UpdateUserRequestDto body)
+    {
+        try
+        {
+            var result = await _authService.UpdateUserAsync(userId, body, User);
+            _logger.LogInformation("User {UserId} updated", userId);
+            return Ok(ApiResponse.Ok("User updated successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while updating user.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
     private async Task<IActionResult> SetUserActive(string userId, bool isActive)
     {
         try

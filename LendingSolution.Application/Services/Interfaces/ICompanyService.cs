@@ -13,4 +13,5 @@ public interface ICompanyService
    Task Deactivate(Guid id);
    Task<PagedCompanyListDto> GetAllCompaniesAsync(CompanyFilterDto filter);
    Task<PagedCompanyUserListDto> GetCompanyUsersAsync(Guid companyId, CompanyUserFilterDto filter);
+   Task<CompanyUserDto> GetCompanyUserByIdAsync(string userId, Guid? companyScope); // null scope = any company (SuperAdmin)
 }

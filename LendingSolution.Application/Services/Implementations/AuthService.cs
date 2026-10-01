@@ -453,6 +453,45 @@ public class AuthService(
         return new { userId = user.Id, isActive = user.IsActive };
     }
 
+    public async Task<object> UpdateUserAsync(string userId, UpdateUserRequestDto body, ClaimsPrincipal caller)
+    {
+        var callerId = GetCallerId(caller);
+        var user = await _userManager.FindByIdAsync(userId) ?? throw new AppException("User not found", 404);
+
+        await EnsureCanManageUserAsync(caller, callerId, user);
+
+        var firstName = body.FirstName.Trim();
+        var lastName = body.LastName.Trim();
+        if (firstName.Length == 0 || lastName.Length == 0)
+        {
+            throw new AppException("First name and last name are required", 400);
+        }
+
+        var previousName = $"{user.FirstName} {user.LastName}";
+        user.FirstName = firstName;
+        user.LastName = lastName;
+
+        var result = await _userManager.UpdateAsync(user);
+        if (!result.Succeeded)
+        {
+            throw new AppException(
+                "Failed to update user: " + string.Join(", ", result.Errors.Select(e => e.Description)), 400);
+        }
+
+        await auditService.LogAsync(
+            action: "UserUpdated",
+            category: "User",
+            userId: callerId,
+            entityType: "User",
+            entityId: user.Id,
+            userEmail: user.Email,
+            companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
+            details: $"User {user.Email} renamed from '{previousName}' to '{firstName} {lastName}' by {callerId}"
+        );
+
+        return new { userId = user.Id, firstName = user.FirstName, lastName = user.LastName };
+    }
+
     private static string GetCallerId(ClaimsPrincipal caller) =>
         caller.FindFirstValue(ClaimTypes.NameIdentifier) ?? throw new AppException("User not authenticated", 401);
 

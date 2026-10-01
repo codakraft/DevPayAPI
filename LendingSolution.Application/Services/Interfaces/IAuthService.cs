@@ -15,6 +15,7 @@ public interface IAuthService
     Task<object> AssignRole(RoleAssignDto body, System.Security.Claims.ClaimsPrincipal caller);
     Task<object> RemoveRole(RoleAssignDto body, System.Security.Claims.ClaimsPrincipal caller);
     Task<object> SetUserActiveAsync(string userId, bool isActive, System.Security.Claims.ClaimsPrincipal caller);
+    Task<object> UpdateUserAsync(string userId, UpdateUserRequestDto body, System.Security.Claims.ClaimsPrincipal caller);
     Task<object> RefreshToken(RefreshTokenRequestDto request);
     Task<bool> RevokeToken(RevokeTokenRequestDto request, string? userId = null);
     Task<bool> Logout(string? userId = null);
