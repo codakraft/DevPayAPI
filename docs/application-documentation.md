@@ -133,7 +133,8 @@ from another company returns 404.
 - `POST company/users/create`: `users.manage` creates company staff (staff roles only),
   with `RequiresPasswordChange = true`.
 - `POST admin/role/assign`, `POST admin/role/remove`,
-  `POST admin/users/{id}/activate|deactivate`: `users.manage`. Non-SuperAdmins can
+  `POST admin/users/{id}/activate|deactivate`, `PUT admin/users/{id}` (first/last name): `users.manage`.
+- `GET company/users/{id}`: `users.view`; other companies' users return 404. Non-SuperAdmins can
   only manage non-admin users in their own company, only with staff roles, and
   never themselves.
 

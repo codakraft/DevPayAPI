@@ -497,7 +497,7 @@ public class SupportService : ISupportService
     /// </summary>
     private static bool UserInScope(Guid? companyScope, ApplicationUser user, IEnumerable<Loan> loansInScope) =>
         companyScope is null
-        || user.CompanyId == companyScope.Value.ToString()
+        || user.BelongsToCompany(companyScope.Value)
         || loansInScope.Any();
 
     /// <summary>

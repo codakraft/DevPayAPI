@@ -610,6 +610,42 @@ public class CompanyController(
     /// <param name="filter">Filter parameters for searching and filtering users</param>
     /// <returns>Paginated list of company users with statistics</returns>
     // [GET] /api/company/users
+    /// <summary>
+    /// Gets one user by id, in the same shape as the users list. Users from other companies
+    /// return 404; SuperAdmin can read any user.
+    /// </summary>
+    // [GET] /api/company/users/{userId}
+    [HttpGet("users/{userId}")]
+    [HasPermission(Permissions.Users.View)]
+    public async Task<IActionResult> GetCompanyUserById(string userId)
+    {
+        try
+        {
+            Guid? companyScope = null;
+            if (!User.IsSuperAdmin())
+            {
+                companyScope = User.GetCompanyId();
+                if (companyScope is null)
+                {
+                    return BadRequest(ApiResponse.Fail("Company ID not found in token"));
+                }
+            }
+
+            var result = await _companyService.GetCompanyUserByIdAsync(userId, companyScope);
+            return Ok(ApiResponse.Ok("User fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while fetching company user.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
     [HttpGet("users")]
     [HasPermission(Permissions.Users.View)]
     public async Task<IActionResult> GetCompanyUsers([FromQuery] CompanyUserFilterDto filter)

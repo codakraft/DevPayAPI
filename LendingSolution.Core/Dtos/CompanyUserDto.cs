@@ -43,6 +43,17 @@ public class CreateCompanyUserResponseDto
     public DateTime CreatedAt { get; set; }
 }
 
+public class UpdateUserRequestDto
+{
+    [Required]
+    [StringLength(100, MinimumLength = 1)]
+    public string FirstName { get; set; } = string.Empty;
+
+    [Required]
+    [StringLength(100, MinimumLength = 1)]
+    public string LastName { get; set; } = string.Empty;
+}
+
 public class CompanyUserDto
 {
     public string Id { get; set; } = string.Empty;
