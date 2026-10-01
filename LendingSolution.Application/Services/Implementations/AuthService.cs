@@ -473,7 +473,7 @@ public class AuthService(
         }
 
         var callerCompanyId = caller.FindFirstValue("CompanyId");
-        if (string.IsNullOrEmpty(callerCompanyId) || target.CompanyId != callerCompanyId)
+        if (!target.BelongsToCompany(callerCompanyId))
         {
             throw new AppException("User does not belong to your company", 403);
         }
@@ -977,7 +977,8 @@ public class AuthService(
         // Company filter
         if (!string.IsNullOrEmpty(filter.CompanyId))
         {
-            query = query.Where(u => u.CompanyId == filter.CompanyId);
+            // In-memory list: compare as GUIDs, not case-sensitive strings
+            query = query.Where(u => u.BelongsToCompany(filter.CompanyId));
         }
 
         // Gender filter
