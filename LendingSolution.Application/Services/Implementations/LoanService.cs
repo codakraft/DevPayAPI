@@ -370,6 +370,12 @@ public class LoanService(
         };
     }
 
+    public async Task<Guid?> GetLoanCompanyIdAsync(Guid loanId)
+    {
+        var loan = await _loanRepository.GetLoanById(loanId);
+        return loan?.CompanyId;
+    }
+
     public async Task<LoanListDto> GetLoanByIdAsync(Guid loanId, string? requestingUserId = null)
     {
         var loan = await _loanRepository.GetLoanByIdWithIncludes(loanId);

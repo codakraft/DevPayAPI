@@ -18,6 +18,7 @@ public class CompanyService : ICompanyService
     private readonly IDisbursementRepository _disbursementRepository;
     private readonly IRepaymentRepository _repaymentRepository;
     private readonly IWalletService _walletService;
+    private readonly RoleManager<IdentityRole> _roleManager;
 
     public CompanyService(
         ICompanyRepository companyRepository,
@@ -25,8 +26,10 @@ public class CompanyService : ICompanyService
         ILoanRepository loanRepository,
         IDisbursementRepository disbursementRepository,
         IRepaymentRepository repaymentRepository,
-        IWalletService walletService)
+        IWalletService walletService,
+        RoleManager<IdentityRole> roleManager)
     {
+        _roleManager = roleManager;
         _companyRepository = companyRepository;
         _userManager = userManager;
         _loanRepository = loanRepository;
@@ -515,6 +518,7 @@ public class CompanyService : ICompanyService
         }
 
         // Map users to DTOs with roles
+        var roleIdsByName = _roleManager.Roles.ToDictionary(r => r.Name!, r => r.Id);
         var userDtos = new List<CompanyUserDto>();
         foreach (var user in users)
         {
@@ -535,7 +539,10 @@ public class CompanyService : ICompanyService
                 IsActive = user.IsActive,
                 CreatedAt = user.CreatedAt,
                 LastLoginAt = user.LastLoginAt,
-                Role = userRoles.FirstOrDefault()
+                Role = userRoles.FirstOrDefault(),
+                Roles = userRoles
+                    .Select(name => new RoleSummaryDto { Id = roleIdsByName.GetValueOrDefault(name, string.Empty), Name = name })
+                    .ToList()
             };
 
             userDtos.Add(userDto);
