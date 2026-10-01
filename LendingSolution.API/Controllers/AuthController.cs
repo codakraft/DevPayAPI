@@ -6,6 +6,7 @@ using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using LendingSolution.API.Filters;
 
 namespace LendingSolution.API.Controllers;
 
@@ -36,7 +37,7 @@ public class AuthController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -58,7 +59,7 @@ public class AuthController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -73,14 +74,14 @@ public class AuthController(
     {
         try
         {
-            var result = await _authService.CreateSuperAdmin(body);
+            var result = await _authService.CreateSuperAdmin(body, User.IsInRole("SuperAdmin"));
             _logger.LogInformation("Super admin created successfully: {Email}", body.Email);
             return Ok(ApiResponse.Ok("Super admin created successfully", result));
         }
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -102,7 +103,7 @@ public class AuthController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -111,6 +112,7 @@ public class AuthController(
         }
     }
 
+    [AllowWhilePasswordChangeRequired]
     [AllowAnonymous]
     [HttpPost("refresh")]
     public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequestDto request)
@@ -124,7 +126,7 @@ public class AuthController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail($"Failed to refresh token: {ex.Message}"));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail($"Failed to refresh token: {ex.Message}").WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -147,7 +149,7 @@ public class AuthController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -156,6 +158,7 @@ public class AuthController(
         }
     }
 
+    [AllowWhilePasswordChangeRequired]
     [Authorize]
     [HttpPost("logout")]
     public async Task<IActionResult> Logout()
@@ -170,7 +173,7 @@ public class AuthController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -182,6 +185,7 @@ public class AuthController(
     /// <summary>
     /// Change password. Also clears the first-login password change requirement.
     /// </summary>
+    [AllowWhilePasswordChangeRequired]
     [Authorize]
     [HttpPost("change-password")]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequestDto body)
@@ -194,14 +198,14 @@ public class AuthController(
                 return Unauthorized(ApiResponse.Fail("User not authenticated"));
             }
 
-            await _authService.ChangePasswordAsync(body, userId);
+            var tokens = await _authService.ChangePasswordAsync(body, userId);
             _logger.LogInformation("Password changed successfully for user {UserId}", userId);
-            return Ok(ApiResponse.Ok("Password changed successfully"));
+            return Ok(ApiResponse.Ok("Password changed successfully", tokens));
         }
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {

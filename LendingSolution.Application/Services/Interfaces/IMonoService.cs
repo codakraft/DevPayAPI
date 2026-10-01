@@ -13,6 +13,7 @@ public interface IMonoService
 
     // Mandate Management
     Task<MonoGenerateMandateResponseDto?> GenerateMandateAsync(Guid loanId, MonoGenerateMandateRequestDto request, string? userId = null);
+    Task<Guid?> GetMandateCompanyIdAsync(string mandateId); // Used for company-scoped access checks
     Task<MonoCancelMandateResponseDto?> CancelMandateAsync(string mandateId, string? userId = null);
     Task<MonoPauseMandateResponseDto?> PauseMandateAsync(string mandateId, string? userId = null);
     Task<MonoReinstateMandateResponseDto?> ReinstateMandateAsync(string mandateId, string? userId = null);

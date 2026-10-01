@@ -12,14 +12,17 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using LendingSolution.Application.Exceptions;
+using LendingSolution.Core.Auth;
 
 namespace LendingSolution.Application.Services.Implementations;
 
 public class TokenService(
     UserManager<ApplicationUser> userManager,
     IOptions<JwtSettings> configuration,
-    IRefreshTokenRepository refreshTokenRepository) : ITokenService
+    IRefreshTokenRepository refreshTokenRepository,
+    RoleManager<IdentityRole> roleManager) : ITokenService
 {
+    private readonly RoleManager<IdentityRole> _roleManager = roleManager;
     private readonly UserManager<ApplicationUser> _userManager = userManager;
     private readonly JwtSettings _jwtSettings = configuration.Value;
     private readonly IRefreshTokenRepository _refreshTokenRepository = refreshTokenRepository;
@@ -35,6 +38,7 @@ public class TokenService(
                 new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                 new("FirstName", user.FirstName ?? string.Empty),
                 new("LastName", user.LastName ?? string.Empty),
+                new("sstamp", user.SecurityStamp ?? string.Empty),
             };
 
         // Add CompanyId claim for Admin users
@@ -43,9 +47,16 @@ public class TokenService(
             claims.Add(new Claim("CompanyId", user.CompanyId));
         }
 
+        // Restricts the token to change-password/logout/refresh until the password is changed
+        if (user.RequiresPasswordChange)
+        {
+            claims.Add(new Claim("pwd_change_required", "true"));
+        }
+
         var roles = await _userManager.GetRolesAsync(user);
 
         claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
+        claims.AddRange(await GetPermissionClaimsAsync(roles));
         claims.AddRange(userClaims);
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.Key!));
@@ -64,6 +75,24 @@ public class TokenService(
         var token = tokenHandler.CreateToken(tokenDescriptor);
 
         return tokenHandler.WriteToken(token);
+    }
+
+    /// <summary>
+    /// Collects the distinct permission claims granted by the user's roles.
+    /// </summary>
+    private async Task<IEnumerable<Claim>> GetPermissionClaimsAsync(IEnumerable<string> roleNames)
+    {
+        var permissions = new HashSet<string>();
+        foreach (var roleName in roleNames)
+        {
+            var role = await _roleManager.FindByNameAsync(roleName);
+            if (role is null) continue;
+
+            var roleClaims = await _roleManager.GetClaimsAsync(role);
+            permissions.UnionWith(roleClaims.Where(c => c.Type == Permissions.ClaimType).Select(c => c.Value));
+        }
+
+        return permissions.Select(p => new Claim(Permissions.ClaimType, p));
     }
 
     public async Task<TokenResponseDto> GenerateTokenWithRefreshAsync(ApplicationUser user)
@@ -117,6 +146,12 @@ public class TokenService(
         if (user == null)
         {
             throw new AppException("User associated with the refresh token not found");
+        }
+
+        if (!user.IsActive)
+        {
+            await _refreshTokenRepository.RevokeTokenAsync(refreshToken, user.Id, "User deactivated");
+            throw new AppException("Account is deactivated. Please contact your administrator.", 403, ErrorCodes.AccountDeactivated);
         }
 
         // Generate new tokens

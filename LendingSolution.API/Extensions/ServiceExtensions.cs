@@ -10,6 +10,9 @@ using Microsoft.Extensions.Options;
 using LendingSolution.Infrastructure.Data;
 using LendingSolution.Core.Settings;
 using LendingSolution.Core.Models;
+using LendingSolution.Core.Dtos.Response;
+using LendingSolution.API.Filters;
+using LendingSolution.API.Auth;
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Application.Services.Implementations;
 using LendingSolution.Application.Repositories.Interfaces;
@@ -146,6 +149,25 @@ public static class ServiceExtensions
                 ValidAudience = jwtSettings.Audience,
                 IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.Key!)),
             };
+            opt.Events = new JwtBearerEvents
+            {
+                OnTokenValidated = async context =>
+                {
+                    var validator = context.HttpContext.RequestServices.GetRequiredService<UserSessionValidator>();
+                    if (!await validator.IsValidAsync(context.Principal!))
+                    {
+                        context.Fail("Session is no longer valid");
+                    }
+                },
+                // Give permission/role failures a JSON body with a code instead of an empty 403
+                OnForbidden = async context =>
+                {
+                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    await context.Response.WriteAsJsonAsync(
+                        ApiResponse.Fail("You don't have permission to perform this action")
+                            .WithCode(ErrorCodes.PermissionDenied));
+                }
+            };
         });
     }
 
@@ -157,7 +179,8 @@ public static class ServiceExtensions
             options.Password.RequireLowercase = true;
             options.Password.RequireUppercase = true;
             options.Password.RequiredLength = 8;
-            options.Password.RequireNonAlphanumeric = false;
+            // Must match the admin frontend's rule: 8+ chars with upper, lower, digit and special character
+            options.Password.RequireNonAlphanumeric = true;
         })
         .AddRoles<IdentityRole>()
      .AddEntityFrameworkStores<ApplicationDbContext>()
@@ -251,6 +274,9 @@ public static class ServiceExtensions
     public static void RegisterServices(this IServiceCollection services)
     {
         services.AddScoped<IAuthService, AuthService>();
+        services.AddMemoryCache();
+        services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationPolicyProvider, PermissionPolicyProvider>();
+        services.AddScoped<UserSessionValidator>();
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<ICompanyService, CompanyService>();
         services.AddScoped<ILoanProductService, LoanProductService>();
@@ -354,7 +380,7 @@ public static class ServiceExtensions
     public static void ConfigureEndpointExplorer(this IServiceCollection services)
     {
         services.ConfigureSwagger();
-        services.AddControllers()
+        services.AddControllers(options => options.Filters.Add<PasswordChangeRequiredFilter>())
             .AddJsonOptions(options =>
             {
                 options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;

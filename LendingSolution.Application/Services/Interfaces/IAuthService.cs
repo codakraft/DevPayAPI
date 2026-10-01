@@ -6,13 +6,15 @@ namespace LendingSolution.Application.Services.Interfaces;
 public interface IAuthService
 {
     Task<object> Login(LoginRequestDto body);
-    Task<object> CreateSuperAdmin(CreateSuperAdminRequestDto body);
+    Task<object> CreateSuperAdmin(CreateSuperAdminRequestDto body, bool callerIsSuperAdmin);
     Task<object> CreateAdmin(CreateAdminRequestDto body);
     Task<object> AdminLogin(LoginRequestDto body);
     bool VerifyOtp(VerifyOtpRequestDto body);
     Task<bool> SavePersonalDetails(SavePersonalDetailsRequestDto body, System.Security.Claims.ClaimsPrincipal user);
     Task<object> GetRoles();
-    Task<object> AssignRole(RoleAssignDto body);
+    Task<object> AssignRole(RoleAssignDto body, System.Security.Claims.ClaimsPrincipal caller);
+    Task<object> RemoveRole(RoleAssignDto body, System.Security.Claims.ClaimsPrincipal caller);
+    Task<object> SetUserActiveAsync(string userId, bool isActive, System.Security.Claims.ClaimsPrincipal caller);
     Task<object> RefreshToken(RefreshTokenRequestDto request);
     Task<bool> RevokeToken(RevokeTokenRequestDto request, string? userId = null);
     Task<bool> Logout(string? userId = null);
@@ -27,5 +29,5 @@ public interface IAuthService
     Task<CreateCompanyUserResponseDto> CreateCompanyUserAsync(CreateCompanyUserRequestDto body, Guid companyId, string createdByUserId);
 
     // Password management
-    Task ChangePasswordAsync(ChangePasswordRequestDto body, string userId);
+    Task<TokenResponseDto> ChangePasswordAsync(ChangePasswordRequestDto body, string userId);
 }

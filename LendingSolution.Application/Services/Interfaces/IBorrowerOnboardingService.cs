@@ -36,6 +36,12 @@ public interface IBorrowerOnboardingService
     
     // Current step tracking
     Task<BorrowerCurrentStepResponseDto> GetCurrentStepAsync(BorrowerCurrentStepRequestDto request);
+
+    /// <summary>Emails a resume code if an application exists for the email (silent otherwise).</summary>
+    Task RequestResumeOtpAsync(string email);
+
+    /// <summary>Validates the resume code, then returns the application's current step.</summary>
+    Task<BorrowerCurrentStepResponseDto> VerifyResumeOtpAsync(BorrowerCurrentStepRequestDto request);
     
     // Update documents (works regardless of completion status)
     Task<UpdateDocumentsResponseDto> UpdateDocumentsAsync(UpdateDocumentsRequestDto request);

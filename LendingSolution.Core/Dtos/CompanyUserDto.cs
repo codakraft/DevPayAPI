@@ -59,7 +59,11 @@ public class CompanyUserDto
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? LastLoginAt { get; set; }
+    /// <summary>First role name. Kept for compatibility; use <see cref="Roles"/>.</summary>
     public string? Role { get; set; }
+
+    /// <summary>All of the user's roles (a user can hold several).</summary>
+    public List<RoleSummaryDto> Roles { get; set; } = [];
 }
 
 public class CompanyUserFilterDto

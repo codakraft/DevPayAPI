@@ -7,6 +7,7 @@ using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Enum;
 using LendingSolution.Application.Repositories.Interfaces;
 using LendingSolution.Application.Exceptions;
+using System.Security.Claims;
 namespace LendingSolution.Application.Services.Implementations;
 
 public class AuthService(
@@ -69,6 +70,8 @@ public class AuthService(
             throw new AppException("Invalid credentials", 401);
         }
 
+        await EnsureActiveAsync(user);
+
         var tokenResponse = await _tokenService.GenerateTokenWithRefreshAsync(user);
 
         // Log successful login
@@ -119,6 +122,8 @@ public class AuthService(
             );
             throw new AppException("Invalid credentials", 401);
         }
+
+        await EnsureActiveAsync(user);
 
         var tokenResponse = await _tokenService.GenerateTokenWithRefreshAsync(user);
 
@@ -210,8 +215,23 @@ public class AuthService(
         return true;
     }
 
-    public async Task<object> CreateSuperAdmin(CreateSuperAdminRequestDto body)
+    public async Task<object> CreateSuperAdmin(CreateSuperAdminRequestDto body, bool callerIsSuperAdmin)
     {
+        // Anonymous creation is only allowed to bootstrap the very first SuperAdmin.
+        // Once one exists, only an authenticated SuperAdmin can create another.
+        if (!callerIsSuperAdmin && await _userRepository.GetUserCountByRoleAsync("SuperAdmin") > 0)
+        {
+            await auditService.LogAsync(
+                action: "SuperAdminCreationDenied",
+                category: "Security",
+                userEmail: body.Email,
+                details: $"Unauthorized attempt to create super admin {body.Email}",
+                isSuccess: false,
+                errorMessage: "SuperAdmin already exists"
+            );
+            throw new AppException("Only a SuperAdmin can create another SuperAdmin", 403);
+        }
+
         var user = new ApplicationUser
         {
             FirstName = body.FirstName,
@@ -229,13 +249,31 @@ public class AuthService(
         }
 
         // Assign SuperAdmin role
-        await _userManager.AddToRoleAsync(user, "SuperAdmin");
+        await AddToRoleOrRollbackAsync(user, "SuperAdmin");
+
+        await auditService.LogAsync(
+            action: "SuperAdminCreated",
+            category: "User",
+            userId: user.Id,
+            userEmail: user.Email,
+            entityType: "User",
+            entityId: user.Id,
+            details: $"New super admin created: {user.Email}"
+        );
 
         return new { userId = user.Id };
     }
 
     public async Task<object> CreateAdmin(CreateAdminRequestDto body)
     {
+        _ = await _companyRepository.GetCompanyById(body.CompanyId)
+            ?? throw new AppException("Company not found", 404);
+
+        if (await _userManager.FindByEmailAsync(body.Email) != null)
+        {
+            throw new AppException($"A user with email '{body.Email}' already exists", 409);
+        }
+
         var user = new ApplicationUser
         {
             FirstName = body.FirstName,
@@ -253,7 +291,7 @@ public class AuthService(
         }
 
         // Assign Admin role
-        await _userManager.AddToRoleAsync(user, "Admin");
+        await AddToRoleOrRollbackAsync(user, "Admin");
 
         // Audit log for admin creation
         await auditService.LogAsync(
@@ -270,42 +308,230 @@ public class AuthService(
         return new { userId = user.Id };
     }
 
-    public Task<object> GetRoles()
+    public async Task<object> GetRoles()
     {
-        var roles = _roleManager.Roles.Select(r => new
+        var roles = _roleManager.Roles.ToList();
+        var result = new List<RoleWithPermissionsDto>();
+        foreach (var role in roles)
         {
-            r.Id,
-            r.Name
-        })
-        .ToList();
+            var claims = await _roleManager.GetClaimsAsync(role);
+            result.Add(new RoleWithPermissionsDto
+            {
+                Id = role.Id,
+                Name = role.Name!,
+                Permissions = claims
+                    .Where(c => c.Type == Core.Auth.Permissions.ClaimType)
+                    .Select(c => c.Value)
+                    .OrderBy(p => p)
+                    .ToList()
+            });
+        }
 
-        return Task.FromResult((object)roles);
+        return result;
     }
 
-    public async Task<object> AssignRole(RoleAssignDto body)
+    public async Task<object> AssignRole(RoleAssignDto body, ClaimsPrincipal caller)
     {
+        var callerId = GetCallerId(caller);
         var user = await _userManager.FindByIdAsync(body.UserId) ?? throw new AppException("User not found", 404);
-        var role = await _roleManager.FindByIdAsync(body.RoleId);
+        var role = await _roleManager.FindByIdAsync(body.RoleId) ?? throw new AppException("Role not found", 404);
 
-        if (role is null)
+        await EnsureCanManageUserAsync(caller, callerId, user);
+        EnsureCanGrantRole(caller, role.Name!);
+
+        if (await _userManager.IsInRoleAsync(user, role.Name!))
         {
-            throw new AppException("Role not found", 404);
+            throw new AppException($"User already has role '{role.Name}'", 409);
         }
 
         var result = await _userManager.AddToRoleAsync(user, role.Name!);
+        if (!result.Succeeded)
+        {
+            throw new AppException(
+                "Failed to assign role: " + string.Join(", ", result.Errors.Select(e => e.Description)), 400);
+        }
+
+        // Invalidate existing access tokens so the new role takes effect on next refresh
+        await _userManager.UpdateSecurityStampAsync(user);
 
         // Audit log for role assignment
         await auditService.LogAsync(
             action: "RoleAssigned",
             category: "User",
+            userId: callerId,
             entityType: "User",
             entityId: user.Id,
             userEmail: user.Email,
             companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
-            details: $"Role '{role.Name}' assigned to user {user.Email}"
+            details: $"Role '{role.Name}' assigned to user {user.Email} by {callerId}"
         );
 
-        return result;
+        return new { userId = user.Id, role = role.Name };
+    }
+
+    public async Task<object> RemoveRole(RoleAssignDto body, ClaimsPrincipal caller)
+    {
+        var callerId = GetCallerId(caller);
+        var user = await _userManager.FindByIdAsync(body.UserId) ?? throw new AppException("User not found", 404);
+        var role = await _roleManager.FindByIdAsync(body.RoleId) ?? throw new AppException("Role not found", 404);
+
+        await EnsureCanManageUserAsync(caller, callerId, user);
+        EnsureCanGrantRole(caller, role.Name!);
+
+        if (!await _userManager.IsInRoleAsync(user, role.Name!))
+        {
+            throw new AppException($"User does not have role '{role.Name}'", 404);
+        }
+
+        if (role.Name == "SuperAdmin" && await _userRepository.GetUserCountByRoleAsync("SuperAdmin") <= 1)
+        {
+            throw new AppException("Cannot remove the last SuperAdmin", 400);
+        }
+
+        var result = await _userManager.RemoveFromRoleAsync(user, role.Name!);
+        if (!result.Succeeded)
+        {
+            throw new AppException(
+                "Failed to remove role: " + string.Join(", ", result.Errors.Select(e => e.Description)), 400);
+        }
+
+        // Invalidate existing access tokens so the removed role stops working immediately
+        await _userManager.UpdateSecurityStampAsync(user);
+
+        await auditService.LogAsync(
+            action: "RoleRemoved",
+            category: "User",
+            userId: callerId,
+            entityType: "User",
+            entityId: user.Id,
+            userEmail: user.Email,
+            companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
+            details: $"Role '{role.Name}' removed from user {user.Email} by {callerId}"
+        );
+
+        return new { userId = user.Id, role = role.Name };
+    }
+
+    public async Task<object> SetUserActiveAsync(string userId, bool isActive, ClaimsPrincipal caller)
+    {
+        var callerId = GetCallerId(caller);
+        var user = await _userManager.FindByIdAsync(userId) ?? throw new AppException("User not found", 404);
+
+        await EnsureCanManageUserAsync(caller, callerId, user);
+
+        if (user.IsActive == isActive)
+        {
+            throw new AppException($"User is already {(isActive ? "active" : "deactivated")}", 409);
+        }
+
+        user.IsActive = isActive;
+        var result = await _userManager.UpdateAsync(user);
+        if (!result.Succeeded)
+        {
+            throw new AppException(
+                "Failed to update user: " + string.Join(", ", result.Errors.Select(e => e.Description)), 400);
+        }
+
+        if (!isActive)
+        {
+            // Kill access tokens (via the stamp) and refresh tokens so the user is signed out everywhere
+            await _userManager.UpdateSecurityStampAsync(user);
+            await _tokenService.RevokeAllUserTokensAsync(user.Id, callerId, "User deactivated");
+        }
+
+        await auditService.LogAsync(
+            action: isActive ? "UserActivated" : "UserDeactivated",
+            category: "User",
+            userId: callerId,
+            entityType: "User",
+            entityId: user.Id,
+            userEmail: user.Email,
+            companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
+            details: $"User {user.Email} {(isActive ? "activated" : "deactivated")} by {callerId}"
+        );
+
+        return new { userId = user.Id, isActive = user.IsActive };
+    }
+
+    private static string GetCallerId(ClaimsPrincipal caller) =>
+        caller.FindFirstValue(ClaimTypes.NameIdentifier) ?? throw new AppException("User not authenticated", 401);
+
+    /// <summary>
+    /// Nobody manages their own account; non-SuperAdmins may only manage
+    /// non-admin users in their own company.
+    /// </summary>
+    private async Task EnsureCanManageUserAsync(ClaimsPrincipal caller, string callerId, ApplicationUser target)
+    {
+        if (target.Id == callerId)
+        {
+            throw new AppException("You cannot change your own roles or status", 403);
+        }
+
+        if (caller.IsInRole("SuperAdmin"))
+        {
+            return;
+        }
+
+        var callerCompanyId = caller.FindFirstValue("CompanyId");
+        if (string.IsNullOrEmpty(callerCompanyId) || target.CompanyId != callerCompanyId)
+        {
+            throw new AppException("User does not belong to your company", 403);
+        }
+
+        var targetRoles = await _userManager.GetRolesAsync(target);
+        if (targetRoles.Contains("Admin") || targetRoles.Contains("SuperAdmin"))
+        {
+            throw new AppException("You cannot change roles or status for admin users", 403);
+        }
+    }
+
+    /// <summary>
+    /// Non-SuperAdmins may only grant or remove company staff roles.
+    /// </summary>
+    private static void EnsureCanGrantRole(ClaimsPrincipal caller, string roleName)
+    {
+        if (!caller.IsInRole("SuperAdmin") && !AllowedCompanyRoles.Contains(roleName))
+        {
+            throw new AppException(
+                $"You can only manage these roles: {string.Join(", ", AllowedCompanyRoles)}", 403);
+        }
+    }
+
+    /// <summary>
+    /// Rejects deactivated accounts before any token is issued.
+    /// </summary>
+    private async Task EnsureActiveAsync(ApplicationUser user)
+    {
+        if (user.IsActive)
+        {
+            return;
+        }
+
+        await auditService.LogAsync(
+            action: "LoginBlockedInactive",
+            category: "Security",
+            userId: user.Id,
+            userEmail: user.Email,
+            details: $"Login attempt by deactivated user {user.Email}",
+            isSuccess: false,
+            errorMessage: "Account is deactivated"
+        );
+        throw new AppException("Account is deactivated. Please contact your administrator.", 403, ErrorCodes.AccountDeactivated);
+    }
+
+    /// <summary>
+    /// Adds a role to a newly created user, deleting the user if the assignment fails
+    /// so no role-less accounts are left behind.
+    /// </summary>
+    private async Task AddToRoleOrRollbackAsync(ApplicationUser user, string role)
+    {
+        var roleResult = await _userManager.AddToRoleAsync(user, role);
+        if (!roleResult.Succeeded)
+        {
+            await _userManager.DeleteAsync(user);
+            throw new AppException(
+                "Failed to assign role: " + string.Join(", ", roleResult.Errors.Select(e => e.Description)), 500);
+        }
     }
 
     public async Task<object> RefreshToken(RefreshTokenRequestDto request)
@@ -859,6 +1085,8 @@ public class AuthService(
             throw new AppException("Invalid credentials", 401);
         }
 
+        await EnsureActiveAsync(user);
+
         // Generate session ID
         var sessionId = Guid.NewGuid().ToString();
         var expiresAt = DateTime.UtcNow.AddMinutes(5);
@@ -995,6 +1223,12 @@ public class AuthService(
             throw new AppException("User not found", 404);
         }
 
+        if (!user.IsActive)
+        {
+            await _mfaSessionRepository.DeleteAsync(request.SessionId);
+        }
+        await EnsureActiveAsync(user);
+
         // Generate tokens
         var tokenResponse = await _tokenService.GenerateTokenWithRefreshAsync(user);
 
@@ -1056,6 +1290,7 @@ public class AuthService(
     private static readonly HashSet<string> AllowedCompanyRoles = new(StringComparer.OrdinalIgnoreCase)
     {
         "LoanOfficer",
+        "FinanceOfficer",
         "CollectionsOfficer",
         "Underwriter",
         "SupportAgent",
@@ -1152,9 +1387,10 @@ public class AuthService(
     }
 
     /// <summary>
-    /// Changes user's password and clears the RequiresPasswordChange flag
+    /// Changes user's password and clears the RequiresPasswordChange flag.
+    /// Signs out every existing session and returns a fresh token pair for the caller.
     /// </summary>
-    public async Task ChangePasswordAsync(ChangePasswordRequestDto body, string userId)
+    public async Task<TokenResponseDto> ChangePasswordAsync(ChangePasswordRequestDto body, string userId)
     {
         var user = await _userManager.FindByIdAsync(userId)
             ?? throw new AppException("User not found", 404);
@@ -1205,6 +1441,11 @@ public class AuthService(
             companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
             details: $"Password changed successfully for {user.Email}"
         );
+
+        // The password change rotated the security stamp, so existing access tokens are already dead;
+        // revoke refresh tokens too so other devices are signed out, then issue a new pair for this one.
+        await _tokenService.RevokeAllUserTokensAsync(user.Id, user.Id, "Password changed");
+        return await _tokenService.GenerateTokenWithRefreshAsync(user);
     }
 }
 

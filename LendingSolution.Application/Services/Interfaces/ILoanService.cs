@@ -20,6 +20,7 @@ public interface ILoanService
     Task<PagedLoanListDto> GetAllLoansAsync(LoanFilterDto filter); // For SuperAdmin - all companies
     Task<PagedLoanListDto> GetCompanyLoansAsync(Guid companyId, LoanFilterDto filter); // For Admin/SuperAdmin - specific company
     Task<LoanListDto> GetLoanByIdAsync(Guid loanId, string? requestingUserId = null); // Get single loan with access control
+    Task<Guid?> GetLoanCompanyIdAsync(Guid loanId); // Used for company-scoped access checks
     
     // Offer letter and disbursement methods
     Task<OfferLetterResponseDto> SendOfferLetterAsync(Guid loanId, string? approvedBy = null);

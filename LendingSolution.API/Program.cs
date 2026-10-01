@@ -1,4 +1,6 @@
 using LendingSolution.API.Extensions;
+using LendingSolution.API.Auth;
+using LendingSolution.Core.Auth;
 using LendingSolution.Infrastructure.Data;
 using LendingSolution.Infrastructure.Logging;
 using Microsoft.EntityFrameworkCore;
@@ -95,7 +97,7 @@ using (var scope = app.Services.CreateScope())
         var services = scope.ServiceProvider;
         var logger = services.GetRequiredService<ILogger<Program>>();
         var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
-        var roles = new[] { "SuperAdmin", "Admin", "LoanOfficer", "CollectionsOfficer", "Underwriter", "SupportAgent", "Auditor", "Viewer" };
+        var roles = RolePermissions.Defaults.Keys;
         
         logger.LogInformation("Seeding roles...");
         foreach (var role in roles)
@@ -107,6 +109,9 @@ using (var scope = app.Services.CreateScope())
             }
         }
         logger.LogInformation("Role seeding completed");
+
+        await PermissionSeeder.SyncRolePermissionsAsync(roleManager, logger);
+        logger.LogInformation("Role permission sync completed");
     }
     catch (Microsoft.Data.SqlClient.SqlException ex) when (ex.Number == 40615) // Firewall rule error
     {
