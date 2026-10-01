@@ -4,6 +4,8 @@ using LendingSolution.Core.Dtos.Response;
 using LendingSolution.Core.Models;
 using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
+using LendingSolution.API.Auth;
+using LendingSolution.Core.Auth;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 
@@ -16,11 +18,13 @@ namespace LendingSolution.API.Controllers;
 public class MonoController : ControllerBase
 {
     private readonly IMonoService _monoService;
+    private readonly ILoanService _loanService;
     private readonly ILogger<MonoController> _logger;
 
-    public MonoController(IMonoService monoService, ILogger<MonoController> logger)
+    public MonoController(IMonoService monoService, ILoanService loanService, ILogger<MonoController> logger)
     {
         _monoService = monoService;
+        _loanService = loanService;
         _logger = logger;
     }
 
@@ -30,7 +34,7 @@ public class MonoController : ControllerBase
     /// <param name="request">Customer details</param>
     /// <returns>Created Mono customer with ID</returns>
     [HttpPost("customers")]
-    [AllowAnonymous]
+    [HasPermission(Permissions.Loans.Approve)]
     public async Task<ActionResult<MonoCreateCustomerResponseDto>> CreateCustomer([FromBody] MonoCreateCustomerRequestDto request)
     {
         try
@@ -66,7 +70,7 @@ public class MonoController : ControllerBase
     /// <param name="customerId">The Mono customer ID</param>
     /// <returns>Customer details</returns>
     [HttpGet("customers/{customerId}")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult<MonoGetCustomerResponseDto>> GetCustomerById(string customerId)
     {
         try
@@ -99,7 +103,7 @@ public class MonoController : ControllerBase
     /// <param name="limit">Page size (default: 20)</param>
     /// <returns>Paginated list of customers</returns>
     [HttpGet("customers")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult<MonoGetAllCustomersResponseDto>> GetAllCustomers(
         [FromQuery] int page = 1,
         [FromQuery] int limit = 20)
@@ -130,7 +134,7 @@ public class MonoController : ControllerBase
     /// <param name="customerId">The Mono customer ID</param>
     /// <returns>List of linked bank accounts</returns>
     [HttpGet("customers/{customerId}/accounts")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult<MonoGetLinkedAccountsResponseDto>> GetCustomerLinkedAccounts(string customerId)
     {
         try
@@ -160,13 +164,18 @@ public class MonoController : ControllerBase
     /// <param name="request">Mono mandate generation request</param>
     /// <returns>Mono mandate response</returns>
     [HttpPost("generate-mandate/{loanId}")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Collections.Manage)]
     public async Task<ActionResult<MonoGenerateMandateResponseDto>> GenerateMandate(
         Guid loanId, 
         [FromBody] MonoGenerateMandateRequestDto request)
     {
         try
         {
+            if (!await User.CanAccessLoanAsync(_loanService, loanId))
+            {
+                return NotFound(ApiResponse.Fail("Loan not found"));
+            }
+
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             
             _logger.LogInformation("Generating Mono mandate for loan: {LoanId} by user: {UserId}", loanId, userId);
@@ -205,11 +214,16 @@ public class MonoController : ControllerBase
     /// <param name="mandateId">The mandate ID to cancel</param>
     /// <returns>Mono cancel mandate response</returns>
     [HttpPatch("cancel-mandate/{mandateId}")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Collections.Manage)]
     public async Task<ActionResult<MonoCancelMandateResponseDto>> CancelMandate(string mandateId)
     {
         try
         {
+            if (!await User.CanAccessMonoMandateAsync(_monoService, mandateId))
+            {
+                return NotFound(ApiResponse.Fail("Mandate not found"));
+            }
+
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             
             _logger.LogInformation("Cancelling Mono mandate: {MandateId} by user: {UserId}", mandateId, userId);
@@ -247,11 +261,16 @@ public class MonoController : ControllerBase
     /// <param name="mandateId">The mandate ID to pause</param>
     /// <returns>Mono pause mandate response</returns>
     [HttpPatch("pause-mandate/{mandateId}")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Collections.Manage)]
     public async Task<ActionResult<MonoPauseMandateResponseDto>> PauseMandate(string mandateId)
     {
         try
         {
+            if (!await User.CanAccessMonoMandateAsync(_monoService, mandateId))
+            {
+                return NotFound(ApiResponse.Fail("Mandate not found"));
+            }
+
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             
             _logger.LogInformation("Pausing Mono mandate: {MandateId} by user: {UserId}", mandateId, userId);
@@ -289,11 +308,16 @@ public class MonoController : ControllerBase
     /// <param name="mandateId">The mandate ID to reinstate</param>
     /// <returns>Mono reinstate mandate response</returns>
     [HttpPatch("reinstate-mandate/{mandateId}")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Collections.Manage)]
     public async Task<ActionResult<MonoReinstateMandateResponseDto>> ReinstateMandate(string mandateId)
     {
         try
         {
+            if (!await User.CanAccessMonoMandateAsync(_monoService, mandateId))
+            {
+                return NotFound(ApiResponse.Fail("Mandate not found"));
+            }
+
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             
             _logger.LogInformation("Reinstating Mono mandate: {MandateId} by user: {UserId}", mandateId, userId);
@@ -331,7 +355,7 @@ public class MonoController : ControllerBase
     /// <param name="nin">The National Identification Number to verify</param>
     /// <returns>NIN details from Mono</returns>
     [HttpPost("nin-lookup")]
-    [AllowAnonymous]
+    [HasPermission(Permissions.Loans.Approve)]
     public async Task<ActionResult<MonoNinLookupResponseDto>> NinLookup([FromQuery] string nin)
     {
         try
@@ -366,7 +390,7 @@ public class MonoController : ControllerBase
     /// <param name="request">BVN lookup request containing BVN and scope</param>
     /// <returns>Mono BVN lookup response</returns>
     [HttpPost("bvn-lookup")]
-    [AllowAnonymous]
+    [HasPermission(Permissions.Loans.Approve)]
     public async Task<ActionResult<MonoBvnLookupResponseDto>> BvnLookup([FromBody] MonoBvnLookupRequestDto request)
     {
         try
@@ -410,7 +434,7 @@ public class MonoController : ControllerBase
     /// <param name="sessionId">Mono session ID from initiate step</param>
     /// <returns>Mono BVN verification response</returns>
     [HttpPost("bvn-verify")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Loans.Approve)]
     public async Task<ActionResult<MonoBvnVerifyResponseDto>> BvnVerify([FromBody] MonoBvnVerifyRequestDto request, [FromHeader(Name = "x-session-id")] string sessionId)
     {
         try
@@ -459,7 +483,7 @@ public class MonoController : ControllerBase
     /// <param name="sessionId">Mono session ID from initiate step</param>
     /// <returns>Mono BVN details response</returns>
     [HttpPost("bvn-details")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Loans.Approve)]
     public async Task<ActionResult<MonoBvnDetailsResponseDto>> BvnGetDetails([FromBody] MonoBvnDetailsRequestDto request, [FromHeader(Name = "x-session-id")] string sessionId)
     {
         try
@@ -507,7 +531,7 @@ public class MonoController : ControllerBase
     /// <param name="request">Complete BVN validation request</param>
     /// <returns>Mono BVN validation result</returns>
     [HttpPost("bvn-validate-complete")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Loans.Approve)]
     public async Task<ActionResult<MonoBvnValidationResultDto>> BvnValidateComplete([FromBody] MonoBvnCompleteValidationRequestDto request)
     {
         try
@@ -559,7 +583,7 @@ public class MonoController : ControllerBase
     /// <param name="request">Credit history request containing BVN and provider</param>
     /// <returns>Credit history response from Mono</returns>
     [HttpPost("credit-history")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Loans.Approve)]
     public async Task<ActionResult<MonoCreditHistoryResponseDto>> GetCreditHistory([FromBody] MonoCreditHistoryRequestDto request, [FromQuery] string provider = "xds")
     {
         try
@@ -603,7 +627,7 @@ public class MonoController : ControllerBase
     /// <param name="request">Credit analysis request containing BVN and provider</param>
     /// <returns>Complete credit analysis with risk assessment and loan recommendations</returns>
     [HttpPost("credit-analysis")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Loans.Approve)]
     public async Task<ActionResult<MonoCreditAnalysisResultDto>> GetCreditAnalysis([FromBody] MonoCreditHistoryRequestDto request, [FromQuery] string provider = "xds")
     {
         try
@@ -641,7 +665,7 @@ public class MonoController : ControllerBase
     /// <param name="request">Session-based BVN verification request</param>
     /// <returns>BVN verification response with session ID</returns>
     [HttpPost("bvn/verify-with-session")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Loans.Approve)]
     public async Task<ActionResult<MonoBvnVerifyResponseDto>> BvnVerifyWithSession([FromBody] MonoBvnSessionRequestDto request)
     {
         try
@@ -684,7 +708,7 @@ public class MonoController : ControllerBase
     /// <param name="request">Session-based BVN details request with OTP</param>
     /// <returns>Complete BVN details response</returns>
     [HttpPost("bvn/details-with-session")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Loans.Approve)]
     public async Task<ActionResult<MonoBvnDetailsResponseDto>> BvnGetDetailsWithSession([FromBody] MonoBvnSessionDetailsRequestDto request)
     {
         try
@@ -729,7 +753,7 @@ public class MonoController : ControllerBase
     /// <param name="bvn">The BVN to check</param>
     /// <returns>Boolean indicating if BVN is already verified</returns>
     [HttpGet("bvn/is-verified/{bvn}")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Loans.Approve)]
     public async Task<ActionResult<bool>> IsBvnAlreadyVerified(string bvn)
     {
         try
@@ -755,7 +779,7 @@ public class MonoController : ControllerBase
     /// <param name="bvn">The BVN to get verification record for</param>
     /// <returns>BVN verification record details</returns>
     [HttpGet("bvn/verification-record/{bvn}")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Loans.Approve)]
     public async Task<ActionResult<MonoBvnVerificationRecord>> GetBvnVerificationRecord(string bvn)
     {
         try
@@ -829,7 +853,7 @@ public class MonoController : ControllerBase
     /// <param name="mandateId">The Mono mandate ID to debit</param>
     /// <param name="request">Optional amount (kobo) and description</param>
     [HttpPost("mandate/{mandateId}/debit")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Collections.Manage)]
     public async Task<IActionResult> InitiateDebit(string mandateId, [FromBody] MonoInitiateDebitRequestDto request)
     {
         if (!ModelState.IsValid)
@@ -837,6 +861,11 @@ public class MonoController : ControllerBase
 
         try
         {
+            if (!await User.CanAccessMonoMandateAsync(_monoService, mandateId))
+            {
+                return NotFound(ApiResponse.Fail("Mandate not found"));
+            }
+
             var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
             _logger.LogInformation("InitiateDebit called for MandateId={MandateId}, Amount={Amount}, UserId={UserId}",

@@ -4,6 +4,8 @@ using LendingSolution.API.Models;
 using LendingSolution.Application.Exceptions;
 using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
+using LendingSolution.API.Auth;
+using LendingSolution.Core.Auth;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using LendingSolution.Core.Dtos.Response;
@@ -23,6 +25,7 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
     /// Get wallet by ID
     /// </summary>
     [HttpGet("{walletId}")]
+    [HasPermission(Permissions.Finance.View)]
     public async Task<ActionResult<WalletDto>> GetWallet(Guid walletId)
     {
         try
@@ -34,10 +37,10 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
             }
 
             // Check authorization - users can only see their company's wallet or SuperAdmin can see all
-            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
+            var isSuperAdmin = User.IsSuperAdmin();
             var userCompanyId = User.FindFirst("CompanyId")?.Value;
 
-            if (userRole != "SuperAdmin")
+            if (!isSuperAdmin)
             {
                 // Parse both GUIDs for proper comparison (case-insensitive)
                 if (string.IsNullOrEmpty(userCompanyId) || 
@@ -61,12 +64,12 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
     /// Get wallet by company ID or current user's company wallet
     /// </summary>
     [HttpGet("company/{companyId?}")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Finance.View)]
     public async Task<ActionResult<WalletDto>> GetCompanyWallet(Guid? companyId = null)
     {
         try
         {
-            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
+            var isSuperAdmin = User.IsSuperAdmin();
             var userCompanyId = User.FindFirst("CompanyId")?.Value;
             
             Guid targetCompanyId;
@@ -84,7 +87,7 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
                 targetCompanyId = companyId.Value;
                 
                 // SuperAdmin can access any company wallet, Admin can only access their own
-                if (userRole != "SuperAdmin")
+                if (!isSuperAdmin)
                 {
                     if (string.IsNullOrEmpty(userCompanyId) || !Guid.TryParse(userCompanyId, out var userCompanyGuid) || userCompanyGuid != targetCompanyId)
                     {
@@ -166,7 +169,7 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
     /// Get wallet transactions
     /// </summary>
     [HttpGet("{walletId}/transactions")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Finance.View)]
     public async Task<ActionResult<List<WalletTransactionDto>>> GetWalletTransactions(
         Guid walletId,
         [FromQuery] int page = 1,
@@ -175,7 +178,7 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
         try
         {
             // Check authorization
-            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
+            var isSuperAdmin = User.IsSuperAdmin();
             var userCompanyId = User.FindFirst("CompanyId")?.Value;
 
             var wallet = await _walletService.GetWalletByIdAsync(walletId);
@@ -184,7 +187,7 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
                 return NotFound("Wallet not found");
             }
 
-            if (userRole != "SuperAdmin")
+            if (!isSuperAdmin)
             {
                 if (wallet.IsSuperAdminWallet)
                 {
@@ -219,7 +222,7 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
     /// Get wallet report
     /// </summary>
     [HttpGet("{walletId}/report")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Finance.View)]
     public async Task<ActionResult<WalletReportDto>> GetWalletReport(
         Guid walletId,
         [FromQuery] DateTime? fromDate = null,
@@ -228,7 +231,7 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
         try
         {
             // Check authorization
-            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
+            var isSuperAdmin = User.IsSuperAdmin();
             var userCompanyId = User.FindFirst("CompanyId")?.Value;
 
             var wallet = await _walletService.GetWalletByIdAsync(walletId);
@@ -237,7 +240,7 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
                 return NotFound("Wallet not found");
             }
 
-            if (userRole != "SuperAdmin")
+            if (!isSuperAdmin)
             {
                 if (wallet.IsSuperAdminWallet)
                 {
@@ -272,13 +275,13 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
     /// Check if wallet has sufficient balance for loan disbursement
     /// </summary>
     [HttpGet("{walletId}/balance-check")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Finance.View)]
     public async Task<ActionResult<bool>> CheckSufficientBalance(Guid walletId, [FromQuery] decimal amount)
     {
         try
         {
             // Check authorization
-            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
+            var isSuperAdmin = User.IsSuperAdmin();
             var userCompanyId = User.FindFirst("CompanyId")?.Value;
 
             var wallet = await _walletService.GetWalletByIdAsync(walletId);
@@ -287,7 +290,7 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
                 return NotFound("Wallet not found");
             }
 
-            if (userRole != "SuperAdmin")
+            if (!isSuperAdmin)
             {
                 if (wallet.IsSuperAdminWallet)
                 {
@@ -322,7 +325,7 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
     /// Get current user's company wallet
     /// </summary>
     [HttpGet("my-company")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Finance.View)]
     public async Task<ActionResult<WalletDto>> GetMyCompanyWallet()
     {
         try
@@ -368,7 +371,7 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
     /// Get current user's company wallet transactions
     /// </summary>
     [HttpGet("my-company/transactions")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Finance.View)]
     public async Task<ActionResult<List<WalletTransactionDto>>> GetMyCompanyWalletTransactions(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20)
@@ -406,7 +409,7 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
     /// Get current user's company wallet report
     /// </summary>
     [HttpGet("my-company/report")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Finance.View)]
     public async Task<ActionResult<WalletReportDto>> GetMyCompanyWalletReport(
         [FromQuery] DateTime? fromDate = null,
         [FromQuery] DateTime? toDate = null)
@@ -444,7 +447,7 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
     /// Check current user's company wallet balance
     /// </summary>
     [HttpGet("my-company/balance-check")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Finance.View)]
     public async Task<ActionResult<bool>> CheckMyCompanyWalletBalance([FromQuery] decimal amount)
     {
         try
@@ -480,16 +483,22 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
     /// Get wallet transactions by query
     /// </summary>
     [HttpPost("transactions/query")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Finance.View)]
     public async Task<ActionResult<List<WalletTransactionDto>>> GetTransactionsByQuery([FromBody] WalletTransactionQueryDto query)
     {
         try
         {
             // Check authorization
-            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
+            var isSuperAdmin = User.IsSuperAdmin();
             var userCompanyId = User.FindFirst("CompanyId")?.Value;
 
-            if (query.WalletId.HasValue && userRole != "SuperAdmin")
+            // Without a WalletId the query spans every wallet, so only SuperAdmin may omit it
+            if (!query.WalletId.HasValue && !isSuperAdmin)
+            {
+                return BadRequest("WalletId is required");
+            }
+
+            if (query.WalletId.HasValue && !isSuperAdmin)
             {
                 var wallet = await _walletService.GetWalletByIdAsync(query.WalletId.Value);
                 if (wallet == null)
@@ -530,7 +539,7 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
     /// Query current user's company wallet transactions
     /// </summary>
     [HttpPost("my-company/transactions/query")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Finance.View)]
     public async Task<ActionResult<List<WalletTransactionDto>>> QueryMyCompanyWalletTransactions([FromBody] WalletTransactionQueryDto query)
     {
         try
@@ -569,16 +578,16 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
     /// Create wallet for company
     /// </summary>
     [HttpPost("company/{companyId}")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Finance.Manage)]
     public async Task<ActionResult<WalletDto>> CreateCompanyWallet(Guid companyId)
     {
         try
         {
             // Check authorization - Admin can only create wallet for their company
-            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
+            var isSuperAdmin = User.IsSuperAdmin();
             var userCompanyId = User.FindFirst("CompanyId")?.Value;
 
-            if (userRole != "SuperAdmin")
+            if (!isSuperAdmin)
             {
                 // Parse both GUIDs for proper comparison (case-insensitive)
                 if (string.IsNullOrEmpty(userCompanyId) || 
@@ -631,13 +640,13 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
     /// Initiate wallet funding via Paystack
     /// </summary>
     [HttpPost("fund")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Finance.Manage)]
     public async Task<ActionResult<PaystackInitializationDto>> FundWallet([FromBody] FundWalletDto fundWalletDto)
     {
         try
         {
             // Check authorization
-            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
+            var isSuperAdmin = User.IsSuperAdmin();
             var userCompanyId = User.FindFirst("CompanyId")?.Value;
 
             // Get wallet to check ownership
@@ -647,7 +656,7 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
                 return NotFound("Wallet not found");
             }
 
-            if (userRole != "SuperAdmin")
+            if (!isSuperAdmin)
             {
                 if (wallet.IsSuperAdminWallet)
                 {
@@ -682,7 +691,7 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
     /// Complete wallet funding after Paystack payment verification
     /// </summary>
     [HttpPost("fund/complete")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Finance.Manage)]
     public async Task<ActionResult> CompleteFunding([FromBody] CompleteFundingDto completeFundingDto)
     {
         try
@@ -711,13 +720,13 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
     /// Debit a wallet
     /// </summary>
     [HttpPatch("{walletId}/debit")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Finance.Manage)]
     public async Task<ActionResult> DebitWallet(Guid walletId, [FromBody] DebitWalletDto debitWalletDto)
     {
         try
         {
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value!;
-            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
+            var isSuperAdmin = User.IsSuperAdmin();
             var userCompanyId = User.FindFirst("CompanyId")?.Value;
 
             // Override the WalletId from the route parameter
@@ -731,7 +740,7 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
             }
 
             // Authorization check
-            if (userRole != "SuperAdmin")
+            if (!isSuperAdmin)
             {
                 if (wallet.IsSuperAdminWallet)
                 {

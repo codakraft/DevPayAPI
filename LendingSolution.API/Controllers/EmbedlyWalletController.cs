@@ -1,4 +1,5 @@
 using Asp.Versioning;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using LendingSolution.Application.Services.Interfaces;
@@ -10,6 +11,8 @@ namespace LendingSolution.API.Controllers;
 [ApiController]
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/wallets")]
+// Platform-level Embedly operations (customers, wallets, transfers): SuperAdmin only
+[Authorize(Roles = "SuperAdmin")]
 public class EmbedlyWalletController : ControllerBase
 {
     private readonly IEmbedlyWalletService _embedlyWalletService;

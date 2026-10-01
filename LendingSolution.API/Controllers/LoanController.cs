@@ -1,4 +1,6 @@
+using LendingSolution.API.Auth;
 using LendingSolution.Application.Exceptions;
+using LendingSolution.Core.Auth;
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos.Response;
 using LendingSolution.Core.Dtos;
@@ -33,19 +35,20 @@ public class LoanController(
     /// <returns>A list of all loans with borrower and company details</returns>
     [HttpGet]
     [Route("/")]
-    [Authorize(Roles = "Admin")]
+    [HasPermission(Permissions.Loans.View)]
     public async Task<IActionResult> GetAllLoans()
     {
         try
         {
-            var result = await _loanService.GetAllLoans();
+            var loans = await _loanService.GetAllLoans();
+            var result = User.IsSuperAdmin() ? loans : loans.Where(l => User.CanAccessCompany(l.CompanyId)).ToList();
             _logger.LogInformation("Successfully fetched all loans");
             return Ok(ApiResponse.Ok("Loans fetched successfully", result));
         }
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -60,19 +63,20 @@ public class LoanController(
     /// <param name="status">The loan status to filter by (e.g., Pending, Approved, Disbursed, Rejected)</param>
     /// <returns>A list of loans matching the specified status</returns>
     [HttpGet("status/{status}")]
-    [Authorize(Roles = "Admin,SuperAdmin")]
+    [HasPermission(Permissions.Loans.View)]
     public async Task<IActionResult> GetLoansByStatus(LoanStatus status)
     {
         try
         {
-            var result = await _loanService.GetLoansByStatus(status);
+            var loans = await _loanService.GetLoansByStatus(status);
+            var result = User.IsSuperAdmin() ? loans : loans.Where(l => User.CanAccessCompany(l.CompanyId)).ToList();
             _logger.LogInformation("Successfully fetched loans with status: {Status}", status);
             return Ok(ApiResponse.Ok($"Loans with status {status} fetched successfully", result));
         }
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -88,11 +92,16 @@ public class LoanController(
     /// <param name="request">The approval details including optional reason</param>
     /// <returns>Updated loan details with approved status and approval timestamp</returns>
     [HttpPost("{id:guid}/approve")]
-    [Authorize(Roles = "Admin,SuperAdmin")]
+    [HasPermission(Permissions.Loans.Approve)]
     public async Task<IActionResult> ApproveLoan(Guid id, [FromBody] LoanApprovalRequestDto request)
     {
         try
         {
+            if (!await User.CanAccessLoanAsync(_loanService, id))
+            {
+                return NotFound(ApiResponse.Fail("Loan not found"));
+            }
+
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var result = await _loanService.ApproveLoan(id, userId, request.Reason);
             
@@ -102,7 +111,7 @@ public class LoanController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -118,11 +127,16 @@ public class LoanController(
     /// <param name="request">The rejection details including the reason for rejection</param>
     /// <returns>Updated loan details with rejected status and rejection reason</returns>
     [HttpPost("{id:guid}/reject")]
-    [Authorize(Roles = "Admin,SuperAdmin")]
+    [HasPermission(Permissions.Loans.Approve)]
     public async Task<IActionResult> RejectLoan(Guid id, [FromBody] LoanRejectionRequestDto request)
     {
         try
         {
+            if (!await User.CanAccessLoanAsync(_loanService, id))
+            {
+                return NotFound(ApiResponse.Fail("Loan not found"));
+            }
+
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var result = await _loanService.RejectLoan(id, userId, request.Reason);
             
@@ -132,7 +146,7 @@ public class LoanController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -148,11 +162,16 @@ public class LoanController(
     /// <param name="request">The processing action and reason</param>
     /// <returns>Updated loan details with new status based on the action taken</returns>
     [HttpPost("{id:guid}/process")]
-    [Authorize(Roles = "Admin,SuperAdmin")]
+    [HasPermission(Permissions.Loans.Approve)]
     public async Task<IActionResult> ProcessLoan(Guid id, [FromBody] ProcessLoanRequestDto request)
     {
         try
         {
+            if (!await User.CanAccessLoanAsync(_loanService, id))
+            {
+                return NotFound(ApiResponse.Fail("Loan not found"));
+            }
+
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
             var result = await _loanService.ProcessLoan(id, request, userId);
             
@@ -163,7 +182,7 @@ public class LoanController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -178,7 +197,7 @@ public class LoanController(
     /// <param name="filters">Filter and pagination parameters for salary history records</param>
     /// <returns>Paginated list of salary history records for the company's borrowers with detailed payment information</returns>
     [HttpGet("salary-history")]
-    [Authorize(Roles = "Admin")]
+    [HasPermission(Permissions.Loans.View)]
     public async Task<IActionResult> GetCompanySalaryHistory([FromQuery] SalaryHistoryFilterRequestDto filters)
     {
         try
@@ -199,7 +218,7 @@ public class LoanController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -214,7 +233,7 @@ public class LoanController(
     /// <param name="salaryHistoryId">The unique identifier of the salary history record</param>
     /// <returns>Detailed salary history information including payment dates, amounts, and employer details</returns>
     [HttpGet("salary-history/{salaryHistoryId}")]
-    [Authorize(Roles = "Admin")]
+    [HasPermission(Permissions.Loans.View)]
     public async Task<IActionResult> GetSalaryHistoryDetails(Guid salaryHistoryId)
     {
         try
@@ -241,7 +260,7 @@ public class LoanController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -272,7 +291,7 @@ public class LoanController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -302,7 +321,7 @@ public class LoanController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -319,11 +338,16 @@ public class LoanController(
     /// <param name="id">The unique identifier of the loan</param>
     /// <returns>Offer letter details including document URL, loan terms, repayment schedule, and status</returns>
     [HttpGet("{id:guid}/offer-letter")]
-    [Authorize]
+    [HasPermission(Permissions.Loans.View)]
     public async Task<IActionResult> GetOfferLetterDetails(Guid id)
     {
         try
         {
+            if (!await User.CanAccessLoanAsync(_loanService, id))
+            {
+                return NotFound(ApiResponse.Fail("Loan not found"));
+            }
+
             var result = await _loanService.GetOfferLetterDetailsAsync(id);
             
             _logger.LogInformation("Successfully fetched offer letter details for loan {LoanId}", id);
@@ -333,7 +357,7 @@ public class LoanController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -348,11 +372,16 @@ public class LoanController(
     /// <param name="id">The unique identifier of the approved loan</param>
     /// <returns>Confirmation with offer letter details and email delivery status</returns>
     [HttpPost("{id:guid}/send-offer-letter")]
-    [Authorize(Roles = "Admin,SuperAdmin")]
+    [HasPermission(Permissions.Loans.Manage)]
     public async Task<IActionResult> SendOfferLetter(Guid id)
     {
         try
         {
+            if (!await User.CanAccessLoanAsync(_loanService, id))
+            {
+                return NotFound(ApiResponse.Fail("Loan not found"));
+            }
+
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var result = await _loanService.SendOfferLetterAsync(id, userId);
             
@@ -363,7 +392,7 @@ public class LoanController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -379,11 +408,16 @@ public class LoanController(
     /// <param name="id">The unique identifier of the loan with signed offer letter</param>
     /// <returns>Disbursement confirmation with transaction reference, amount disbursed, and due date</returns>
     [HttpPost("{id:guid}/disburse")]
-    [Authorize(Roles = "Admin,SuperAdmin")]
+    [HasPermission(Permissions.Loans.Disburse)]
     public async Task<IActionResult> DisburseLoan(Guid id)
     {
         try
         {
+            if (!await User.CanAccessLoanAsync(_loanService, id))
+            {
+                return NotFound(ApiResponse.Fail("Loan not found"));
+            }
+
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var result = await _loanService.DisburseLoanAsync(id, userId);
             
@@ -394,7 +428,7 @@ public class LoanController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -414,7 +448,7 @@ public class LoanController(
     /// <response code="403">Forbidden - User does not have required role (Admin or SuperAdmin)</response>
     /// <response code="500">Internal server error - An unexpected error occurred</response>
     [HttpGet("disbursements")]
-    [Authorize(Roles = "Admin,SuperAdmin")]
+    [HasPermission(Permissions.Loans.View)]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ApiResponse<List<DisbursementDto>>))]
     [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ApiResponse<object>))]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -468,7 +502,7 @@ public class LoanController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -483,11 +517,16 @@ public class LoanController(
     /// <param name="loanId">The unique identifier of the loan to stop collection for</param>
     /// <returns>Result of the stop mandate operation</returns>
     [HttpPost("{loanId:guid}/stop-collection")]
-    [Authorize(Roles = "Admin,SuperAdmin")]
+    [HasPermission(Permissions.Collections.Manage)]
     public async Task<IActionResult> StopLoanCollection(Guid loanId)
     {
         try
         {
+            if (!await User.CanAccessLoanAsync(_loanService, loanId))
+            {
+                return NotFound(ApiResponse.Fail("Loan not found"));
+            }
+
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var result = await _loanService.StopLoanCollectionAsync(loanId, userId);
             
@@ -497,7 +536,7 @@ public class LoanController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -512,11 +551,16 @@ public class LoanController(
     /// <param name="loanId">The unique identifier of the loan to reconcile</param>
     /// <returns>Reconciliation result with comparison details</returns>
     [HttpPost("{loanId:guid}/reconcile")]
-    [Authorize(Roles = "Admin,SuperAdmin")]
+    [HasPermission(Permissions.Collections.Manage)]
     public async Task<IActionResult> ReconcileLoanCollection(Guid loanId)
     {
         try
         {
+            if (!await User.CanAccessLoanAsync(_loanService, loanId))
+            {
+                return NotFound(ApiResponse.Fail("Loan not found"));
+            }
+
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var result = await _loanService.ReconcileLoanCollectionAsync(loanId, userId);
             
@@ -528,7 +572,7 @@ public class LoanController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
