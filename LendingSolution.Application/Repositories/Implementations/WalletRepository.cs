@@ -86,6 +86,62 @@ public class WalletTransactionRepository : IWalletTransactionRepository
         _context = context;
     }
 
+    public async Task<decimal?> CompletePendingFundingAsync(Guid transactionId)
+    {
+        // Retry-on-failure is enabled, so a user transaction has to run inside the execution strategy
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+            var now = DateTime.UtcNow;
+
+            // Claim the funding: only one request can move it from Pending, so it is credited once
+            var claimed = await _context.WalletTransactions
+                .Where(t => t.Id == transactionId && t.Status == WalletTransactionStatus.Pending)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(t => t.Status, WalletTransactionStatus.Completed)
+                    .SetProperty(t => t.CompletedAt, now));
+            if (claimed == 0)
+            {
+                await dbTransaction.RollbackAsync();
+                return (decimal?)null;
+            }
+
+            var funding = await _context.WalletTransactions
+                .AsNoTracking()
+                .Where(t => t.Id == transactionId)
+                .Select(t => new { t.WalletId, t.Amount })
+                .FirstAsync();
+
+            // Increment in the database rather than read-modify-write, so concurrent wallet updates aren't lost
+            await _context.Wallets
+                .Where(w => w.Id == funding.WalletId)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(w => w.Balance, w => w.Balance + funding.Amount)
+                    .SetProperty(w => w.TotalCredits, w => w.TotalCredits + funding.Amount)
+                    .SetProperty(w => w.UpdatedAt, now));
+
+            var balance = await _context.Wallets
+                .Where(w => w.Id == funding.WalletId)
+                .Select(w => w.Balance)
+                .FirstAsync();
+
+            await _context.WalletTransactions
+                .Where(t => t.Id == transactionId)
+                .ExecuteUpdateAsync(s => s.SetProperty(t => t.BalanceAfter, balance));
+
+            await dbTransaction.CommitAsync();
+            return balance;
+        });
+    }
+
+    public async Task MarkFundingFailedAsync(Guid transactionId)
+    {
+        await _context.WalletTransactions
+            .Where(t => t.Id == transactionId && t.Status == WalletTransactionStatus.Pending)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.Status, WalletTransactionStatus.Failed));
+    }
+
     public async Task<WalletTransaction> CreateTransactionAsync(WalletTransaction transaction)
     {
         transaction.Id = Guid.NewGuid();

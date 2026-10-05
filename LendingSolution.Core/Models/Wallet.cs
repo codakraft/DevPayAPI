@@ -87,12 +87,38 @@ public class WalletTransaction
     /// Paystack payment reference (if applicable)
     /// </summary>
     public string? PaystackReference { get; set; }
+
+    /// <summary>
+    /// Paystack funding progress. Set on funding rows created from now on; null on every other
+    /// transaction (they complete immediately) and on funding rows created before this existed.
+    /// </summary>
+    public WalletTransactionStatus? Status { get; set; }
+
+    /// <summary>
+    /// When a Paystack funding was verified and credited
+    /// </summary>
+    public DateTime? CompletedAt { get; set; }
     
     public DateTime CreatedAt { get; set; }
     
     // Navigation properties
     public Wallet Wallet { get; set; } = null!;
     public ApplicationUser? InitiatedByUser { get; set; }
+}
+
+/// <summary>
+/// Progress of a Paystack wallet funding
+/// </summary>
+public enum WalletTransactionStatus
+{
+    /// <summary>Checkout started; not yet verified or credited</summary>
+    Pending = 1,
+
+    /// <summary>Verified with Paystack and credited to the wallet (exactly once)</summary>
+    Completed = 2,
+
+    /// <summary>Paystack reported the payment as failed</summary>
+    Failed = 3
 }
 
 /// <summary>

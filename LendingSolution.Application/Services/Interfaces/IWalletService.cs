@@ -16,6 +16,11 @@ public interface IPaystackService
     /// Verify payment with Paystack
     /// </summary>
     Task<bool> VerifyPaymentAsync(string reference);
+
+    /// <summary>
+    /// Verify a transaction with Paystack and return its status, amount and currency
+    /// </summary>
+    Task<PaystackVerificationResult> VerifyTransactionAsync(string reference);
     
     /// <summary>
     /// Get payment details from Paystack
@@ -61,12 +66,13 @@ public interface IWalletService
     /// <summary>
     /// Fund wallet using Paystack
     /// </summary>
-    Task<PaystackInitializationDto> InitiateWalletFundingAsync(FundWalletDto fundWalletDto);
+    Task<PaystackInitializationDto> InitiateWalletFundingAsync(FundWalletDto fundWalletDto, string? userId);
     
     /// <summary>
-    /// Complete wallet funding after Paystack verification
+    /// Verify a Paystack funding and credit the wallet exactly once.
+    /// <paramref name="callerCompanyId"/> limits completion to that company's wallet; null for SuperAdmin.
     /// </summary>
-    Task<bool> CompleteWalletFundingAsync(string paystackReference);
+    Task<WalletFundingResultDto> CompleteWalletFundingAsync(string paystackReference, Guid? callerCompanyId, string? userId);
     
     /// <summary>
     /// Debit wallet for fees

@@ -100,12 +100,22 @@ public class WalletService : IWalletService
         return wallets.Select(MapToWalletDto).ToList();
     }
 
-    public async Task<PaystackInitializationDto> InitiateWalletFundingAsync(FundWalletDto fundWalletDto)
+    /// <summary>
+    /// Smallest amount (NGN) a wallet can be funded with through Paystack
+    /// </summary>
+    public const decimal MinimumFundingAmount = 1000m;
+
+    public async Task<PaystackInitializationDto> InitiateWalletFundingAsync(FundWalletDto fundWalletDto, string? userId)
     {
+        if (fundWalletDto.Amount < MinimumFundingAmount)
+        {
+            throw new AppException($"The minimum funding amount is ₦{MinimumFundingAmount:N0}.", 400);
+        }
+
         var wallet = await _walletRepository.GetWalletByIdAsync(fundWalletDto.WalletId);
         if (wallet == null)
         {
-            throw new AppException("Wallet not found");
+            throw new AppException("Wallet not found", 404);
         }
 
         // Generate unique reference
@@ -119,16 +129,17 @@ public class WalletService : IWalletService
 
         if (result.Status)
         {
-            // Create pending transaction
+            // Pending until fund/complete verifies the payment and credits the wallet
             var transaction = new WalletTransaction
             {
                 WalletId = fundWalletDto.WalletId,
                 Amount = fundWalletDto.Amount,
-                BalanceAfter = wallet.Balance, // Will be updated when payment is verified
+                BalanceAfter = wallet.Balance, // Set when the payment is verified and credited
                 TransactionType = WalletTransactionType.PaystackFunding,
                 Description = $"Wallet funding via Paystack - {fundWalletDto.Amount:C}",
                 PaystackReference = reference,
-                InitiatedBy = null // Will be set when available
+                InitiatedBy = userId,
+                Status = WalletTransactionStatus.Pending
             };
 
             await _transactionRepository.CreateTransactionAsync(transaction);
@@ -137,39 +148,101 @@ public class WalletService : IWalletService
         return result;
     }
 
-    public async Task<bool> CompleteWalletFundingAsync(string paystackReference)
+    public async Task<WalletFundingResultDto> CompleteWalletFundingAsync(string paystackReference, Guid? callerCompanyId, string? userId)
     {
-        // Verify payment with Paystack
-        var isPaymentValid = await _paystackService.VerifyPaymentAsync(paystackReference);
-        if (!isPaymentValid)
-        {
-            return false;
-        }
-
-        // Get the pending transaction
         var transaction = await _transactionRepository.GetTransactionByPaystackReferenceAsync(paystackReference);
-        if (transaction == null)
+
+        // Company admins can only complete their own company's fundings; don't reveal other companies' references
+        if (transaction == null ||
+            transaction.TransactionType != WalletTransactionType.PaystackFunding ||
+            (callerCompanyId.HasValue && (transaction.Wallet.IsSuperAdminWallet || transaction.Wallet.CompanyId != callerCompanyId)))
         {
-            return false;
+            throw new AppException("Funding not found", 404);
         }
 
-        // Get wallet and update balance
-        var wallet = await _walletRepository.GetWalletByIdAsync(transaction.WalletId);
-        if (wallet == null)
+        switch (transaction.Status)
         {
-            return false;
+            case WalletTransactionStatus.Completed:
+                // Already credited (e.g. the payment page was refreshed): report success, credit nothing
+                return new WalletFundingResultDto
+                {
+                    TransactionStatus = "success",
+                    Amount = transaction.Amount,
+                    Balance = transaction.Wallet.Balance,
+                    AlreadyCompleted = true
+                };
+            case WalletTransactionStatus.Failed:
+                throw new AppException("This payment failed. Please start a new funding.", 400,
+                    details: new { transactionStatus = "failed" });
+            case null:
+                // Funding rows from before statuses existed can't be told apart from credited ones,
+                // so they are never completed here (this is what stops old references being replayed)
+                throw new AppException("This funding can no longer be completed. Please contact support if your wallet wasn't credited.", 409);
         }
 
-        // Update wallet balance
-        wallet.Balance += transaction.Amount;
-        wallet.TotalCredits += transaction.Amount;
-        await _walletRepository.UpdateWalletAsync(wallet);
+        var verification = await _paystackService.VerifyTransactionAsync(paystackReference);
+        if (!verification.Verified)
+        {
+            throw new AppException("We couldn't verify this payment with Paystack. Please try again.", 502);
+        }
 
-        // Update transaction with final balance
-        transaction.BalanceAfter = wallet.Balance;
-        await _transactionRepository.CreateTransactionAsync(transaction); // This might need to be an update method
+        if (!string.Equals(verification.Status, "success", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.Equals(verification.Status, "failed", StringComparison.OrdinalIgnoreCase))
+            {
+                await _transactionRepository.MarkFundingFailedAsync(transaction.Id);
+            }
 
-        return true;
+            throw new AppException($"The payment was not successful ({verification.Status ?? "unknown"}). Your wallet wasn't credited.", 400,
+                details: new { transactionStatus = verification.Status });
+        }
+
+        // Paystack charged what we initialised, in naira; anything else is credited by nobody until looked at
+        var expectedKobo = (long)Math.Round(transaction.Amount * 100);
+        if (verification.AmountKobo != expectedKobo ||
+            !string.Equals(verification.Currency, "NGN", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogError(
+                "Paystack funding {Reference} doesn't match: expected {Expected} kobo NGN, Paystack reports {Actual} {Currency}",
+                paystackReference, expectedKobo, verification.AmountKobo, verification.Currency);
+            throw new AppException("The payment amount doesn't match this funding. Please contact support.", 400,
+                details: new { transactionStatus = verification.Status });
+        }
+
+        var balance = await _transactionRepository.CompletePendingFundingAsync(transaction.Id);
+        if (balance == null)
+        {
+            // Another request completed it between our check and now
+            var current = await _walletRepository.GetWalletByIdAsync(transaction.WalletId);
+            return new WalletFundingResultDto
+            {
+                TransactionStatus = "success",
+                Amount = transaction.Amount,
+                Balance = current?.Balance ?? transaction.Wallet.Balance,
+                AlreadyCompleted = true
+            };
+        }
+
+        await _auditService.LogAsync(
+            action: "WalletFunded",
+            category: AuditCategories.Financial,
+            userId: userId,
+            entityType: "Wallet",
+            entityId: transaction.WalletId.ToString(),
+            companyId: transaction.Wallet.CompanyId,
+            details: $"Wallet funded via Paystack ({paystackReference})",
+            amount: transaction.Amount,
+            oldBalance: balance.Value - transaction.Amount,
+            newBalance: balance.Value
+        );
+
+        return new WalletFundingResultDto
+        {
+            TransactionStatus = "success",
+            Amount = transaction.Amount,
+            Balance = balance.Value,
+            AlreadyCompleted = false
+        };
     }
 
     public async Task<bool> DebitWalletAsync(DebitWalletDto debitWalletDto, string? userId)
@@ -470,6 +543,7 @@ public class WalletService : IWalletService
             ReferenceId = transaction.ReferenceId,
             InitiatedBy = transaction.InitiatedByUser?.Email ?? transaction.InitiatedBy,
             PaystackReference = transaction.PaystackReference,
+            Status = transaction.Status?.ToString(),
             CreatedAt = transaction.CreatedAt
         };
     }

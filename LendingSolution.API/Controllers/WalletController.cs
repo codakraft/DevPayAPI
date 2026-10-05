@@ -653,14 +653,14 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
             var wallet = await _walletService.GetWalletByIdAsync(fundWalletDto.WalletId);
             if (wallet == null)
             {
-                return NotFound("Wallet not found");
+                return NotFound(ApiResponse.Fail("Wallet not found"));
             }
 
             if (!isSuperAdmin)
             {
                 if (wallet.IsSuperAdminWallet)
                 {
-                    return StatusCode(403, "You can only fund your company's wallet");
+                    return StatusCode(403, ApiResponse.Fail("You can only fund your company's wallet"));
                 }
                 
                 // Parse both GUIDs for proper comparison (case-insensitive)
@@ -668,22 +668,29 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
                     !Guid.TryParse(userCompanyId, out var userCompanyGuid) || 
                     wallet.CompanyId != userCompanyGuid)
                 {
-                    return StatusCode(403, "You can only fund your company's wallet");
+                    return StatusCode(403, ApiResponse.Fail("You can only fund your company's wallet"));
                 }
             }
 
-            var result = await _walletService.InitiateWalletFundingAsync(fundWalletDto);
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var result = await _walletService.InitiateWalletFundingAsync(fundWalletDto, userId);
+            if (!result.Status)
+            {
+                return StatusCode(502, ApiResponse.Fail(result.Message));
+            }
+
+            // Success keeps Paystack's initialisation shape, which the admin app already reads
             return Ok(result);
         }
         catch (AppException ex)
         {
             _logger.LogError(ex, "Error initiating wallet funding");
-            return StatusCode(ex.StatusCode, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled error initiating wallet funding");
-            return StatusCode(500, "Something went wrong");
+            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
         }
     }
 
@@ -696,23 +703,35 @@ public class WalletController(IWalletService walletService, ILogger<WalletContro
     {
         try
         {
-            var result = await _walletService.CompleteWalletFundingAsync(completeFundingDto.PaystackReference);
-            if (result)
+            Guid? callerCompanyId = null;
+            if (!User.IsSuperAdmin())
             {
-                return Ok(new { message = "Wallet funding completed successfully" });
+                if (!Guid.TryParse(User.FindFirst("CompanyId")?.Value, out var companyId))
+                {
+                    return StatusCode(403, ApiResponse.Fail("You can only fund your company's wallet"));
+                }
+                callerCompanyId = companyId;
             }
 
-            return BadRequest("Failed to complete wallet funding");
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var result = await _walletService.CompleteWalletFundingAsync(
+                completeFundingDto.PaystackReference, callerCompanyId, userId);
+
+            return Ok(ApiResponse.Ok(
+                result.AlreadyCompleted
+                    ? "This payment has already been added to your wallet"
+                    : "Wallet funding completed successfully",
+                result));
         }
         catch (AppException ex)
         {
             _logger.LogError(ex, "Error completing wallet funding");
-            return StatusCode(ex.StatusCode, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode).WithData(ex.Details));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled error completing wallet funding");
-            return StatusCode(500, "Something went wrong");
+            return StatusCode(500, ApiResponse.Fail("Something went wrong"));
         }
     }
 

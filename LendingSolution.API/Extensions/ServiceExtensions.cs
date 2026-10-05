@@ -385,6 +385,8 @@ public static class ServiceExtensions
             {
                 options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
                 options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
+                // Applies to DateTime? too: System.Text.Json wraps it for nullable values
+                options.JsonSerializerOptions.Converters.Add(new LendingSolution.API.Json.UtcDateTimeConverter());
             });
         services.AddEndpointsApiExplorer();
 
