@@ -388,7 +388,24 @@ public class LoanService(
         // Optional: Add access control if requestingUserId is provided
         // This can be enhanced based on business rules
 
-        return MapToLoanListDto(loan);
+        var dto = MapToLoanListDto(loan);
+
+        // Credit analysis is only cached for Mono applicants and expires, so it may be missing.
+        // Looked up here rather than in the mapper to avoid a query per row on list endpoints.
+        if (loan.BorrowerApplication != null)
+        {
+            var now = DateTime.UtcNow;
+            var creditAnalysis = await _db.MonoCreditAnalysisRecords
+                .AsNoTracking()
+                .Where(r => r.BorrowerApplicationId == loan.BorrowerApplication.Id && r.ExpiresAt > now)
+                .OrderByDescending(r => r.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            dto.CreditScore = creditAnalysis?.CreditScore;
+            dto.RiskLevel = creditAnalysis?.RiskLevel;
+        }
+
+        return dto;
     }
 
     private IQueryable<Loan> ApplyFilters(IQueryable<Loan> query, LoanFilterDto filter, bool excludeCompanyFilter = false)
@@ -571,7 +588,11 @@ public class LoanService(
             OfferLetterDocumentId = loan.OfferLetterDocumentId,
             OfferLetterUrl = loan.OfferLetterUrl,
             SignedOfferLetterDocumentId = loan.SignedOfferLetterDocumentId,
-            SalaryHistory = MapToSalaryHistoryDto(loan.BorrowerApplication?.RemitaSalaryHistory)
+            SalaryHistory = MapToSalaryHistoryDto(loan.BorrowerApplication?.RemitaSalaryHistory),
+            UserPhoneNumber = loan.BorrowerApplication?.PhoneNumber ?? loan.User?.PhoneNumber,
+            Employer = loan.BorrowerApplication?.Employer,
+            Address = loan.BorrowerApplication?.Address ?? loan.User?.Address,
+            MonthlyIncome = loan.BorrowerApplication?.RemitaSalaryHistory?.AverageMonthlySalary
         };
     }
 
@@ -916,7 +937,8 @@ public class LoanService(
             throw new AppException("Borrower information not found", 400);
         }
 
-        // Calculate loan details
+        // Recalculated figures are only a fallback for legacy loans; the amounts below prefer
+        // the values stored at Step 4, which are what the borrower accepted and what is disbursed
         var interestRate = loan.Product.InterestRate;
         var isMonthlyRate = loan.Product.InterestCostComputation == InterestCostComputation.PerMonth;
         var monthlyRate = isMonthlyRate ? interestRate : interestRate / 12;
@@ -955,7 +977,8 @@ public class LoanService(
         // Calculate fees
         var processingFee = loan.Amount * (loan.Product.ProcessingFeePercent / 100) + loan.Product.ProcessingFeeFlat;
         var maintenanceFee = loan.Amount * (loan.Product.MaintenanceFeePercent / 100);
-        var totalFees = processingFee + maintenanceFee;
+        var legalFee = loan.Amount * (loan.Product.LegalFeePercent / 100) + loan.Product.LegalFeeFlat;
+        var totalFees = processingFee + maintenanceFee + legalFee;
         var disbursementAmount = loan.Amount - totalFees;
 
         // Company address
@@ -978,14 +1001,15 @@ public class LoanService(
             DurationInMonths = loan.DurationInMonths,
             InterestRate = interestRate,
             InterestComputationBasis = loan.Product.InterestComputationBasis.ToString(),
-            TotalInterest = Math.Round(totalInterest, 2),
-            TotalRepayment = Math.Round(totalRepayment, 2),
-            MonthlyRepayment = Math.Round(monthlyRepayment, 2),
+            TotalInterest = loan.AppliedInterest ?? Math.Round(totalInterest, 2),
+            TotalRepayment = loan.TotalRepayment ?? Math.Round(totalRepayment, 2),
+            MonthlyRepayment = loan.MonthlyRepayment ?? Math.Round(monthlyRepayment, 2),
             Purpose = loan.Purpose,
             ProcessingFee = Math.Round(processingFee, 2),
             MaintenanceFee = Math.Round(maintenanceFee, 2),
-            TotalFees = Math.Round(totalFees, 2),
-            DisbursementAmount = Math.Round(disbursementAmount, 2),
+            LegalFee = Math.Round(legalFee, 2),
+            TotalFees = loan.ApplicableFees ?? Math.Round(totalFees, 2),
+            DisbursementAmount = loan.DisbursementAmount ?? Math.Round(disbursementAmount, 2),
             ProductName = loan.Product.Name,
             PenaltyRate = loan.Product.PenaltyOnDefaultPrincipal,
             MoratoriumDays = loan.Product.Moratorium,

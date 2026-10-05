@@ -44,6 +44,20 @@ public class LoanListDto
     
     // Salary History Information
     public SalaryHistoryInfoDto? SalaryHistory { get; set; }
+
+    // Borrower details captured during onboarding
+    public string? UserPhoneNumber { get; set; }
+    public string? Employer { get; set; }
+    public string? Address { get; set; }
+
+    /// <summary>Average monthly salary from Remita salary history; null for Mono applicants</summary>
+    public decimal? MonthlyIncome { get; set; }
+
+    /// <summary>Mono credit score (0-1000); loan detail only, and only while the cached analysis exists</summary>
+    public decimal? CreditScore { get; set; }
+
+    /// <summary>Mono risk level (Low, Medium, High); same availability as <see cref="CreditScore"/></summary>
+    public string? RiskLevel { get; set; }
 }
 
 /// <summary>

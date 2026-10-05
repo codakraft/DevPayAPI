@@ -116,6 +116,7 @@ public class LoanRespository(ApplicationDbContext db) : ILoanRepository
             .Include(l => l.Company)
             .Include(l => l.Product)
             .Include(l => l.BorrowerApplication)
+                .ThenInclude(ba => ba != null ? ba.RemitaSalaryHistory : null)
             .AsQueryable();
     }
 
