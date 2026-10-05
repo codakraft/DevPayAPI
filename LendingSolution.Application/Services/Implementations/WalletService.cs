@@ -209,7 +209,7 @@ public class WalletService : IWalletService
         // Audit log
         await _auditService.LogAsync(
             action: "WalletDebited",
-            category: "Financial",
+            category: AuditCategories.Financial,
             userId: userId,
             entityType: "Wallet",
             entityId: debitWalletDto.WalletId.ToString(),
@@ -255,7 +255,7 @@ public class WalletService : IWalletService
         // Audit log
         await _auditService.LogAsync(
             action: "WalletCredited",
-            category: "Financial",
+            category: AuditCategories.Financial,
             userId: userId,
             entityType: "Wallet",
             entityId: walletId.ToString(),
@@ -429,7 +429,7 @@ public class WalletService : IWalletService
         var isFeeTransfer = description.Contains("fee", StringComparison.OrdinalIgnoreCase);
         await _auditService.LogAsync(
             action: isFeeTransfer ? "FeeTransferred" : "FundsTransferred",
-            category: "Financial",
+            category: AuditCategories.Financial,
             userId: userId,
             entityType: "WalletTransfer",
             entityId: $"{fromWalletId}→{toWalletId}",

@@ -831,7 +831,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         // Audit log for offer letter acceptance
         await _auditService.LogAsync(
             action: "OfferLetterAccepted",
-            category: "Loan",
+            category: AuditCategories.Loan,
             userEmail: application.Email,
             entityType: "BorrowerApplication",
             entityId: application.Id.ToString(),
@@ -936,7 +936,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
             await _auditService.LogAsync(
                 action: "MandateActivated",
-                category: "Loan",
+                category: AuditCategories.Loan,
                 userEmail: application.Email,
                 entityType: "BorrowerApplication",
                 entityId: application.Id.ToString(),
@@ -1236,7 +1236,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         
         await _auditService.LogAsync(
             action: "MandateActivated",
-            category: "Loan",
+            category: AuditCategories.Loan,
             userEmail: application.Email,
             entityType: "BorrowerApplication",
             entityId: application.Id.ToString(),

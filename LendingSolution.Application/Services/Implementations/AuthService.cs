@@ -61,7 +61,7 @@ public class AuthService(
             // Log failed login attempt
             await auditService.LogAsync(
                 action: "LoginFailed",
-                category: "Security",
+                category: AuditCategories.Security,
                 userEmail: body.Email,
                 details: $"Failed login attempt for {body.Email}",
                 isSuccess: false,
@@ -77,7 +77,7 @@ public class AuthService(
         // Log successful login
         await auditService.LogAsync(
             action: "LoginSuccessful",
-            category: "Security",
+            category: AuditCategories.Authentication,
             userId: user.Id,
             userEmail: user.Email,
             companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
@@ -114,7 +114,7 @@ public class AuthService(
             // Log failed admin login attempt
             await auditService.LogAsync(
                 action: "AdminLoginFailed",
-                category: "Security",
+                category: AuditCategories.Security,
                 userEmail: body.Email,
                 details: $"Failed admin login attempt for {body.Email}",
                 isSuccess: false,
@@ -130,7 +130,7 @@ public class AuthService(
         // Log successful admin login
         await auditService.LogAsync(
             action: "AdminLoginSuccessful",
-            category: "Security",
+            category: AuditCategories.Authentication,
             userId: user.Id,
             userEmail: user.Email,
             companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
@@ -215,7 +215,7 @@ public class AuthService(
         return true;
     }
 
-    public async Task<object> CreateSuperAdmin(CreateSuperAdminRequestDto body, bool callerIsSuperAdmin)
+    public async Task<object> CreateSuperAdmin(CreateSuperAdminRequestDto body, string? callerId, bool callerIsSuperAdmin)
     {
         // Anonymous creation is only allowed to bootstrap the very first SuperAdmin.
         // Once one exists, only an authenticated SuperAdmin can create another.
@@ -223,7 +223,7 @@ public class AuthService(
         {
             await auditService.LogAsync(
                 action: "SuperAdminCreationDenied",
-                category: "Security",
+                category: AuditCategories.Security,
                 userEmail: body.Email,
                 details: $"Unauthorized attempt to create super admin {body.Email}",
                 isSuccess: false,
@@ -253,18 +253,19 @@ public class AuthService(
 
         await auditService.LogAsync(
             action: "SuperAdminCreated",
-            category: "User",
-            userId: user.Id,
-            userEmail: user.Email,
+            category: AuditCategories.User,
+            userId: callerId,
             entityType: "User",
             entityId: user.Id,
-            details: $"New super admin created: {user.Email}"
+            details: callerId is null
+                ? $"First super admin created: {user.Email}"
+                : $"New super admin created: {user.Email}"
         );
 
         return new { userId = user.Id };
     }
 
-    public async Task<object> CreateAdmin(CreateAdminRequestDto body)
+    public async Task<object> CreateAdmin(CreateAdminRequestDto body, string callerId)
     {
         _ = await _companyRepository.GetCompanyById(body.CompanyId)
             ?? throw new AppException("Company not found", 404);
@@ -296,9 +297,8 @@ public class AuthService(
         // Audit log for admin creation
         await auditService.LogAsync(
             action: "AdminCreated",
-            category: "User",
-            userId: user.Id,
-            userEmail: user.Email,
+            category: AuditCategories.User,
+            userId: callerId,
             entityType: "User",
             entityId: user.Id,
             companyId: body.CompanyId,
@@ -357,13 +357,12 @@ public class AuthService(
         // Audit log for role assignment
         await auditService.LogAsync(
             action: "RoleAssigned",
-            category: "User",
+            category: AuditCategories.Security,
             userId: callerId,
             entityType: "User",
             entityId: user.Id,
-            userEmail: user.Email,
             companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
-            details: $"Role '{role.Name}' assigned to user {user.Email} by {callerId}"
+            details: $"Role '{role.Name}' assigned to user {user.Email}"
         );
 
         return new { userId = user.Id, role = role.Name };
@@ -400,13 +399,12 @@ public class AuthService(
 
         await auditService.LogAsync(
             action: "RoleRemoved",
-            category: "User",
+            category: AuditCategories.Security,
             userId: callerId,
             entityType: "User",
             entityId: user.Id,
-            userEmail: user.Email,
             companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
-            details: $"Role '{role.Name}' removed from user {user.Email} by {callerId}"
+            details: $"Role '{role.Name}' removed from user {user.Email}"
         );
 
         return new { userId = user.Id, role = role.Name };
@@ -441,13 +439,12 @@ public class AuthService(
 
         await auditService.LogAsync(
             action: isActive ? "UserActivated" : "UserDeactivated",
-            category: "User",
+            category: AuditCategories.Security,
             userId: callerId,
             entityType: "User",
             entityId: user.Id,
-            userEmail: user.Email,
             companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
-            details: $"User {user.Email} {(isActive ? "activated" : "deactivated")} by {callerId}"
+            details: $"User {user.Email} {(isActive ? "activated" : "deactivated")}"
         );
 
         return new { userId = user.Id, isActive = user.IsActive };
@@ -480,13 +477,12 @@ public class AuthService(
 
         await auditService.LogAsync(
             action: "UserUpdated",
-            category: "User",
+            category: AuditCategories.User,
             userId: callerId,
             entityType: "User",
             entityId: user.Id,
-            userEmail: user.Email,
             companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
-            details: $"User {user.Email} renamed from '{previousName}' to '{firstName} {lastName}' by {callerId}"
+            details: $"User {user.Email} renamed from '{previousName}' to '{firstName} {lastName}'"
         );
 
         return new { userId = user.Id, firstName = user.FirstName, lastName = user.LastName };
@@ -548,7 +544,7 @@ public class AuthService(
 
         await auditService.LogAsync(
             action: "LoginBlockedInactive",
-            category: "Security",
+            category: AuditCategories.Security,
             userId: user.Id,
             userEmail: user.Email,
             details: $"Login attempt by deactivated user {user.Email}",
@@ -595,6 +591,14 @@ public class AuthService(
         }
 
         await _tokenService.RevokeAllUserTokensAsync(userId, userId, "User logged out");
+
+        await auditService.LogAsync(
+            action: "Logout",
+            category: AuditCategories.Authentication,
+            userId: userId,
+            details: "Signed out"
+        );
+
         return true;
     }
 
@@ -1116,7 +1120,7 @@ public class AuthService(
             // Log failed admin login attempt
             await auditService.LogAsync(
                 action: "AdminLoginFailed",
-                category: "Security",
+                category: AuditCategories.Security,
                 userEmail: body.Email,
                 details: $"Failed admin login attempt for {body.Email}",
                 isSuccess: false,
@@ -1150,7 +1154,7 @@ public class AuthService(
         {
             await auditService.LogAsync(
                 action: "AdminLoginOtpFailed",
-                category: "Security",
+                category: AuditCategories.Security,
                 userId: user.Id,
                 userEmail: user.Email,
                 details: $"Failed to send OTP to {user.Email}",
@@ -1177,7 +1181,7 @@ public class AuthService(
         // Log MFA initiation
         await auditService.LogAsync(
             action: "AdminLoginMfaInitiated",
-            category: "Security",
+            category: AuditCategories.Authentication,
             userId: user.Id,
             userEmail: user.Email,
             details: $"Admin MFA initiated for {user.Email}"
@@ -1205,7 +1209,7 @@ public class AuthService(
         {
             await auditService.LogAsync(
                 action: "AdminLoginOtpVerificationFailed",
-                category: "Security",
+                category: AuditCategories.Security,
                 details: $"Invalid session ID: {request.SessionId}",
                 isSuccess: false,
                 errorMessage: "Invalid or expired session"
@@ -1219,7 +1223,8 @@ public class AuthService(
             await _mfaSessionRepository.DeleteAsync(request.SessionId);
             await auditService.LogAsync(
                 action: "AdminLoginOtpVerificationFailed",
-                category: "Security",
+                category: AuditCategories.Security,
+                userId: session.UserId,
                 userEmail: session.Email,
                 details: $"Expired session for {session.Email}",
                 isSuccess: false,
@@ -1242,7 +1247,8 @@ public class AuthService(
         {
             await auditService.LogAsync(
                 action: "AdminLoginOtpVerificationFailed",
-                category: "Security",
+                category: AuditCategories.Security,
+                userId: session.UserId,
                 userEmail: session.Email,
                 details: $"Invalid OTP for {session.Email}",
                 isSuccess: false,
@@ -1281,7 +1287,7 @@ public class AuthService(
         // Log successful admin login
         await auditService.LogAsync(
             action: "AdminLoginSuccessful",
-            category: "Security",
+            category: AuditCategories.Authentication,
             userId: user.Id,
             userEmail: user.Email,
             companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
@@ -1438,7 +1444,7 @@ public class AuthService(
         // Audit log
         await auditService.LogAsync(
             action: "CompanyUserCreated",
-            category: "User",
+            category: AuditCategories.User,
             userId: createdByUserId,
             entityType: "User",
             entityId: user.Id,
@@ -1472,7 +1478,7 @@ public class AuthService(
         {
             await auditService.LogAsync(
                 action: "PasswordChangeFailed",
-                category: "Security",
+                category: AuditCategories.Security,
                 userId: user.Id,
                 userEmail: user.Email,
                 details: "Password change failed - incorrect current password",
@@ -1506,7 +1512,7 @@ public class AuthService(
         // Audit log
         await auditService.LogAsync(
             action: "PasswordChanged",
-            category: "Security",
+            category: AuditCategories.Security,
             userId: user.Id,
             userEmail: user.Email,
             companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
@@ -1530,7 +1536,7 @@ public class AuthService(
         {
             await auditService.LogAsync(
                 action: "PasswordResetRequestIgnored",
-                category: "Security",
+                category: AuditCategories.Security,
                 userEmail: email,
                 details: $"Password reset requested for {email}: no active account",
                 isSuccess: false,
@@ -1553,7 +1559,7 @@ public class AuthService(
         // reveal that the email has an account
         await auditService.LogAsync(
             action: otpResult.Success ? "PasswordResetRequested" : "PasswordResetOtpFailed",
-            category: "Security",
+            category: AuditCategories.Security,
             userId: user.Id,
             userEmail: user.Email,
             details: otpResult.Success
@@ -1608,7 +1614,7 @@ public class AuthService(
         {
             await auditService.LogAsync(
                 action: "PasswordResetFailed",
-                category: "Security",
+                category: AuditCategories.Security,
                 userId: user.Id,
                 userEmail: user.Email,
                 details: $"Invalid password reset code for {user.Email}",
@@ -1634,7 +1640,7 @@ public class AuthService(
 
         await auditService.LogAsync(
             action: "PasswordReset",
-            category: "Security",
+            category: AuditCategories.Security,
             userId: user.Id,
             userEmail: user.Email,
             companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,

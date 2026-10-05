@@ -21,6 +21,28 @@ public class AuditService : IAuditService
         decimal? oldBalance = null, decimal? newBalance = null, string? ipAddress = null, 
         bool isSuccess = true, string? errorMessage = null)
     {
+        // UserId is always the person who acted; fill in who they are so readers don't need a lookup.
+        // Company is filled too, so company admins (who only see their company's rows) see their staff's actions.
+        string? userName = null;
+        if (!string.IsNullOrEmpty(userId))
+        {
+            var actor = await _context.Users
+                .AsNoTracking()
+                .Where(u => u.Id == userId)
+                .Select(u => new { u.Email, u.FirstName, u.LastName, u.CompanyId })
+                .FirstOrDefaultAsync();
+
+            if (actor != null)
+            {
+                userEmail ??= actor.Email;
+                userName = $"{actor.FirstName} {actor.LastName}".Trim();
+                if (companyId == null && Guid.TryParse(actor.CompanyId, out var actorCompanyId))
+                {
+                    companyId = actorCompanyId;
+                }
+            }
+        }
+
         var auditLog = new AuditLog
         {
             Id = Guid.NewGuid(),
@@ -29,6 +51,7 @@ public class AuditService : IAuditService
             Category = category,
             UserId = userId,
             UserEmail = userEmail,
+            UserName = string.IsNullOrEmpty(userName) ? null : userName,
             EntityType = entityType,
             EntityId = entityId,
             CompanyId = companyId,
