@@ -1,3 +1,4 @@
+using LendingSolution.Core.Models;
 using LendingSolution.API.Auth;
 using LendingSolution.Core.Auth;
 using Microsoft.AspNetCore.Mvc;
@@ -48,5 +49,15 @@ public class AuditController : ControllerBase
 
         var logs = await _auditService.GetLogsAsync(category, companyId, fromDate, toDate, page, pageSize);
         return Ok(ApiResponse.Ok("Audit logs retrieved successfully", logs));
+    }
+
+    /// <summary>
+    /// The audit categories, for the category filter. <c>value</c> is what <c>category</c> filters on.
+    /// </summary>
+    [HttpGet("categories")]
+    public IActionResult GetCategories()
+    {
+        var categories = AuditCategories.All.Select(c => new { value = c.Value, label = c.Label });
+        return Ok(ApiResponse.Ok("Audit categories retrieved successfully", categories));
     }
 }

@@ -15,6 +15,7 @@ public class AuditLog
     // Who did it
     public string? UserId { get; set; }
     public string? UserEmail { get; set; }
+    public string? UserName { get; set; }  // Full name of the user who acted, filled from UserId
     
     // What was affected
     public string? EntityType { get; set; }  // "Loan", "Wallet", "User"

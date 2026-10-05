@@ -120,7 +120,8 @@ public class AuthController(
     {
         try
         {
-            var result = await _authService.CreateSuperAdmin(body, User.IsInRole("SuperAdmin"));
+            var result = await _authService.CreateSuperAdmin(
+                body, User.FindFirstValue(ClaimTypes.NameIdentifier), User.IsInRole("SuperAdmin"));
             _logger.LogInformation("Super admin created successfully: {Email}", body.Email);
             return Ok(ApiResponse.Ok("Super admin created successfully", result));
         }
@@ -142,7 +143,7 @@ public class AuthController(
     {
         try
         {
-            var result = await _authService.CreateAdmin(body);
+            var result = await _authService.CreateAdmin(body, User.FindFirstValue(ClaimTypes.NameIdentifier)!);
             _logger.LogInformation("Admin created successfully: {Email}", body.Email);
             return Ok(ApiResponse.Ok("Admin created successfully", result));
         }

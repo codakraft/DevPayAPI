@@ -188,7 +188,7 @@ public class LoanService(
         // Audit log
         await auditService.LogAsync(
             action: "LoanApproved",
-            category: "Loan",
+            category: AuditCategories.Loan,
             userId: approvedBy,
             entityType: "Loan",
             entityId: loanId.ToString(),
@@ -241,7 +241,7 @@ public class LoanService(
         // Audit log
         await auditService.LogAsync(
             action: "LoanRejected",
-            category: "Loan",
+            category: AuditCategories.Loan,
             userId: rejectedBy,
             entityType: "Loan",
             entityId: loanId.ToString(),
@@ -884,7 +884,7 @@ public class LoanService(
         // Audit log for disbursement
         await auditService.LogAsync(
             action: "LoanDisbursed",
-            category: "Loan",
+            category: AuditCategories.Loan,
             userId: disbursedBy,
             entityType: "Loan",
             entityId: loanId.ToString(),
