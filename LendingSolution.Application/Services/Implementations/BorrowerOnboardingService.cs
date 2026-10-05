@@ -863,6 +863,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             Purpose = "Salary Loan",
             ProcessingFee = Math.Round(loanPrincipal * (product.ProcessingFeePercent / 100) + product.ProcessingFeeFlat, 2),
             MaintenanceFee = Math.Round(loanPrincipal * (product.MaintenanceFeePercent / 100), 2),
+            LegalFee = Math.Round(legalFee, 2),
             TotalFees = applicableFees,
             DisbursementAmount = disbursementAmount,
             ProductName = product.Name,
