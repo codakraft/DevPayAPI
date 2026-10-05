@@ -441,7 +441,9 @@ public class LoanController(
     /// Gets disbursements filtered by company or all disbursements based on user role
     /// </summary>
     /// <param name="companyId">Optional company ID to filter disbursements (SuperAdmin only). If not provided, SuperAdmin sees all disbursements, Admin sees only their company's disbursements.</param>
-    /// <returns>List of disbursements with loan details, amounts, and processing status</returns>
+    /// <param name="page">Page number, starting at 1</param>
+    /// <param name="pageSize">Items per page (1-100, default 20)</param>
+    /// <returns>Page of disbursements, newest first, with paging metadata</returns>
     /// <response code="200">Returns the list of disbursements successfully</response>
     /// <response code="400">Bad request - Invalid company ID format or Admin user attempting to filter by companyId</response>
     /// <response code="401">Unauthorized - User not authenticated</response>
@@ -449,12 +451,15 @@ public class LoanController(
     /// <response code="500">Internal server error - An unexpected error occurred</response>
     [HttpGet("disbursements")]
     [HasPermission(Permissions.Loans.View)]
-    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ApiResponse<List<DisbursementDto>>))]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ApiResponse<PagedDisbursementListDto>))]
     [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ApiResponse<object>))]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden, Type = typeof(ApiResponse<object>))]
     [ProducesResponseType(StatusCodes.Status500InternalServerError, Type = typeof(ApiResponse<object>))]
-    public async Task<IActionResult> GetDisbursements([FromQuery] Guid? companyId = null)
+    public async Task<IActionResult> GetDisbursements(
+        [FromQuery] Guid? companyId = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20)
     {
         try
         {
@@ -467,20 +472,22 @@ public class LoanController(
                 return StatusCode(403, ApiResponse.Fail("Only SuperAdmin can filter disbursements by company ID"));
             }
             
-            List<DisbursementDto> result;
+            page = Math.Max(page, 1);
+            pageSize = Math.Clamp(pageSize, 1, 100);
+            PagedDisbursementListDto result;
             
             if (isSuperAdmin)
             {
                 if (companyId.HasValue)
                 {
                     // SuperAdmin filtering by specific company
-                    result = await _financeService.GetCompanyDisbursementsAsync(companyId.Value);
+                    result = await _financeService.GetDisbursementsAsync(companyId.Value, page, pageSize);
                     _logger.LogInformation("SuperAdmin fetched disbursements for company {CompanyId}", companyId.Value);
                 }
                 else
                 {
                     // SuperAdmin viewing all disbursements
-                    result = await _financeService.GetAllDisbursementsAsync();
+                    result = await _financeService.GetDisbursementsAsync(null, page, pageSize);
                     _logger.LogInformation("SuperAdmin fetched all disbursements");
                 }
             }
@@ -493,7 +500,7 @@ public class LoanController(
                     return BadRequest(ApiResponse.Fail("Company ID not found in token"));
                 }
                 
-                result = await _financeService.GetCompanyDisbursementsAsync(adminCompanyId);
+                result = await _financeService.GetDisbursementsAsync(adminCompanyId, page, pageSize);
                 _logger.LogInformation("Admin fetched disbursements for their company {CompanyId}", adminCompanyId);
             }
             

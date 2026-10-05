@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using LendingSolution.Application.Repositories.Interfaces;
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
+using LendingSolution.Core.Dtos.Response;
 using LendingSolution.Core.Enum;
 using LendingSolution.Core.Models;
 using Microsoft.Extensions.Logging;
@@ -155,21 +156,21 @@ public class OtpService : IOtpService
                 _logger.LogWarning("No active OTP found for {Recipient}, Type: {Type}", 
                     request.RecipientIdentifier, request.Type);
                 
-                return ValidateOtpResult.Fail("Invalid or expired OTP. Please request a new one.");
+                return ValidateOtpResult.Fail("Invalid or expired OTP. Please request a new one.", 0, ErrorCodes.OtpExpired);
             }
 
             // 2. Check if OTP is locked
             if (otp.IsLocked)
             {
                 _logger.LogWarning("OTP {OtpId} is locked due to too many failed attempts", otp.Id);
-                return ValidateOtpResult.Fail("This OTP has been locked due to too many failed attempts. Please request a new one.");
+                return ValidateOtpResult.Fail("This OTP has been locked due to too many failed attempts. Please request a new one.", 0, ErrorCodes.OtpLocked);
             }
 
             // 3. Check if OTP has expired
             if (otp.ExpiresAt < DateTime.UtcNow)
             {
                 _logger.LogInformation("OTP {OtpId} has expired", otp.Id);
-                return ValidateOtpResult.Fail("This OTP has expired. Please request a new one.");
+                return ValidateOtpResult.Fail("This OTP has expired. Please request a new one.", 0, ErrorCodes.OtpExpired);
             }
 
             // 4. Validate OTP code
@@ -207,7 +208,7 @@ public class OtpService : IOtpService
                     ? "Too many failed attempts. This OTP has been locked. Please request a new one."
                     : $"Invalid OTP. You have {remainingAttempts} attempt(s) remaining.";
 
-                return ValidateOtpResult.Fail(message, remainingAttempts);
+                return ValidateOtpResult.Fail(message, remainingAttempts, otp.IsLocked ? ErrorCodes.OtpLocked : ErrorCodes.OtpInvalid);
             }
         }
         catch (Exception ex)

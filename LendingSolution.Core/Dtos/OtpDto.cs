@@ -210,12 +210,17 @@ public class ValidateOtpResult
     /// Remaining attempts before lockout
     /// </summary>
     public int? RemainingAttempts { get; set; }
+
+    /// <summary>
+    /// Why validation failed (an <c>ErrorCodes.Otp*</c> value); null on success or an internal error
+    /// </summary>
+    public string? ErrorCode { get; set; }
     
     public static ValidateOtpResult Succeed(Guid otpId)
         => new() { Success = true, OtpId = otpId };
     
-    public static ValidateOtpResult Fail(string errorMessage, int? remainingAttempts = null)
-        => new() { Success = false, ErrorMessage = errorMessage, RemainingAttempts = remainingAttempts };
+    public static ValidateOtpResult Fail(string errorMessage, int? remainingAttempts = null, string? errorCode = null)
+        => new() { Success = false, ErrorMessage = errorMessage, RemainingAttempts = remainingAttempts, ErrorCode = errorCode };
 }
 
 /// <summary>

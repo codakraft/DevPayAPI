@@ -1140,6 +1140,7 @@ public class AuthService(
             SenderName = "DevPay Admin",
             CustomPurpose = "Admin Login Verification",
             ExpiryMinutesOverride = 5,
+            MaxAttemptsOverride = AdminOtpMaxAttempts,
             CreatedBy = "System"
         };
 
@@ -1248,11 +1249,13 @@ public class AuthService(
                 errorMessage: otpResult.ErrorMessage
             );
             
-            var errorMessage = otpResult.RemainingAttempts.HasValue 
-                ? $"Invalid OTP. {otpResult.RemainingAttempts} attempts remaining."
-                : "Invalid OTP.";
-            
-            throw new AppException(errorMessage, 400);
+            if (otpResult.ErrorCode is ErrorCodes.OtpLocked or ErrorCodes.OtpExpired)
+            {
+                // This code can't be used any more; a new one only comes from logging in again
+                await _mfaSessionRepository.DeleteAsync(request.SessionId);
+            }
+
+            throw OtpFailure(otpResult, "Please log in again to get a new code.");
         }
 
         // Get user
@@ -1302,6 +1305,34 @@ public class AuthService(
                 PhoneNumber = user.PhoneNumber,
                 CompanyId = user.CompanyId
             }
+        };
+    }
+
+    /// <summary>
+    /// Wrong codes allowed on admin OTPs (login and password reset) before the code locks
+    /// </summary>
+    private const int AdminOtpMaxAttempts = 3;
+
+    /// <summary>
+    /// Builds the error for a failed admin OTP check. Every failure carries a code and
+    /// <c>data.remainingAttempts</c> so clients get the same shape each time.
+    /// </summary>
+    /// <param name="newCodeHint">How the user gets a new code, appended when this one is unusable</param>
+    private static AppException OtpFailure(ValidateOtpResult result, string newCodeHint)
+    {
+        var remaining = Math.Max(result.RemainingAttempts ?? 0, 0);
+        var details = new { remainingAttempts = remaining };
+
+        return result.ErrorCode switch
+        {
+            ErrorCodes.OtpInvalid => new AppException(
+                $"Invalid OTP. {remaining} {(remaining == 1 ? "attempt" : "attempts")} remaining.",
+                400, ErrorCodes.OtpInvalid, details),
+            ErrorCodes.OtpLocked => new AppException(
+                $"Too many failed attempts. {newCodeHint}", 400, ErrorCodes.OtpLocked, details),
+            ErrorCodes.OtpExpired => new AppException(
+                $"This code has expired or is no longer valid. {newCodeHint}", 400, ErrorCodes.OtpExpired, details),
+            _ => new AppException("Could not verify the code. Please try again.", 500)
         };
     }
 
@@ -1486,6 +1517,129 @@ public class AuthService(
         // revoke refresh tokens too so other devices are signed out, then issue a new pair for this one.
         await _tokenService.RevokeAllUserTokensAsync(user.Id, user.Id, "Password changed");
         return await _tokenService.GenerateTokenWithRefreshAsync(user);
+    }
+
+    /// <summary>
+    /// Emails a password reset code to an active user. Returns normally whether or not the
+    /// email belongs to anyone, so the endpoint can't be used to discover accounts.
+    /// </summary>
+    public async Task RequestAdminPasswordResetAsync(string email)
+    {
+        var user = await _userManager.FindByEmailAsync(email);
+        if (user is null || !user.IsActive)
+        {
+            await auditService.LogAsync(
+                action: "PasswordResetRequestIgnored",
+                category: "Security",
+                userEmail: email,
+                details: $"Password reset requested for {email}: no active account",
+                isSuccess: false,
+                errorMessage: user is null ? "No account" : "Account is deactivated"
+            );
+            return;
+        }
+
+        var otpResult = await _otpService.GenerateAndSendOtpAsync(new GenerateOtpRequest
+        {
+            Type = OtpType.PasswordReset,
+            RecipientIdentifier = user.Email!,
+            DeliveryChannel = NotificationChannel.Email,
+            SenderName = "DevPay Admin",
+            MaxAttemptsOverride = AdminOtpMaxAttempts,
+            CreatedBy = "System"
+        });
+
+        // A failure (rate limit, delivery) is logged but not returned: telling the caller would
+        // reveal that the email has an account
+        await auditService.LogAsync(
+            action: otpResult.Success ? "PasswordResetRequested" : "PasswordResetOtpFailed",
+            category: "Security",
+            userId: user.Id,
+            userEmail: user.Email,
+            details: otpResult.Success
+                ? $"Password reset code sent to {user.Email}"
+                : $"Failed to send password reset code to {user.Email}",
+            isSuccess: otpResult.Success,
+            errorMessage: otpResult.ErrorMessage
+        );
+    }
+
+    /// <summary>
+    /// Sets a new password using an emailed reset code, clears the first-login flag and
+    /// signs the user out of every session.
+    /// </summary>
+    public async Task ResetAdminPasswordAsync(AdminResetPasswordRequestDto body)
+    {
+        var user = await _userManager.FindByEmailAsync(body.Email);
+
+        // Check the password rules before using up the code, so a weak password doesn't cost a code.
+        // This runs for unknown emails too, so the error doesn't reveal whether an account exists.
+        var passwordErrors = new List<string>();
+        var userForRules = user ?? new ApplicationUser { FirstName = string.Empty, LastName = string.Empty, Email = body.Email };
+        foreach (var validator in _userManager.PasswordValidators)
+        {
+            var check = await validator.ValidateAsync(_userManager, userForRules, body.NewPassword);
+            if (!check.Succeeded)
+            {
+                passwordErrors.AddRange(check.Errors.Select(e => e.Description));
+            }
+        }
+        if (passwordErrors.Count > 0)
+        {
+            throw new AppException("Failed to reset password: " + string.Join(", ", passwordErrors), 400);
+        }
+
+        if (user is null || !user.IsActive)
+        {
+            // Same response as a code that was never issued
+            throw OtpFailure(
+                ValidateOtpResult.Fail("No active account", 0, ErrorCodes.OtpExpired),
+                "Please request a new code.");
+        }
+
+        var otpResult = await _otpService.ValidateOtpAsync(new ValidateOtpRequest
+        {
+            Type = OtpType.PasswordReset,
+            RecipientIdentifier = user.Email!,
+            Code = body.Otp
+        });
+
+        if (!otpResult.Success)
+        {
+            await auditService.LogAsync(
+                action: "PasswordResetFailed",
+                category: "Security",
+                userId: user.Id,
+                userEmail: user.Email,
+                details: $"Invalid password reset code for {user.Email}",
+                isSuccess: false,
+                errorMessage: otpResult.ErrorMessage
+            );
+            throw OtpFailure(otpResult, "Please request a new code.");
+        }
+
+        // The emailed code is the proof of ownership; Identity's reset token is only the mechanism
+        user.RequiresPasswordChange = false;
+        var resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);
+        var result = await _userManager.ResetPasswordAsync(user, resetToken, body.NewPassword);
+        if (!result.Succeeded)
+        {
+            throw new AppException(
+                "Failed to reset password: " + string.Join(", ", result.Errors.Select(e => e.Description)), 400);
+        }
+
+        // ResetPasswordAsync rotated the security stamp, so access tokens are already dead;
+        // revoke refresh tokens too so every device has to log in again
+        await _tokenService.RevokeAllUserTokensAsync(user.Id, user.Id, "Password reset");
+
+        await auditService.LogAsync(
+            action: "PasswordReset",
+            category: "Security",
+            userId: user.Id,
+            userEmail: user.Email,
+            companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
+            details: $"Password reset with emailed code for {user.Email}"
+        );
     }
 }
 

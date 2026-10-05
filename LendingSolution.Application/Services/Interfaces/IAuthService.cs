@@ -31,4 +31,6 @@ public interface IAuthService
 
     // Password management
     Task<TokenResponseDto> ChangePasswordAsync(ChangePasswordRequestDto body, string userId);
+    Task RequestAdminPasswordResetAsync(string email);
+    Task ResetAdminPasswordAsync(AdminResetPasswordRequestDto body);
 }

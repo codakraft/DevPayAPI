@@ -2,7 +2,8 @@ using LendingSolution.API.Auth;
 using LendingSolution.Core.Auth;
 using Microsoft.AspNetCore.Mvc;
 using LendingSolution.Application.Services.Interfaces;
-using LendingSolution.Core.Models;
+using LendingSolution.Core.Dtos;
+using LendingSolution.Core.Dtos.Response;
 using Asp.Versioning;
 
 namespace LendingSolution.API.Controllers;
@@ -24,7 +25,7 @@ public class AuditController : ControllerBase
     /// Get audit logs with optional filters
     /// </summary>
     [HttpGet]
-    public async Task<ActionResult<List<AuditLog>>> GetLogs(
+    public async Task<ActionResult<ApiResponse<PagedAuditLogListDto>>> GetLogs(
         [FromQuery] string? category = null,
         [FromQuery] Guid? companyId = null,
         [FromQuery] DateTime? fromDate = null,
@@ -42,7 +43,10 @@ public class AuditController : ControllerBase
             }
         }
 
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
         var logs = await _auditService.GetLogsAsync(category, companyId, fromDate, toDate, page, pageSize);
-        return Ok(logs);
+        return Ok(ApiResponse.Ok("Audit logs retrieved successfully", logs));
     }
 }

@@ -16,6 +16,12 @@ public class ApiResponse
         Code = code;
         return this;
     }
+
+    public ApiResponse WithData(object? data)
+    {
+        Data = data;
+        return this;
+    }
     public static ApiResponse Ok(string message) => new()
     {
         Success = true,
