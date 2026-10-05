@@ -59,11 +59,57 @@ public class AuthController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode).WithData(ex.Details));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error occurred during OTP verification.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    /// <summary>
+    /// Step 1 of resetting a forgotten password: emails a 6-digit reset code.
+    /// Always returns the same response so it can't be used to discover accounts.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPassword([FromBody] AdminForgotPasswordRequestDto body)
+    {
+        try
+        {
+            await _authService.RequestAdminPasswordResetAsync(body.Email);
+            return Ok(ApiResponse.Ok("If an account exists for this email, a reset code has been sent."));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while requesting a password reset.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    /// <summary>
+    /// Step 2 of resetting a forgotten password: checks the emailed code and sets the new password.
+    /// Signs the user out everywhere; they log in again with the new password.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword([FromBody] AdminResetPasswordRequestDto body)
+    {
+        try
+        {
+            await _authService.ResetAdminPasswordAsync(body);
+            _logger.LogInformation("Password reset for {Email}", body.Email);
+            return Ok(ApiResponse.Ok("Password reset successfully. Please log in with your new password."));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode).WithData(ex.Details));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while resetting password.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }

@@ -1,4 +1,5 @@
 using LendingSolution.Application.Services.Interfaces;
+using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Models;
 using LendingSolution.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -44,7 +45,7 @@ public class AuditService : IAuditService
         await _context.SaveChangesAsync();
     }
 
-    public async Task<List<AuditLog>> GetLogsAsync(string? category = null, Guid? companyId = null, 
+    public async Task<PagedAuditLogListDto> GetLogsAsync(string? category = null, Guid? companyId = null, 
         DateTime? fromDate = null, DateTime? toDate = null, int page = 1, int pageSize = 50)
     {
         var query = _context.AuditLogs.AsQueryable();
@@ -61,10 +62,23 @@ public class AuditService : IAuditService
         if (toDate.HasValue)
             query = query.Where(a => a.Timestamp <= toDate.Value);
 
-        return await query
+        var totalCount = await query.CountAsync();
+        var logs = await query
             .OrderByDescending(a => a.Timestamp)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
+
+        var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+        return new PagedAuditLogListDto
+        {
+            Logs = logs,
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize,
+            TotalPages = totalPages,
+            HasNextPage = page < totalPages,
+            HasPreviousPage = page > 1
+        };
     }
 }

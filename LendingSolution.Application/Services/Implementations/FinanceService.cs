@@ -26,58 +26,58 @@ public class FinanceService(
     private readonly ApplicationDbContext _db = db;
     private readonly ILogger<FinanceService> _logger = logger;
 
-    public async Task<List<DisbursementDto>> GetAllDisbursementsAsync()
+    public async Task<PagedDisbursementListDto> GetDisbursementsAsync(Guid? companyId, int page, int pageSize)
     {
-        var disbursements = await _disbursementRepository.GetAllDisbursements();
-        var disbursementDtos = disbursements.Select(d => new DisbursementDto
-        {
-            Id = d.Id.ToString(),
-            LoanId = d.LoanId,
-            Amount = d.Amount,
-            Status = d.Status,
-            AccountDetails = d.AccountDetails,
-            DisbursementMethod = d.DisbursementMethod,
-            RequestedAt = d.RequestedAt,
-            ProcessedAt = d.ProcessedAt,
-            ProcessedBy = d.ProcessedBy,
-            Notes = d.Notes
-        }).ToList();
+        var query = _db.Disbursements.AsNoTracking().OrderByDescending(d => d.CreatedAt);
 
-        return disbursementDtos;
-    }
+        int totalCount;
+        List<Disbursement> pageItems;
 
-    public async Task<List<DisbursementDto>> GetCompanyDisbursementsAsync(Guid companyId)
-    {
-        var disbursements = await _disbursementRepository.GetAllDisbursements();
-        
-        // Filter disbursements by company through loan relationship
-        var companyDisbursements = new List<DisbursementDto>();
-        
-        foreach (var d in disbursements)
+        if (companyId.HasValue)
         {
-            if (Guid.TryParse(d.LoanId, out var loanId))
-            {
-                var loan = await _loanRepository.GetLoanById(loanId);
-                if (loan != null && loan.CompanyId == companyId)
-                {
-                    companyDisbursements.Add(new DisbursementDto
-                    {
-                        Id = d.Id.ToString(),
-                        LoanId = d.LoanId,
-                        Amount = d.Amount,
-                        Status = d.Status,
-                        AccountDetails = d.AccountDetails,
-                        DisbursementMethod = d.DisbursementMethod,
-                        RequestedAt = d.RequestedAt,
-                        ProcessedAt = d.ProcessedAt,
-                        ProcessedBy = d.ProcessedBy,
-                        Notes = d.Notes
-                    });
-                }
-            }
+            // Disbursement.LoanId is a string, so match it to the company's loans as GUIDs in memory
+            var companyLoanIds = (await _db.Loans
+                    .Where(l => l.CompanyId == companyId.Value)
+                    .Select(l => l.Id)
+                    .ToListAsync())
+                .ToHashSet();
+
+            var companyDisbursements = (await query.ToListAsync())
+                .Where(d => Guid.TryParse(d.LoanId, out var loanId) && companyLoanIds.Contains(loanId))
+                .ToList();
+
+            totalCount = companyDisbursements.Count;
+            pageItems = companyDisbursements.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+        }
+        else
+        {
+            totalCount = await query.CountAsync();
+            pageItems = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
         }
 
-        return companyDisbursements;
+        var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+        return new PagedDisbursementListDto
+        {
+            Disbursements = pageItems.Select(d => new DisbursementDto
+            {
+                Id = d.Id.ToString(),
+                LoanId = d.LoanId,
+                Amount = d.Amount,
+                Status = d.Status,
+                AccountDetails = d.AccountDetails,
+                DisbursementMethod = d.DisbursementMethod,
+                RequestedAt = d.RequestedAt,
+                ProcessedAt = d.ProcessedAt,
+                ProcessedBy = d.ProcessedBy,
+                Notes = d.Notes
+            }).ToList(),
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize,
+            TotalPages = totalPages,
+            HasNextPage = page < totalPages,
+            HasPreviousPage = page > 1
+        };
     }
 
     public async Task<PagedRepaymentDto> GetAllRepaymentsAsync(RepaymentFilterDto filters)
