@@ -4,6 +4,7 @@ using Asp.Versioning;
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Dtos.Response;
+using LendingSolution.Application.Exceptions;
 using LendingSolution.Core.Settings;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -20,17 +21,23 @@ public class WebhookController : Controller
     private readonly ILoanService _loanService;
     private readonly IMonoService _monoService;
     private readonly MonoSettings _monoSettings;
+    private readonly IWalletService _walletService;
+    private readonly PaystackSettings _paystackSettings;
     private readonly ILogger<WebhookController> _logger;
 
     public WebhookController(
         ILoanService loanService,
         IMonoService monoService,
         IOptions<MonoSettings> monoSettings,
+        IWalletService walletService,
+        IOptions<PaystackSettings> paystackSettings,
         ILogger<WebhookController> logger)
     {
         _loanService = loanService;
         _monoService = monoService;
         _monoSettings = monoSettings.Value;
+        _walletService = walletService;
+        _paystackSettings = paystackSettings.Value;
         _logger = logger;
     }
 
@@ -148,6 +155,107 @@ public class WebhookController : Controller
             _logger.LogError(ex, "Error processing Mono webhook notification");
             return StatusCode(500, ApiResponse.Fail("An error occurred while processing the webhook"));
         }
+    }
+
+    /// <summary>
+    /// Webhook endpoint for Paystack events. Register the full public URL of this endpoint
+    /// (e.g. https://your-domain.com/api/v1/webhooks/paystack) on the Paystack dashboard
+    /// (Settings → API Keys &amp; Webhooks), separately for test and live mode. Paystack signs each
+    /// request with an HMAC-SHA512 of the raw body, keyed with the account's secret key.
+    /// <c>charge.success</c> completes the matching wallet funding, so a payment is credited even
+    /// if the user never returns to the app. Crediting is idempotent, so retries and the
+    /// /payment-success page racing this webhook can't credit twice.
+    /// </summary>
+    [HttpPost("paystack")]
+    public async Task<IActionResult> PaystackWebhook([FromHeader(Name = "x-paystack-signature")] string? signature)
+    {
+        byte[] body;
+        using (var buffer = new MemoryStream())
+        {
+            await Request.Body.CopyToAsync(buffer);
+            body = buffer.ToArray();
+        }
+
+        if (!IsValidPaystackSignature(body, signature))
+        {
+            _logger.LogWarning("Rejected Paystack webhook: missing or invalid x-paystack-signature header");
+            return Unauthorized(ApiResponse.Fail("Invalid webhook signature"));
+        }
+
+        string? eventName = null;
+        string? reference = null;
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(body);
+            var root = document.RootElement;
+            if (root.TryGetProperty("event", out var eventElement))
+            {
+                eventName = eventElement.GetString();
+            }
+            if (root.TryGetProperty("data", out var data) && data.TryGetProperty("reference", out var referenceElement))
+            {
+                reference = referenceElement.GetString();
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            _logger.LogWarning("Received Paystack webhook with an unreadable body");
+            return BadRequest(ApiResponse.Fail("Invalid webhook payload"));
+        }
+
+        _logger.LogInformation("Received Paystack webhook. Event: {Event}, Reference: {Reference}", eventName, reference);
+
+        if (eventName != "charge.success" || string.IsNullOrEmpty(reference))
+        {
+            // Acknowledge events we don't act on so Paystack stops resending them
+            return Ok(ApiResponse.Ok("Webhook received"));
+        }
+
+        try
+        {
+            // System completion: no company restriction. It re-verifies with Paystack's API and
+            // checks the amount, so it doesn't rely on the webhook body alone.
+            var result = await _walletService.CompleteWalletFundingAsync(reference, callerCompanyId: null, userId: null);
+            _logger.LogInformation("Paystack webhook completed funding {Reference}: already completed = {AlreadyCompleted}",
+                reference, result.AlreadyCompleted);
+        }
+        catch (AppException ex) when (ex.StatusCode < 500)
+        {
+            // Not a wallet funding we can complete (unknown reference, pre-status funding, amount
+            // mismatch, ...). Retrying won't change that, so acknowledge it.
+            _logger.LogWarning("Paystack webhook for {Reference} not applied: {Message}", reference, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            // Transient (e.g. Paystack verify or the database unavailable): a non-200 makes Paystack retry
+            _logger.LogError(ex, "Error processing Paystack webhook for {Reference}", reference);
+            return StatusCode(500, ApiResponse.Fail("An error occurred while processing the webhook"));
+        }
+
+        return Ok(ApiResponse.Ok("Webhook received"));
+    }
+
+    /// <summary>
+    /// Checks Paystack's <c>x-paystack-signature</c>: the hex HMAC-SHA512 of the raw body, keyed
+    /// with the secret key. Compared in constant time.
+    /// </summary>
+    private bool IsValidPaystackSignature(byte[] body, string? signature)
+    {
+        var secretKey = _paystackSettings.SecretKey;
+        if (string.IsNullOrEmpty(secretKey))
+        {
+            _logger.LogError("Paystack SecretKey is not configured; rejecting webhook.");
+            return false;
+        }
+
+        if (string.IsNullOrEmpty(signature))
+            return false;
+
+        var expected = Convert.ToHexString(HMACSHA512.HashData(Encoding.UTF8.GetBytes(secretKey), body)).ToLowerInvariant();
+
+        return CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(signature.Trim().ToLowerInvariant()),
+            Encoding.UTF8.GetBytes(expected));
     }
 
     /// <summary>

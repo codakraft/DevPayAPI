@@ -30,6 +30,9 @@ public class WalletTransactionDto
     public string? ReferenceId { get; set; }
     public string? InitiatedBy { get; set; }
     public string? PaystackReference { get; set; }
+
+    /// <summary>Pending, Completed or Failed for Paystack fundings; null for other transactions</summary>
+    public string? Status { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 
@@ -52,6 +55,38 @@ public class PaystackInitializationDto
     public bool Status { get; set; }
     public string Message { get; set; } = string.Empty;
     public PaystackAuthorizationData? Data { get; set; }
+}
+
+/// <summary>
+/// What Paystack reports for a transaction when it is verified
+/// </summary>
+public class PaystackVerificationResult
+{
+    /// <summary>False when Paystack couldn't be reached or didn't recognise the reference</summary>
+    public bool Verified { get; set; }
+
+    /// <summary>Paystack's transaction status: success, failed, abandoned, ...</summary>
+    public string? Status { get; set; }
+
+    /// <summary>Amount paid, in kobo</summary>
+    public long AmountKobo { get; set; }
+    public string? Currency { get; set; }
+}
+
+/// <summary>
+/// Result of completing a Paystack wallet funding
+/// </summary>
+public class WalletFundingResultDto
+{
+    /// <summary>Paystack's transaction status; "success" when the wallet was credited</summary>
+    public string TransactionStatus { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+
+    /// <summary>Wallet balance after this funding</summary>
+    public decimal Balance { get; set; }
+
+    /// <summary>True when this reference had already been credited; nothing was credited again</summary>
+    public bool AlreadyCompleted { get; set; }
 }
 
 public class PaystackAuthorizationData
