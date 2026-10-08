@@ -253,11 +253,14 @@ public class OtpService : IOtpService
                 CompanyId = request.CompanyId ?? Guid.Empty,
                 EmailAddress = request.Type == OtpType.EmailVerification || request.DeliveryChannel != NotificationChannel.SMS 
                     ? request.RecipientIdentifier : null,
-                PhoneNumber = request.Type == OtpType.PhoneVerification || request.DeliveryChannel != NotificationChannel.SMS 
+                PhoneNumber = request.Type == OtpType.PhoneVerification || request.DeliveryChannel != NotificationChannel.Email
                     ? request.RecipientIdentifier : null,
                 Channel = request.DeliveryChannel ?? otp.DeliveryChannel,
                 Subject = GetOtpSubject(request.Type),
-                Content = FormatOtpMessage(otp.Code, (int)(otp.ExpiresAt - DateTime.UtcNow).TotalMinutes, request.Type, request.SenderName)
+                Content = FormatOtpMessage(otp.Code, (int)(otp.ExpiresAt - DateTime.UtcNow).TotalMinutes, request.Type, request.SenderName),
+                // Without this the email template falls back to Content and keeps only its digits,
+                // so the minutes left are appended to the code (e.g. 6-digit code + "9" minutes = 7 digits)
+                OtpCode = otp.Code
             };
 
             var notificationResult = await _notificationService.SendNotificationAsync(notificationRequest);
