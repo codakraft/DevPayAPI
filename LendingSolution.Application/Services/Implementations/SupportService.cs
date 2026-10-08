@@ -90,9 +90,9 @@ public class SupportService : ISupportService
         };
     }
 
-    public async Task<List<SupportTicketDto>> GetAllTicketsAsync()
+    public async Task<List<SupportTicketDto>> GetAllTicketsAsync(Guid? companyScope = null)
     {
-        var tickets = await _supportTicketRepository.GetAllAsync();
+        var tickets = (await _supportTicketRepository.GetAllAsync()).Where(t => InScope(companyScope, t.CompanyId));
         var ticketDtos = tickets.Select(ticket => new SupportTicketDto
         {
             Id = ticket.Id,
@@ -122,10 +122,10 @@ public class SupportService : ISupportService
         return ticketDtos;
     }
 
-    public async Task<SupportTicketDto> GetTicketByIdAsync(string ticketId)
+    public async Task<SupportTicketDto> GetTicketByIdAsync(string ticketId, Guid? companyScope = null)
     {
         var ticket = await _supportTicketRepository.GetByIdWithCommentsAsync(ticketId);
-        if (ticket == null)
+        if (ticket == null || !InScope(companyScope, ticket.CompanyId))
         {
             throw new AppException("Support ticket not found", 404);
         }
@@ -163,11 +163,11 @@ public class SupportService : ISupportService
         await Task.CompletedTask; // Add await to resolve warning
     }
 
-    public async Task<SupportCommentDto> AddCommentToTicketAsync(string ticketId, AddSupportCommentDto dto, string userId)
+    public async Task<SupportCommentDto> AddCommentToTicketAsync(string ticketId, AddSupportCommentDto dto, string userId, Guid? companyScope = null)
     {
         // Verify ticket exists
         var ticket = await _supportTicketRepository.GetByIdAsync(ticketId);
-        if (ticket == null)
+        if (ticket == null || !InScope(companyScope, ticket.CompanyId))
         {
             throw new AppException("Support ticket not found", 404);
         }
@@ -212,7 +212,7 @@ public class SupportService : ISupportService
         return new List<SupportTicketDto>();
     }
 
-    public async Task<UserAccountSupportDto> GetUserAccountDetailsAsync(string userId)
+    public async Task<UserAccountSupportDto> GetUserAccountDetailsAsync(string userId, Guid? companyScope = null)
     {
         var user = await _userManager.FindByIdAsync(userId);
         if (user == null)
@@ -220,7 +220,13 @@ public class SupportService : ISupportService
             throw new AppException("User not found", 404);
         }
 
-        var userLoans = await _loanRepository.GetLoansByUserIdAsync(userId);
+        var userLoans = (await _loanRepository.GetLoansByUserIdAsync(userId))
+            .Where(l => InScope(companyScope, l.CompanyId))
+            .ToList();
+        if (!UserInScope(companyScope, user, userLoans))
+        {
+            throw new AppException("User not found", 404);
+        }
         var totalLoanAmount = userLoans.Sum(l => l.Amount);
         var activeLoans = userLoans.Where(l => l.Status == Core.Enum.LoanStatus.Approved || 
                                                l.Status == Core.Enum.LoanStatus.Disbursed);
@@ -241,9 +247,22 @@ public class SupportService : ISupportService
         };
     }
 
-    public async Task<object> SearchUsersAsync(string searchTerm)
+    public async Task<object> SearchUsersAsync(string searchTerm, Guid? companyScope = null)
     {
-        var users = await _userManager.Users
+        var query = _userManager.Users.AsQueryable();
+        if (companyScope.HasValue)
+        {
+            // Staff of the company, plus borrowers who have a loan with it
+            var scope = companyScope.Value.ToString();
+            var borrowerIds = (await _loanRepository.GetAllLoansByCompanyId(companyScope.Value))
+                .Where(l => l.UserId != null)
+                .Select(l => l.UserId!)
+                .Distinct()
+                .ToList();
+            query = query.Where(u => u.CompanyId == scope || borrowerIds.Contains(u.Id));
+        }
+
+        var users = await query
             .Where(u => u.Email!.Contains(searchTerm) || 
                        u.FirstName.Contains(searchTerm) || 
                        u.LastName.Contains(searchTerm))
@@ -293,9 +312,11 @@ public class SupportService : ISupportService
         }
     }
 
-    public async Task<List<LoanSupportDto>> GetUserLoansAsync(string userId)
+    public async Task<List<LoanSupportDto>> GetUserLoansAsync(string userId, Guid? companyScope = null)
     {
-        var loans = await _loanRepository.GetLoansByUserIdAsync(userId);
+        var loans = (await _loanRepository.GetLoansByUserIdAsync(userId))
+            .Where(l => InScope(companyScope, l.CompanyId))
+            .ToList();
         var loanSupportDtos = new List<LoanSupportDto>();
 
         foreach (var loan in loans)
@@ -357,9 +378,9 @@ public class SupportService : ISupportService
         };
     }
 
-    public async Task<object> SearchLoansAsync(string searchTerm)
+    public async Task<object> SearchLoansAsync(string searchTerm, Guid? companyScope = null)
     {
-        var allLoans = await _loanRepository.GetAllLoans();
+        var allLoans = (await _loanRepository.GetAllLoans()).Where(l => InScope(companyScope, l.CompanyId));
         var filteredLoans = allLoans
             .Where(l => l.Id.ToString().Contains(searchTerm) || 
                        (l.UserId != null && l.UserId.Contains(searchTerm)) ||
@@ -379,9 +400,9 @@ public class SupportService : ISupportService
         return filteredLoans;
     }
 
-    public async Task<object> GetLoansByStatusAsync(string status)
+    public async Task<object> GetLoansByStatusAsync(string status, Guid? companyScope = null)
     {
-        var allLoans = await _loanRepository.GetAllLoans();
+        var allLoans = (await _loanRepository.GetAllLoans()).Where(l => InScope(companyScope, l.CompanyId));
         var filteredLoans = allLoans
             .Where(l => l.Status.ToString().Equals(status, StringComparison.OrdinalIgnoreCase))
             .ToList();
@@ -389,9 +410,9 @@ public class SupportService : ISupportService
         return filteredLoans;
     }
 
-    public async Task<object> GetOverdueLoansAsync()
+    public async Task<object> GetOverdueLoansAsync(Guid? companyScope = null)
     {
-        var allLoans = await _loanRepository.GetAllLoans();
+        var allLoans = (await _loanRepository.GetAllLoans()).Where(l => InScope(companyScope, l.CompanyId));
         var overdueLoans = allLoans
             .Where(l => l.DueDate.HasValue && l.DueDate < DateTime.UtcNow && 
                        l.Status == Core.Enum.LoanStatus.Approved)
@@ -400,8 +421,13 @@ public class SupportService : ISupportService
         return overdueLoans;
     }
 
-    public async Task<SupportDashboardDto> GetSupportDashboardAsync()
+    public async Task<SupportDashboardDto> GetSupportDashboardAsync(Guid? companyScope = null)
     {
+        if (companyScope.HasValue)
+        {
+            return await GetCompanySupportDashboardAsync(companyScope.Value);
+        }
+
         // Get dashboard statistics from repository
         var allTickets = await _supportTicketRepository.GetAllAsync();
         var totalTickets = allTickets.Count();
@@ -426,9 +452,9 @@ public class SupportService : ISupportService
         };
     }
 
-    public async Task<List<SupportTicketDto>> GetTicketsByStatusAsync(string status)
+    public async Task<List<SupportTicketDto>> GetTicketsByStatusAsync(string status, Guid? companyScope = null)
     {
-        var tickets = await _supportTicketRepository.GetByStatusAsync(status);
+        var tickets = (await _supportTicketRepository.GetByStatusAsync(status)).Where(t => InScope(companyScope, t.CompanyId));
         var ticketDtos = tickets.Select(ticket => new SupportTicketDto
         {
             Id = ticket.Id,
@@ -449,18 +475,52 @@ public class SupportService : ISupportService
         return ticketDtos;
     }
 
-    public async Task<List<SupportTicketDto>> GetTicketsByCategoryAsync(string category)
+    public async Task<List<SupportTicketDto>> GetTicketsByCategoryAsync(string category, Guid? companyScope = null)
     {
-        var tickets = await _supportTicketRepository.GetByCategoryAsync(category);
+        var tickets = (await _supportTicketRepository.GetByCategoryAsync(category)).Where(t => InScope(companyScope, t.CompanyId));
         var ticketDtos = ConvertTicketsToDto(tickets);
         return ticketDtos;
     }
 
-    public async Task<List<SupportTicketDto>> GetTicketsByPriorityAsync(string priority)
+    public async Task<List<SupportTicketDto>> GetTicketsByPriorityAsync(string priority, Guid? companyScope = null)
     {
-        var tickets = await _supportTicketRepository.GetByPriorityAsync(priority);
+        var tickets = (await _supportTicketRepository.GetByPriorityAsync(priority)).Where(t => InScope(companyScope, t.CompanyId));
         var ticketDtos = ConvertTicketsToDto(tickets);
         return ticketDtos;
+    }
+
+    private static bool InScope(Guid? companyScope, Guid companyId) =>
+        companyScope is null || companyScope == companyId;
+
+    /// <summary>
+    /// A user is visible to a company if they are its staff or have a loan with it.
+    /// </summary>
+    private static bool UserInScope(Guid? companyScope, ApplicationUser user, IEnumerable<Loan> loansInScope) =>
+        companyScope is null
+        || user.BelongsToCompany(companyScope.Value)
+        || loansInScope.Any();
+
+    /// <summary>
+    /// Same figures as the platform dashboard, computed over one company's tickets.
+    /// </summary>
+    private async Task<SupportDashboardDto> GetCompanySupportDashboardAsync(Guid companyId)
+    {
+        var tickets = (await _supportTicketRepository.GetByCompanyIdAsync(companyId)).ToList();
+        var resolved = tickets.Where(t => t.ResolvedAt.HasValue).ToList();
+
+        return new SupportDashboardDto
+        {
+            TotalTickets = tickets.Count,
+            OpenTickets = tickets.Count(t => t.Status == "Open"),
+            InProgressTickets = tickets.Count(t => t.Status == "InProgress"),
+            ResolvedTickets = tickets.Count(t => t.Status == "Resolved"),
+            HighPriorityTickets = tickets.Count(t => t.Priority == "High"),
+            CriticalPriorityTickets = tickets.Count(t => t.Priority == "Critical"),
+            AverageResolutionTimeHours = resolved.Count == 0
+                ? 0
+                : resolved.Average(t => (t.ResolvedAt!.Value - t.CreatedAt).TotalHours),
+            RecentTickets = ConvertTicketsToDto(tickets.OrderByDescending(t => t.CreatedAt).Take(5))
+        };
     }
 
     // Helper method to convert tickets to DTOs

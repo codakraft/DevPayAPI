@@ -1,9 +1,12 @@
+using LendingSolution.API.Auth;
 using LendingSolution.Application.Exceptions;
+using LendingSolution.Core.Auth;
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Dtos.Response;
 using LendingSolution.Core.Settings;
 using Asp.Versioning;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -243,6 +246,7 @@ public class MiscController : Controller
     }
 
     [HttpGet("roles")]
+    [HasPermission(Permissions.Users.View)]
     public async Task<IActionResult> GetRoles()
     {
         try
@@ -253,7 +257,7 @@ public class MiscController : Controller
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {

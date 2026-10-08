@@ -68,6 +68,18 @@ public interface IWalletTransactionRepository
     /// Get transaction by Paystack reference
     /// </summary>
     Task<WalletTransaction?> GetTransactionByPaystackReferenceAsync(string paystackReference);
+
+    /// <summary>
+    /// Marks a pending Paystack funding as completed and credits its wallet, atomically and only once.
+    /// Returns the wallet balance after the credit, or null if the funding was no longer pending
+    /// (already completed by another request), in which case nothing is credited.
+    /// </summary>
+    Task<decimal?> CompletePendingFundingAsync(Guid transactionId);
+
+    /// <summary>
+    /// Marks a pending Paystack funding as failed. Does nothing if it is no longer pending.
+    /// </summary>
+    Task MarkFundingFailedAsync(Guid transactionId);
     
     /// <summary>
     /// Get transactions by query parameters

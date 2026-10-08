@@ -17,6 +17,9 @@ namespace LendingSolution.Application.Services.Implementations;
 /// </summary>
 public class EmailService : IEmailService
 {
+    /// <summary>Platform brand shown in email footers and sign-offs.</summary>
+    private const string PlatformName = "Devtage Financial Service";
+
     private readonly EmailSettings _emailSettings;
     private readonly ILogger<EmailService> _logger;
     private readonly IConfiguration _configuration;
@@ -485,7 +488,7 @@ public class EmailService : IEmailService
         </div>
         <div class='footer'>
             <p>This is an automated message, please do not reply.</p>
-            <p>&copy; {DateTime.UtcNow.Year} LendingSolution. All rights reserved.</p>
+            <p>&copy; {DateTime.UtcNow.Year} {PlatformName}. All rights reserved.</p>
         </div>
     </div>
 </body>
@@ -756,7 +759,7 @@ public class EmailService : IEmailService
                     <li>Keep this document for your records</li>
                 </ul>
             </div>
-            " : "") + @"
+            " : "") + $@"
 
             <div class='info-box'>
                 <h3>Important Information</h3>
@@ -769,13 +772,13 @@ public class EmailService : IEmailService
             </div>
 
             <p style='margin-top: 30px; font-size: 15px; color: #4a5568;'>
-                We appreciate your trust in <strong>{companyName}</strong> and look forward to serving you!
+                We appreciate your trust in <strong>{PlatformName}</strong> and look forward to serving you!
             </p>
         </div>
         <div class='footer'>
-            <p><strong>{companyName}</strong> - Powering Your Financial Future</p>
+            <p><strong>{PlatformName}</strong> - Powering Your Financial Future</p>
             <p style='margin-top: 15px;'>This is an automated message. Please do not reply to this email.</p>
-            <p>&copy; {DateTime.UtcNow.Year} {companyName}. All rights reserved.</p>
+            <p>&copy; {DateTime.UtcNow.Year} {PlatformName}. All rights reserved.</p>
         </div>
     </div>
 </body>
@@ -1224,9 +1227,9 @@ public class EmailService : IEmailService
         </div>
         
         <div class='footer'>
-            <p style='font-weight: 700; font-size: 16px;'>Lending Solution Support Team</p>
+            <p style='font-weight: 700; font-size: 16px;'>{PlatformName} Support Team</p>
             <p style='margin-top: 15px;'>This is an automated message regarding your loan application.</p>
-            <p>&copy; {DateTime.UtcNow.Year} Lending Solution. All rights reserved.</p>
+            <p>&copy; {DateTime.UtcNow.Year} {PlatformName}. All rights reserved.</p>
         </div>
     </div>
 </body>

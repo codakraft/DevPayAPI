@@ -831,7 +831,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         // Audit log for offer letter acceptance
         await _auditService.LogAsync(
             action: "OfferLetterAccepted",
-            category: "Loan",
+            category: AuditCategories.Loan,
             userEmail: application.Email,
             entityType: "BorrowerApplication",
             entityId: application.Id.ToString(),
@@ -863,6 +863,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             Purpose = "Salary Loan",
             ProcessingFee = Math.Round(loanPrincipal * (product.ProcessingFeePercent / 100) + product.ProcessingFeeFlat, 2),
             MaintenanceFee = Math.Round(loanPrincipal * (product.MaintenanceFeePercent / 100), 2),
+            LegalFee = Math.Round(legalFee, 2),
             TotalFees = applicableFees,
             DisbursementAmount = disbursementAmount,
             ProductName = product.Name,
@@ -935,7 +936,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
 
             await _auditService.LogAsync(
                 action: "MandateActivated",
-                category: "Loan",
+                category: AuditCategories.Loan,
                 userEmail: application.Email,
                 entityType: "BorrowerApplication",
                 entityId: application.Id.ToString(),
@@ -1235,7 +1236,7 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
         
         await _auditService.LogAsync(
             action: "MandateActivated",
-            category: "Loan",
+            category: AuditCategories.Loan,
             userEmail: application.Email,
             entityType: "BorrowerApplication",
             entityId: application.Id.ToString(),
@@ -1657,6 +1658,66 @@ public class BorrowerOnboardingService : IBorrowerOnboardingService
             // Log the exception and throw a generic error
             throw new AppException("An error occurred while processing Email fee. Please try again.", 500);
         }
+    }
+
+    public async Task RequestResumeOtpAsync(string email)
+    {
+        // Resume is by email only; an application ID must not be enough to trigger or receive a code
+        var application = Guid.TryParse(email, out _) ? null : await _borrowerRepository.GetByEmailAsync(email);
+        if (application == null)
+        {
+            // Same outcome as success so the endpoint can't be used to discover who has applied
+            _logger.LogInformation("Resume OTP requested for an email with no application");
+            return;
+        }
+
+        var otpResult = await _otpService.GenerateAndSendOtpAsync(new GenerateOtpRequest
+        {
+            Type = OtpType.ApplicationResume,
+            RecipientIdentifier = application.Email,
+            CompanyId = application.CompanyId,
+            RelatedEntityId = application.Id,
+            RelatedEntityType = "BorrowerApplication",
+            DeliveryChannel = NotificationChannel.Email,
+            SenderName = application.Company?.Name,
+            CreatedBy = "System"
+        });
+
+        if (!otpResult.Success)
+        {
+            _logger.LogWarning("Failed to send resume OTP for application {ApplicationId}: {Error}",
+                application.Id, otpResult.ErrorMessage);
+            throw new AppException(otpResult.ErrorMessage ?? "Failed to send verification code", 429);
+        }
+    }
+
+    public async Task<BorrowerCurrentStepResponseDto> VerifyResumeOtpAsync(BorrowerCurrentStepRequestDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Otp))
+        {
+            throw new AppException("Verification code is required. Request one with Borrower/resume/request-otp.", 400);
+        }
+
+        var application = Guid.TryParse(request.Email, out _) ? null : await _borrowerRepository.GetByEmailAsync(request.Email);
+        if (application == null)
+        {
+            // Indistinguishable from a wrong code
+            throw new AppException("Invalid or expired verification code", 400);
+        }
+
+        var validateResult = await _otpService.ValidateOtpAsync(new ValidateOtpRequest
+        {
+            Type = OtpType.ApplicationResume,
+            RecipientIdentifier = application.Email,
+            Code = request.Otp
+        });
+
+        if (!validateResult.Success)
+        {
+            throw new AppException(validateResult.ErrorMessage ?? "Invalid or expired verification code", 400);
+        }
+
+        return await GetCurrentStepAsync(new BorrowerCurrentStepRequestDto { Email = application.Email });
     }
 
     public async Task<BorrowerCurrentStepResponseDto> GetCurrentStepAsync(BorrowerCurrentStepRequestDto request)

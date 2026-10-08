@@ -1,4 +1,6 @@
+using LendingSolution.API.Auth;
 using LendingSolution.Application.Exceptions;
+using LendingSolution.Core.Auth;
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Dtos.Response;
@@ -32,7 +34,7 @@ public class AdminController(
     /// <returns>List of all admin roles with their IDs and names</returns>
     // [GET]    /api/admin/roles
     [HttpGet("roles")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HasPermission(Permissions.Users.View)]
     public async Task<IActionResult> GetAllRoles()
     {
         try
@@ -44,7 +46,7 @@ public class AdminController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -53,24 +55,119 @@ public class AdminController(
         }
     }
 
-    // [POST]   /api/admin/users/{id}/assign-role
+    /// <summary>
+    /// Assigns a role to a user. SuperAdmin can assign any role; company Admins can only
+    /// assign company staff roles to non-admin users in their own company.
+    /// </summary>
+    // [POST]   /api/admin/role/assign
     [HttpPost("role/assign")]
+    [HasPermission(Permissions.Users.Manage)]
     public async Task<IActionResult> AssignRole([FromBody] RoleAssignDto body)
     {
         try
         {
-            var result = await _authService.AssignRole(body);
+            var result = await _authService.AssignRole(body, User);
             _logger.LogInformation("Role assigned successfully to user {UserId}", body.UserId);
             return Ok(ApiResponse.Ok("Role assigned successfully", result));
         }
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error occurred while assigning role.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    /// <summary>
+    /// Removes a role from a user. Same scoping rules as role assignment.
+    /// The user's current access tokens stop working immediately.
+    /// </summary>
+    // [POST]   /api/admin/role/remove
+    [HttpPost("role/remove")]
+    [HasPermission(Permissions.Users.Manage)]
+    public async Task<IActionResult> RemoveRole([FromBody] RoleAssignDto body)
+    {
+        try
+        {
+            var result = await _authService.RemoveRole(body, User);
+            _logger.LogInformation("Role removed successfully from user {UserId}", body.UserId);
+            return Ok(ApiResponse.Ok("Role removed successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while removing role.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    /// <summary>
+    /// Deactivates a user: blocks login and signs them out everywhere (access and refresh tokens).
+    /// </summary>
+    // [POST]   /api/admin/users/{userId}/deactivate
+    [HttpPost("users/{userId}/deactivate")]
+    [HasPermission(Permissions.Users.Manage)]
+    public Task<IActionResult> DeactivateUser(string userId) => SetUserActive(userId, false);
+
+    /// <summary>
+    /// Re-activates a previously deactivated user.
+    /// </summary>
+    // [POST]   /api/admin/users/{userId}/activate
+    [HttpPost("users/{userId}/activate")]
+    [HasPermission(Permissions.Users.Manage)]
+    public Task<IActionResult> ActivateUser(string userId) => SetUserActive(userId, true);
+
+    /// <summary>
+    /// Updates a user's first and last name. Same scoping rules as role changes: non-SuperAdmins can
+    /// only edit non-admin users in their own company, and nobody can edit themselves here.
+    /// </summary>
+    // [PUT]    /api/admin/users/{userId}
+    [HttpPut("users/{userId}")]
+    [HasPermission(Permissions.Users.Manage)]
+    public async Task<IActionResult> UpdateUser(string userId, [FromBody] UpdateUserRequestDto body)
+    {
+        try
+        {
+            var result = await _authService.UpdateUserAsync(userId, body, User);
+            _logger.LogInformation("User {UserId} updated", userId);
+            return Ok(ApiResponse.Ok("User updated successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while updating user.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
+    private async Task<IActionResult> SetUserActive(string userId, bool isActive)
+    {
+        try
+        {
+            var result = await _authService.SetUserActiveAsync(userId, isActive, User);
+            _logger.LogInformation("User {UserId} active status set to {IsActive}", userId, isActive);
+            return Ok(ApiResponse.Ok(isActive ? "User activated successfully" : "User deactivated successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while updating user status.");
             return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
         }
     }
@@ -93,7 +190,7 @@ public class AdminController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -121,7 +218,7 @@ public class AdminController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -149,7 +246,7 @@ public class AdminController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -177,7 +274,7 @@ public class AdminController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -206,7 +303,7 @@ public class AdminController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -235,7 +332,7 @@ public class AdminController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {

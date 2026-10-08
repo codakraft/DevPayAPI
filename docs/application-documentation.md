@@ -82,18 +82,81 @@ roles. See [§13](#13-known-issues-and-gotchas) for why that startup call matter
 
 ---
 
-## 3. Roles
+## 3. Roles, permissions and access
 
-Seeded in `Program.cs:98`:
+**Roles** are seeded on startup from `RolePermissions.Defaults`
+(`LendingSolution.Core/Auth/Permissions.cs`):
 
-`SuperAdmin`, `Admin`, `LoanOfficer`, `CollectionsOfficer`, `Underwriter`,
-`SupportAgent`, `Auditor`, `Viewer`
+`SuperAdmin`, `Admin`, `LoanOfficer`, `Underwriter`, `CollectionsOfficer`,
+`FinanceOfficer`, `SupportAgent`, `Auditor`, `Viewer`
 
-Loan actions — approve, reject, process, send offer letter, disburse — are
-restricted to `Admin,SuperAdmin` (`LoanController`). Cross-company visibility is
-`SuperAdmin` only; `Admin` is scoped to its own company. The borrower onboarding
-endpoints are **unauthenticated** — a borrower is not an Identity user, they are
-a `BorrowerApplication` row progressed by OTP.
+**Permissions** are what endpoints actually check, via
+`[HasPermission(Permissions.X.Y)]`. Each role's permissions are synced into the
+Identity role-claims table on startup (`PermissionSeeder`), added to the JWT as
+`permission` claims (`TokenService`), and resolved by `PermissionPolicyProvider`.
+To change what a role can do, edit `RolePermissions.Defaults` and redeploy.
+
+| Permission | Guards |
+|---|---|
+| `loans.view` | loan lists/details, salary history, disbursement list |
+| `loans.manage` | send offer letter, request document re-upload |
+| `loans.approve` | approve / reject / process; Mono BVN/NIN lookups, credit history and analysis |
+| `loans.disburse` | disburse (`/loan/{id}/disburse`, `/finance/disbursements/{loanId}`) |
+| `collections.manage` | stop collection, reconcile; Mono mandate generate / cancel / pause / reinstate / debit |
+| `products.view` / `products.manage` | company loan products |
+| `company.view` / `company.manage` | company dashboard, info, logo |
+| `users.view` / `users.manage` | company users, role assign/remove, activate/deactivate |
+| `finance.view` / `finance.manage` | repayments, finance reports, company wallets (`wallet/*`: view / fund, debit, create) |
+| `audit.view` | audit logs |
+| `support.view` / `support.manage` | support desk |
+
+`SuperAdmin` and `Admin` hold every permission. Platform endpoints remain
+`[Authorize(Roles = "SuperAdmin")]`: companies, settings, cross-company views,
+creating admins, the SuperAdmin wallet, Embedly (`/wallets`), raw Remita direct-debit
+(`/remita/direct-debit`), Mono customer listings, document read/delete, and
+support account actions (`support/users/{id}/actions`).
+
+**Intentionally anonymous:** borrower onboarding (`Borrower/*`), `Document/upload`
+and `upload-multipart` (borrower uploads), webhooks, `Mono/banks`, `Mono/status`.
+
+**Company scoping** is separate from permissions: only `SuperAdmin` crosses
+companies. Everyone else is limited to the `CompanyId` in their token, enforced
+with `TenantAccessExtensions` (`CanAccessCompany`, `CanAccessLoanAsync`,
+`CanAccessMonoMandateAsync`). `SupportService` takes a `companyScope` (null = platform-wide). A loan
+from another company returns 404.
+
+**Who creates whom**
+
+- `POST admin/sa/create`: anonymous only while no SuperAdmin exists (bootstrap),
+  SuperAdmin-only afterwards.
+- `POST admin/sa/admin/create`: SuperAdmin creates a company `Admin`.
+- `POST company/users/create`: `users.manage` creates company staff (staff roles only),
+  with `RequiresPasswordChange = true`.
+- `POST admin/role/assign`, `POST admin/role/remove`,
+  `POST admin/users/{id}/activate|deactivate`, `PUT admin/users/{id}` (first/last name): `users.manage`.
+- `GET company/users/{id}`: `users.view`; other companies' users return 404. Non-SuperAdmins can
+  only manage non-admin users in their own company, only with staff roles, and
+  never themselves.
+
+**Sessions**
+
+- Tokens carry the user's security stamp (`sstamp`). `UserSessionValidator` rejects
+  a token whose stamp has changed or whose user is inactive. Matching lookups are
+  cached 30s; a mismatch is re-checked against the database, so new tokens work
+  immediately. Role changes and deactivation update the stamp; the client then calls
+  `refresh` to get a token with current roles and permissions.
+- `change-password` revokes all of the user's refresh tokens and returns a new token pair.
+- Passwords: 8+ characters with upper, lower, digit and non-alphanumeric (Identity options).
+- Error responses carry a stable `code` (`ErrorCodes`): `PASSWORD_CHANGE_REQUIRED`,
+  `ACCOUNT_DEACTIVATED`, `PERMISSION_DENIED`. Throw `AppException(message, status, code)`
+  to set one.
+- Deactivated users cannot log in or refresh; deactivation also revokes refresh tokens.
+- While `RequiresPasswordChange` is set, the token carries `pwd_change_required`
+  and only `change-password`, `logout` and `refresh` are reachable
+  (`PasswordChangeRequiredFilter`).
+
+The borrower onboarding endpoints are **unauthenticated**: a borrower is not an
+Identity user, they are a `BorrowerApplication` row progressed by OTP.
 
 ---
 
@@ -286,8 +349,27 @@ Validates the mandate OTP via `ValidateMandateAuthorizationAsync`; requires
 ### Supporting endpoints
 
 `resend-step1-email-otp`, `resend-step2-bvn-otp`, `generate-email-otp`,
-`validate-email-otp`, `generate-bvn-otp`, `current-step`, `GET /{emailOrId}`,
-`PUT /update-documents`, `POST /{id}/upload-signed-offer-letter`.
+`validate-email-otp`, `generate-bvn-otp`, `PUT /update-documents`,
+`POST /{id}/upload-signed-offer-letter`.
+
+### Resuming an application
+
+Resuming requires proving control of the email address:
+
+1. `POST /resume/request-otp` `{ email }` emails a code (`OtpType.ApplicationResume`).
+   The response is the same whether or not an application exists, so the endpoint
+   can't be used to find out who has applied. Requests are rate-limited by `OtpService`.
+2. `POST /current-step` `{ email, otp }` validates the code (attempts are capped)
+   and returns the current step, including the application ID the borrower web app
+   uses to continue.
+
+Only an email is accepted; an application ID alone can't trigger or answer a code.
+`GET /{emailOrId}` is SuperAdmin-only.
+
+Mono and Remita calls during onboarding are made in-process by
+`BorrowerOnboardingService` through `IMonoService` / `IRemitaService`, so they are
+not affected by the authorization on the `/Mono/*` and `/remita/direct-debit/*`
+HTTP endpoints.
 
 ---
 
@@ -347,7 +429,7 @@ Pending ──approve──→ Approved ──send offer──→ OfferLetterSen
                                                 Disbursed → Repaid / Overdue
 ```
 
-### Approval — `POST /loan/{id}/approve` (`Admin,SuperAdmin`)
+### Approval — `POST /loan/{id}/approve` (`loans.approve`)
 
 `ApproveLoan` (`LoanService.cs:151`). Rejects if already approved / sent /
 signed, if rejected, or if disbursed. Sets `Approved`, `ApprovedAt`,

@@ -66,9 +66,9 @@ public class ServiceManager(
                     mfaSessionRepository
                 ));
     private readonly Lazy<ITokenService> _tokenService = new Lazy<ITokenService>(() =>
-                new TokenService(userManager, jwtconfig, refreshTokenRepository));
+                new TokenService(userManager, jwtconfig, refreshTokenRepository, roleManager));
     private readonly Lazy<ICompanyService> _companyService = new Lazy<ICompanyService>(() =>
-                new CompanyService(companyRepository, userManager, loanRepository, disbursementRepository, repaymentRepository, walletService));
+                new CompanyService(companyRepository, userManager, loanRepository, disbursementRepository, repaymentRepository, walletService, roleManager));
     private readonly Lazy<ILoanService> _loanService = new Lazy<ILoanService>(() =>
                 new LoanService(
                     userManager,

@@ -5,6 +5,23 @@ public class ApiResponse
     public bool Success { get; set; }
     public string Message { get; set; } = string.Empty;
     public object? Data { get; set; } = null;
+
+    /// <summary>
+    /// Machine-readable error code (see <see cref="ErrorCodes"/>); omitted when not set.
+    /// </summary>
+    public string? Code { get; set; }
+
+    public ApiResponse WithCode(string? code)
+    {
+        Code = code;
+        return this;
+    }
+
+    public ApiResponse WithData(object? data)
+    {
+        Data = data;
+        return this;
+    }
     public static ApiResponse Ok(string message) => new()
     {
         Success = true,

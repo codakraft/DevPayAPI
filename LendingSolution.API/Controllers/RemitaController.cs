@@ -14,7 +14,9 @@ namespace LendingSolution.API.Controllers;
 [ApiController]
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/remita/direct-debit")]
-[Authorize]
+// Raw mandate operations not tied to a loan or company: SuperAdmin only.
+// Company users manage collections through loan/{id}/stop-collection and reconcile.
+[Authorize(Roles = "SuperAdmin")]
 public class RemitaController(
     IRemitaService remitaService,
     ILogger<RemitaController> logger

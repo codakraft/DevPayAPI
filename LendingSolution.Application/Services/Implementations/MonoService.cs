@@ -306,6 +306,14 @@ public class MonoService : IMonoService
         }
     }
 
+    public async Task<Guid?> GetMandateCompanyIdAsync(string mandateId)
+    {
+        var mandate = await _db.MonoMandateReferences
+            .AsNoTracking()
+            .FirstOrDefaultAsync(m => m.MandateId == mandateId);
+        return mandate?.CompanyId;
+    }
+
     public async Task<MonoCancelMandateResponseDto?> CancelMandateAsync(string mandateId, string? userId = null)
     {
         try

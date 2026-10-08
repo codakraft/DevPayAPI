@@ -7,6 +7,7 @@ using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Enum;
 using LendingSolution.Application.Repositories.Interfaces;
 using LendingSolution.Application.Exceptions;
+using System.Security.Claims;
 namespace LendingSolution.Application.Services.Implementations;
 
 public class AuthService(
@@ -60,7 +61,7 @@ public class AuthService(
             // Log failed login attempt
             await auditService.LogAsync(
                 action: "LoginFailed",
-                category: "Security",
+                category: AuditCategories.Security,
                 userEmail: body.Email,
                 details: $"Failed login attempt for {body.Email}",
                 isSuccess: false,
@@ -69,12 +70,14 @@ public class AuthService(
             throw new AppException("Invalid credentials", 401);
         }
 
+        await EnsureActiveAsync(user);
+
         var tokenResponse = await _tokenService.GenerateTokenWithRefreshAsync(user);
 
         // Log successful login
         await auditService.LogAsync(
             action: "LoginSuccessful",
-            category: "Security",
+            category: AuditCategories.Authentication,
             userId: user.Id,
             userEmail: user.Email,
             companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
@@ -111,7 +114,7 @@ public class AuthService(
             // Log failed admin login attempt
             await auditService.LogAsync(
                 action: "AdminLoginFailed",
-                category: "Security",
+                category: AuditCategories.Security,
                 userEmail: body.Email,
                 details: $"Failed admin login attempt for {body.Email}",
                 isSuccess: false,
@@ -120,12 +123,14 @@ public class AuthService(
             throw new AppException("Invalid credentials", 401);
         }
 
+        await EnsureActiveAsync(user);
+
         var tokenResponse = await _tokenService.GenerateTokenWithRefreshAsync(user);
 
         // Log successful admin login
         await auditService.LogAsync(
             action: "AdminLoginSuccessful",
-            category: "Security",
+            category: AuditCategories.Authentication,
             userId: user.Id,
             userEmail: user.Email,
             companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
@@ -210,8 +215,23 @@ public class AuthService(
         return true;
     }
 
-    public async Task<object> CreateSuperAdmin(CreateSuperAdminRequestDto body)
+    public async Task<object> CreateSuperAdmin(CreateSuperAdminRequestDto body, string? callerId, bool callerIsSuperAdmin)
     {
+        // Anonymous creation is only allowed to bootstrap the very first SuperAdmin.
+        // Once one exists, only an authenticated SuperAdmin can create another.
+        if (!callerIsSuperAdmin && await _userRepository.GetUserCountByRoleAsync("SuperAdmin") > 0)
+        {
+            await auditService.LogAsync(
+                action: "SuperAdminCreationDenied",
+                category: AuditCategories.Security,
+                userEmail: body.Email,
+                details: $"Unauthorized attempt to create super admin {body.Email}",
+                isSuccess: false,
+                errorMessage: "SuperAdmin already exists"
+            );
+            throw new AppException("Only a SuperAdmin can create another SuperAdmin", 403);
+        }
+
         var user = new ApplicationUser
         {
             FirstName = body.FirstName,
@@ -229,13 +249,32 @@ public class AuthService(
         }
 
         // Assign SuperAdmin role
-        await _userManager.AddToRoleAsync(user, "SuperAdmin");
+        await AddToRoleOrRollbackAsync(user, "SuperAdmin");
+
+        await auditService.LogAsync(
+            action: "SuperAdminCreated",
+            category: AuditCategories.User,
+            userId: callerId,
+            entityType: "User",
+            entityId: user.Id,
+            details: callerId is null
+                ? $"First super admin created: {user.Email}"
+                : $"New super admin created: {user.Email}"
+        );
 
         return new { userId = user.Id };
     }
 
-    public async Task<object> CreateAdmin(CreateAdminRequestDto body)
+    public async Task<object> CreateAdmin(CreateAdminRequestDto body, string callerId)
     {
+        _ = await _companyRepository.GetCompanyById(body.CompanyId)
+            ?? throw new AppException("Company not found", 404);
+
+        if (await _userManager.FindByEmailAsync(body.Email) != null)
+        {
+            throw new AppException($"A user with email '{body.Email}' already exists", 409);
+        }
+
         var user = new ApplicationUser
         {
             FirstName = body.FirstName,
@@ -253,14 +292,13 @@ public class AuthService(
         }
 
         // Assign Admin role
-        await _userManager.AddToRoleAsync(user, "Admin");
+        await AddToRoleOrRollbackAsync(user, "Admin");
 
         // Audit log for admin creation
         await auditService.LogAsync(
             action: "AdminCreated",
-            category: "User",
-            userId: user.Id,
-            userEmail: user.Email,
+            category: AuditCategories.User,
+            userId: callerId,
             entityType: "User",
             entityId: user.Id,
             companyId: body.CompanyId,
@@ -270,42 +308,265 @@ public class AuthService(
         return new { userId = user.Id };
     }
 
-    public Task<object> GetRoles()
+    public async Task<object> GetRoles()
     {
-        var roles = _roleManager.Roles.Select(r => new
+        var roles = _roleManager.Roles.ToList();
+        var result = new List<RoleWithPermissionsDto>();
+        foreach (var role in roles)
         {
-            r.Id,
-            r.Name
-        })
-        .ToList();
+            var claims = await _roleManager.GetClaimsAsync(role);
+            result.Add(new RoleWithPermissionsDto
+            {
+                Id = role.Id,
+                Name = role.Name!,
+                Permissions = claims
+                    .Where(c => c.Type == Core.Auth.Permissions.ClaimType)
+                    .Select(c => c.Value)
+                    .OrderBy(p => p)
+                    .ToList()
+            });
+        }
 
-        return Task.FromResult((object)roles);
+        return result;
     }
 
-    public async Task<object> AssignRole(RoleAssignDto body)
+    public async Task<object> AssignRole(RoleAssignDto body, ClaimsPrincipal caller)
     {
+        var callerId = GetCallerId(caller);
         var user = await _userManager.FindByIdAsync(body.UserId) ?? throw new AppException("User not found", 404);
-        var role = await _roleManager.FindByIdAsync(body.RoleId);
+        var role = await _roleManager.FindByIdAsync(body.RoleId) ?? throw new AppException("Role not found", 404);
 
-        if (role is null)
+        await EnsureCanManageUserAsync(caller, callerId, user);
+        EnsureCanGrantRole(caller, role.Name!);
+
+        if (await _userManager.IsInRoleAsync(user, role.Name!))
         {
-            throw new AppException("Role not found", 404);
+            throw new AppException($"User already has role '{role.Name}'", 409);
         }
 
         var result = await _userManager.AddToRoleAsync(user, role.Name!);
+        if (!result.Succeeded)
+        {
+            throw new AppException(
+                "Failed to assign role: " + string.Join(", ", result.Errors.Select(e => e.Description)), 400);
+        }
+
+        // Invalidate existing access tokens so the new role takes effect on next refresh
+        await _userManager.UpdateSecurityStampAsync(user);
 
         // Audit log for role assignment
         await auditService.LogAsync(
             action: "RoleAssigned",
-            category: "User",
+            category: AuditCategories.Security,
+            userId: callerId,
             entityType: "User",
             entityId: user.Id,
-            userEmail: user.Email,
             companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
             details: $"Role '{role.Name}' assigned to user {user.Email}"
         );
 
-        return result;
+        return new { userId = user.Id, role = role.Name };
+    }
+
+    public async Task<object> RemoveRole(RoleAssignDto body, ClaimsPrincipal caller)
+    {
+        var callerId = GetCallerId(caller);
+        var user = await _userManager.FindByIdAsync(body.UserId) ?? throw new AppException("User not found", 404);
+        var role = await _roleManager.FindByIdAsync(body.RoleId) ?? throw new AppException("Role not found", 404);
+
+        await EnsureCanManageUserAsync(caller, callerId, user);
+        EnsureCanGrantRole(caller, role.Name!);
+
+        if (!await _userManager.IsInRoleAsync(user, role.Name!))
+        {
+            throw new AppException($"User does not have role '{role.Name}'", 404);
+        }
+
+        if (role.Name == "SuperAdmin" && await _userRepository.GetUserCountByRoleAsync("SuperAdmin") <= 1)
+        {
+            throw new AppException("Cannot remove the last SuperAdmin", 400);
+        }
+
+        var result = await _userManager.RemoveFromRoleAsync(user, role.Name!);
+        if (!result.Succeeded)
+        {
+            throw new AppException(
+                "Failed to remove role: " + string.Join(", ", result.Errors.Select(e => e.Description)), 400);
+        }
+
+        // Invalidate existing access tokens so the removed role stops working immediately
+        await _userManager.UpdateSecurityStampAsync(user);
+
+        await auditService.LogAsync(
+            action: "RoleRemoved",
+            category: AuditCategories.Security,
+            userId: callerId,
+            entityType: "User",
+            entityId: user.Id,
+            companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
+            details: $"Role '{role.Name}' removed from user {user.Email}"
+        );
+
+        return new { userId = user.Id, role = role.Name };
+    }
+
+    public async Task<object> SetUserActiveAsync(string userId, bool isActive, ClaimsPrincipal caller)
+    {
+        var callerId = GetCallerId(caller);
+        var user = await _userManager.FindByIdAsync(userId) ?? throw new AppException("User not found", 404);
+
+        await EnsureCanManageUserAsync(caller, callerId, user);
+
+        if (user.IsActive == isActive)
+        {
+            throw new AppException($"User is already {(isActive ? "active" : "deactivated")}", 409);
+        }
+
+        user.IsActive = isActive;
+        var result = await _userManager.UpdateAsync(user);
+        if (!result.Succeeded)
+        {
+            throw new AppException(
+                "Failed to update user: " + string.Join(", ", result.Errors.Select(e => e.Description)), 400);
+        }
+
+        if (!isActive)
+        {
+            // Kill access tokens (via the stamp) and refresh tokens so the user is signed out everywhere
+            await _userManager.UpdateSecurityStampAsync(user);
+            await _tokenService.RevokeAllUserTokensAsync(user.Id, callerId, "User deactivated");
+        }
+
+        await auditService.LogAsync(
+            action: isActive ? "UserActivated" : "UserDeactivated",
+            category: AuditCategories.Security,
+            userId: callerId,
+            entityType: "User",
+            entityId: user.Id,
+            companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
+            details: $"User {user.Email} {(isActive ? "activated" : "deactivated")}"
+        );
+
+        return new { userId = user.Id, isActive = user.IsActive };
+    }
+
+    public async Task<object> UpdateUserAsync(string userId, UpdateUserRequestDto body, ClaimsPrincipal caller)
+    {
+        var callerId = GetCallerId(caller);
+        var user = await _userManager.FindByIdAsync(userId) ?? throw new AppException("User not found", 404);
+
+        await EnsureCanManageUserAsync(caller, callerId, user);
+
+        var firstName = body.FirstName.Trim();
+        var lastName = body.LastName.Trim();
+        if (firstName.Length == 0 || lastName.Length == 0)
+        {
+            throw new AppException("First name and last name are required", 400);
+        }
+
+        var previousName = $"{user.FirstName} {user.LastName}";
+        user.FirstName = firstName;
+        user.LastName = lastName;
+
+        var result = await _userManager.UpdateAsync(user);
+        if (!result.Succeeded)
+        {
+            throw new AppException(
+                "Failed to update user: " + string.Join(", ", result.Errors.Select(e => e.Description)), 400);
+        }
+
+        await auditService.LogAsync(
+            action: "UserUpdated",
+            category: AuditCategories.User,
+            userId: callerId,
+            entityType: "User",
+            entityId: user.Id,
+            companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
+            details: $"User {user.Email} renamed from '{previousName}' to '{firstName} {lastName}'"
+        );
+
+        return new { userId = user.Id, firstName = user.FirstName, lastName = user.LastName };
+    }
+
+    private static string GetCallerId(ClaimsPrincipal caller) =>
+        caller.FindFirstValue(ClaimTypes.NameIdentifier) ?? throw new AppException("User not authenticated", 401);
+
+    /// <summary>
+    /// Nobody manages their own account; non-SuperAdmins may only manage
+    /// non-admin users in their own company.
+    /// </summary>
+    private async Task EnsureCanManageUserAsync(ClaimsPrincipal caller, string callerId, ApplicationUser target)
+    {
+        if (target.Id == callerId)
+        {
+            throw new AppException("You cannot change your own roles or status", 403);
+        }
+
+        if (caller.IsInRole("SuperAdmin"))
+        {
+            return;
+        }
+
+        var callerCompanyId = caller.FindFirstValue("CompanyId");
+        if (!target.BelongsToCompany(callerCompanyId))
+        {
+            throw new AppException("User does not belong to your company", 403);
+        }
+
+        var targetRoles = await _userManager.GetRolesAsync(target);
+        if (targetRoles.Contains("Admin") || targetRoles.Contains("SuperAdmin"))
+        {
+            throw new AppException("You cannot change roles or status for admin users", 403);
+        }
+    }
+
+    /// <summary>
+    /// Non-SuperAdmins may only grant or remove company staff roles.
+    /// </summary>
+    private static void EnsureCanGrantRole(ClaimsPrincipal caller, string roleName)
+    {
+        if (!caller.IsInRole("SuperAdmin") && !AllowedCompanyRoles.Contains(roleName))
+        {
+            throw new AppException(
+                $"You can only manage these roles: {string.Join(", ", AllowedCompanyRoles)}", 403);
+        }
+    }
+
+    /// <summary>
+    /// Rejects deactivated accounts before any token is issued.
+    /// </summary>
+    private async Task EnsureActiveAsync(ApplicationUser user)
+    {
+        if (user.IsActive)
+        {
+            return;
+        }
+
+        await auditService.LogAsync(
+            action: "LoginBlockedInactive",
+            category: AuditCategories.Security,
+            userId: user.Id,
+            userEmail: user.Email,
+            details: $"Login attempt by deactivated user {user.Email}",
+            isSuccess: false,
+            errorMessage: "Account is deactivated"
+        );
+        throw new AppException("Account is deactivated. Please contact your administrator.", 403, ErrorCodes.AccountDeactivated);
+    }
+
+    /// <summary>
+    /// Adds a role to a newly created user, deleting the user if the assignment fails
+    /// so no role-less accounts are left behind.
+    /// </summary>
+    private async Task AddToRoleOrRollbackAsync(ApplicationUser user, string role)
+    {
+        var roleResult = await _userManager.AddToRoleAsync(user, role);
+        if (!roleResult.Succeeded)
+        {
+            await _userManager.DeleteAsync(user);
+            throw new AppException(
+                "Failed to assign role: " + string.Join(", ", roleResult.Errors.Select(e => e.Description)), 500);
+        }
     }
 
     public async Task<object> RefreshToken(RefreshTokenRequestDto request)
@@ -330,6 +591,14 @@ public class AuthService(
         }
 
         await _tokenService.RevokeAllUserTokensAsync(userId, userId, "User logged out");
+
+        await auditService.LogAsync(
+            action: "Logout",
+            category: AuditCategories.Authentication,
+            userId: userId,
+            details: "Signed out"
+        );
+
         return true;
     }
 
@@ -751,7 +1020,8 @@ public class AuthService(
         // Company filter
         if (!string.IsNullOrEmpty(filter.CompanyId))
         {
-            query = query.Where(u => u.CompanyId == filter.CompanyId);
+            // In-memory list: compare as GUIDs, not case-sensitive strings
+            query = query.Where(u => u.BelongsToCompany(filter.CompanyId));
         }
 
         // Gender filter
@@ -850,7 +1120,7 @@ public class AuthService(
             // Log failed admin login attempt
             await auditService.LogAsync(
                 action: "AdminLoginFailed",
-                category: "Security",
+                category: AuditCategories.Security,
                 userEmail: body.Email,
                 details: $"Failed admin login attempt for {body.Email}",
                 isSuccess: false,
@@ -858,6 +1128,8 @@ public class AuthService(
             );
             throw new AppException("Invalid credentials", 401);
         }
+
+        await EnsureActiveAsync(user);
 
         // Generate session ID
         var sessionId = Guid.NewGuid().ToString();
@@ -872,6 +1144,7 @@ public class AuthService(
             SenderName = "DevPay Admin",
             CustomPurpose = "Admin Login Verification",
             ExpiryMinutesOverride = 5,
+            MaxAttemptsOverride = AdminOtpMaxAttempts,
             CreatedBy = "System"
         };
 
@@ -881,7 +1154,7 @@ public class AuthService(
         {
             await auditService.LogAsync(
                 action: "AdminLoginOtpFailed",
-                category: "Security",
+                category: AuditCategories.Security,
                 userId: user.Id,
                 userEmail: user.Email,
                 details: $"Failed to send OTP to {user.Email}",
@@ -908,7 +1181,7 @@ public class AuthService(
         // Log MFA initiation
         await auditService.LogAsync(
             action: "AdminLoginMfaInitiated",
-            category: "Security",
+            category: AuditCategories.Authentication,
             userId: user.Id,
             userEmail: user.Email,
             details: $"Admin MFA initiated for {user.Email}"
@@ -936,7 +1209,7 @@ public class AuthService(
         {
             await auditService.LogAsync(
                 action: "AdminLoginOtpVerificationFailed",
-                category: "Security",
+                category: AuditCategories.Security,
                 details: $"Invalid session ID: {request.SessionId}",
                 isSuccess: false,
                 errorMessage: "Invalid or expired session"
@@ -950,7 +1223,8 @@ public class AuthService(
             await _mfaSessionRepository.DeleteAsync(request.SessionId);
             await auditService.LogAsync(
                 action: "AdminLoginOtpVerificationFailed",
-                category: "Security",
+                category: AuditCategories.Security,
+                userId: session.UserId,
                 userEmail: session.Email,
                 details: $"Expired session for {session.Email}",
                 isSuccess: false,
@@ -973,18 +1247,21 @@ public class AuthService(
         {
             await auditService.LogAsync(
                 action: "AdminLoginOtpVerificationFailed",
-                category: "Security",
+                category: AuditCategories.Security,
+                userId: session.UserId,
                 userEmail: session.Email,
                 details: $"Invalid OTP for {session.Email}",
                 isSuccess: false,
                 errorMessage: otpResult.ErrorMessage
             );
             
-            var errorMessage = otpResult.RemainingAttempts.HasValue 
-                ? $"Invalid OTP. {otpResult.RemainingAttempts} attempts remaining."
-                : "Invalid OTP.";
-            
-            throw new AppException(errorMessage, 400);
+            if (otpResult.ErrorCode is ErrorCodes.OtpLocked or ErrorCodes.OtpExpired)
+            {
+                // This code can't be used any more; a new one only comes from logging in again
+                await _mfaSessionRepository.DeleteAsync(request.SessionId);
+            }
+
+            throw OtpFailure(otpResult, "Please log in again to get a new code.");
         }
 
         // Get user
@@ -995,6 +1272,12 @@ public class AuthService(
             throw new AppException("User not found", 404);
         }
 
+        if (!user.IsActive)
+        {
+            await _mfaSessionRepository.DeleteAsync(request.SessionId);
+        }
+        await EnsureActiveAsync(user);
+
         // Generate tokens
         var tokenResponse = await _tokenService.GenerateTokenWithRefreshAsync(user);
 
@@ -1004,7 +1287,7 @@ public class AuthService(
         // Log successful admin login
         await auditService.LogAsync(
             action: "AdminLoginSuccessful",
-            category: "Security",
+            category: AuditCategories.Authentication,
             userId: user.Id,
             userEmail: user.Email,
             companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
@@ -1028,6 +1311,34 @@ public class AuthService(
                 PhoneNumber = user.PhoneNumber,
                 CompanyId = user.CompanyId
             }
+        };
+    }
+
+    /// <summary>
+    /// Wrong codes allowed on admin OTPs (login and password reset) before the code locks
+    /// </summary>
+    private const int AdminOtpMaxAttempts = 3;
+
+    /// <summary>
+    /// Builds the error for a failed admin OTP check. Every failure carries a code and
+    /// <c>data.remainingAttempts</c> so clients get the same shape each time.
+    /// </summary>
+    /// <param name="newCodeHint">How the user gets a new code, appended when this one is unusable</param>
+    private static AppException OtpFailure(ValidateOtpResult result, string newCodeHint)
+    {
+        var remaining = Math.Max(result.RemainingAttempts ?? 0, 0);
+        var details = new { remainingAttempts = remaining };
+
+        return result.ErrorCode switch
+        {
+            ErrorCodes.OtpInvalid => new AppException(
+                $"Invalid OTP. {remaining} {(remaining == 1 ? "attempt" : "attempts")} remaining.",
+                400, ErrorCodes.OtpInvalid, details),
+            ErrorCodes.OtpLocked => new AppException(
+                $"Too many failed attempts. {newCodeHint}", 400, ErrorCodes.OtpLocked, details),
+            ErrorCodes.OtpExpired => new AppException(
+                $"This code has expired or is no longer valid. {newCodeHint}", 400, ErrorCodes.OtpExpired, details),
+            _ => new AppException("Could not verify the code. Please try again.", 500)
         };
     }
 
@@ -1056,6 +1367,7 @@ public class AuthService(
     private static readonly HashSet<string> AllowedCompanyRoles = new(StringComparer.OrdinalIgnoreCase)
     {
         "LoanOfficer",
+        "FinanceOfficer",
         "CollectionsOfficer",
         "Underwriter",
         "SupportAgent",
@@ -1132,7 +1444,7 @@ public class AuthService(
         // Audit log
         await auditService.LogAsync(
             action: "CompanyUserCreated",
-            category: "User",
+            category: AuditCategories.User,
             userId: createdByUserId,
             entityType: "User",
             entityId: user.Id,
@@ -1152,9 +1464,10 @@ public class AuthService(
     }
 
     /// <summary>
-    /// Changes user's password and clears the RequiresPasswordChange flag
+    /// Changes user's password and clears the RequiresPasswordChange flag.
+    /// Signs out every existing session and returns a fresh token pair for the caller.
     /// </summary>
-    public async Task ChangePasswordAsync(ChangePasswordRequestDto body, string userId)
+    public async Task<TokenResponseDto> ChangePasswordAsync(ChangePasswordRequestDto body, string userId)
     {
         var user = await _userManager.FindByIdAsync(userId)
             ?? throw new AppException("User not found", 404);
@@ -1165,7 +1478,7 @@ public class AuthService(
         {
             await auditService.LogAsync(
                 action: "PasswordChangeFailed",
-                category: "Security",
+                category: AuditCategories.Security,
                 userId: user.Id,
                 userEmail: user.Email,
                 details: "Password change failed - incorrect current password",
@@ -1199,11 +1512,139 @@ public class AuthService(
         // Audit log
         await auditService.LogAsync(
             action: "PasswordChanged",
-            category: "Security",
+            category: AuditCategories.Security,
             userId: user.Id,
             userEmail: user.Email,
             companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
             details: $"Password changed successfully for {user.Email}"
+        );
+
+        // The password change rotated the security stamp, so existing access tokens are already dead;
+        // revoke refresh tokens too so other devices are signed out, then issue a new pair for this one.
+        await _tokenService.RevokeAllUserTokensAsync(user.Id, user.Id, "Password changed");
+        return await _tokenService.GenerateTokenWithRefreshAsync(user);
+    }
+
+    /// <summary>
+    /// Emails a password reset code to an active user. Returns normally whether or not the
+    /// email belongs to anyone, so the endpoint can't be used to discover accounts.
+    /// </summary>
+    public async Task RequestAdminPasswordResetAsync(string email)
+    {
+        var user = await _userManager.FindByEmailAsync(email);
+        if (user is null || !user.IsActive)
+        {
+            await auditService.LogAsync(
+                action: "PasswordResetRequestIgnored",
+                category: AuditCategories.Security,
+                userEmail: email,
+                details: $"Password reset requested for {email}: no active account",
+                isSuccess: false,
+                errorMessage: user is null ? "No account" : "Account is deactivated"
+            );
+            return;
+        }
+
+        var otpResult = await _otpService.GenerateAndSendOtpAsync(new GenerateOtpRequest
+        {
+            Type = OtpType.PasswordReset,
+            RecipientIdentifier = user.Email!,
+            DeliveryChannel = NotificationChannel.Email,
+            SenderName = "DevPay Admin",
+            MaxAttemptsOverride = AdminOtpMaxAttempts,
+            CreatedBy = "System"
+        });
+
+        // A failure (rate limit, delivery) is logged but not returned: telling the caller would
+        // reveal that the email has an account
+        await auditService.LogAsync(
+            action: otpResult.Success ? "PasswordResetRequested" : "PasswordResetOtpFailed",
+            category: AuditCategories.Security,
+            userId: user.Id,
+            userEmail: user.Email,
+            details: otpResult.Success
+                ? $"Password reset code sent to {user.Email}"
+                : $"Failed to send password reset code to {user.Email}",
+            isSuccess: otpResult.Success,
+            errorMessage: otpResult.ErrorMessage
+        );
+    }
+
+    /// <summary>
+    /// Sets a new password using an emailed reset code, clears the first-login flag and
+    /// signs the user out of every session.
+    /// </summary>
+    public async Task ResetAdminPasswordAsync(AdminResetPasswordRequestDto body)
+    {
+        var user = await _userManager.FindByEmailAsync(body.Email);
+
+        // Check the password rules before using up the code, so a weak password doesn't cost a code.
+        // This runs for unknown emails too, so the error doesn't reveal whether an account exists.
+        var passwordErrors = new List<string>();
+        var userForRules = user ?? new ApplicationUser { FirstName = string.Empty, LastName = string.Empty, Email = body.Email };
+        foreach (var validator in _userManager.PasswordValidators)
+        {
+            var check = await validator.ValidateAsync(_userManager, userForRules, body.NewPassword);
+            if (!check.Succeeded)
+            {
+                passwordErrors.AddRange(check.Errors.Select(e => e.Description));
+            }
+        }
+        if (passwordErrors.Count > 0)
+        {
+            throw new AppException("Failed to reset password: " + string.Join(", ", passwordErrors), 400);
+        }
+
+        if (user is null || !user.IsActive)
+        {
+            // Same response as a code that was never issued
+            throw OtpFailure(
+                ValidateOtpResult.Fail("No active account", 0, ErrorCodes.OtpExpired),
+                "Please request a new code.");
+        }
+
+        var otpResult = await _otpService.ValidateOtpAsync(new ValidateOtpRequest
+        {
+            Type = OtpType.PasswordReset,
+            RecipientIdentifier = user.Email!,
+            Code = body.Otp
+        });
+
+        if (!otpResult.Success)
+        {
+            await auditService.LogAsync(
+                action: "PasswordResetFailed",
+                category: AuditCategories.Security,
+                userId: user.Id,
+                userEmail: user.Email,
+                details: $"Invalid password reset code for {user.Email}",
+                isSuccess: false,
+                errorMessage: otpResult.ErrorMessage
+            );
+            throw OtpFailure(otpResult, "Please request a new code.");
+        }
+
+        // The emailed code is the proof of ownership; Identity's reset token is only the mechanism
+        user.RequiresPasswordChange = false;
+        var resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);
+        var result = await _userManager.ResetPasswordAsync(user, resetToken, body.NewPassword);
+        if (!result.Succeeded)
+        {
+            throw new AppException(
+                "Failed to reset password: " + string.Join(", ", result.Errors.Select(e => e.Description)), 400);
+        }
+
+        // ResetPasswordAsync rotated the security stamp, so access tokens are already dead;
+        // revoke refresh tokens too so every device has to log in again
+        await _tokenService.RevokeAllUserTokensAsync(user.Id, user.Id, "Password reset");
+
+        await auditService.LogAsync(
+            action: "PasswordReset",
+            category: AuditCategories.Security,
+            userId: user.Id,
+            userEmail: user.Email,
+            companyId: user.CompanyId != null ? Guid.Parse(user.CompanyId) : null,
+            details: $"Password reset with emailed code for {user.Email}"
         );
     }
 }

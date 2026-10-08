@@ -18,6 +18,7 @@ public class CompanyService : ICompanyService
     private readonly IDisbursementRepository _disbursementRepository;
     private readonly IRepaymentRepository _repaymentRepository;
     private readonly IWalletService _walletService;
+    private readonly RoleManager<IdentityRole> _roleManager;
 
     public CompanyService(
         ICompanyRepository companyRepository,
@@ -25,8 +26,10 @@ public class CompanyService : ICompanyService
         ILoanRepository loanRepository,
         IDisbursementRepository disbursementRepository,
         IRepaymentRepository repaymentRepository,
-        IWalletService walletService)
+        IWalletService walletService,
+        RoleManager<IdentityRole> roleManager)
     {
+        _roleManager = roleManager;
         _companyRepository = companyRepository;
         _userManager = userManager;
         _loanRepository = loanRepository;
@@ -458,6 +461,45 @@ public class CompanyService : ICompanyService
         };
     }
 
+    public async Task<CompanyUserDto> GetCompanyUserByIdAsync(string userId, Guid? companyScope)
+    {
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null || (companyScope.HasValue && !user.BelongsToCompany(companyScope.Value)))
+        {
+            // Other companies' users are reported as not found
+            throw new AppException("User not found", 404);
+        }
+
+        var roleIdsByName = _roleManager.Roles.ToDictionary(r => r.Name!, r => r.Id);
+        return await MapCompanyUserAsync(user, roleIdsByName);
+    }
+
+    private async Task<CompanyUserDto> MapCompanyUserAsync(ApplicationUser user, IReadOnlyDictionary<string, string> roleIdsByName)
+    {
+        var userRoles = await _userManager.GetRolesAsync(user);
+
+        return new CompanyUserDto
+        {
+            Id = user.Id,
+            FirstName = user.FirstName,
+            LastName = user.LastName,
+            Email = user.Email ?? string.Empty,
+            PhoneNumber = user.PhoneNumber,
+            Address = user.Address,
+            City = user.City,
+            State = user.State,
+            Gender = user.Gender,
+            DateOfBirth = user.DateOfBirth,
+            IsActive = user.IsActive,
+            CreatedAt = user.CreatedAt,
+            LastLoginAt = user.LastLoginAt,
+            Role = userRoles.FirstOrDefault(),
+            Roles = userRoles
+                .Select(name => new RoleSummaryDto { Id = roleIdsByName.GetValueOrDefault(name, string.Empty), Name = name })
+                .ToList()
+        };
+    }
+
     public async Task<PagedCompanyUserListDto> GetCompanyUsersAsync(Guid companyId, CompanyUserFilterDto filter)
     {
         // Verify company exists
@@ -515,30 +557,11 @@ public class CompanyService : ICompanyService
         }
 
         // Map users to DTOs with roles
+        var roleIdsByName = _roleManager.Roles.ToDictionary(r => r.Name!, r => r.Id);
         var userDtos = new List<CompanyUserDto>();
         foreach (var user in users)
         {
-            var userRoles = await _userManager.GetRolesAsync(user);
-            
-            var userDto = new CompanyUserDto
-            {
-                Id = user.Id,
-                FirstName = user.FirstName,
-                LastName = user.LastName,
-                Email = user.Email ?? string.Empty,
-                PhoneNumber = user.PhoneNumber,
-                Address = user.Address,
-                City = user.City,
-                State = user.State,
-                Gender = user.Gender,
-                DateOfBirth = user.DateOfBirth,
-                IsActive = user.IsActive,
-                CreatedAt = user.CreatedAt,
-                LastLoginAt = user.LastLoginAt,
-                Role = userRoles.FirstOrDefault()
-            };
-
-            userDtos.Add(userDto);
+            userDtos.Add(await MapCompanyUserAsync(user, roleIdsByName));
         }
 
         var totalCount = userDtos.Count;
@@ -546,7 +569,7 @@ public class CompanyService : ICompanyService
         // Apply role-based filtering
         if (!string.IsNullOrEmpty(filter.Role))
         {
-            userDtos = userDtos.Where(u => u.Role == filter.Role).ToList();
+            userDtos = userDtos.Where(u => u.Roles.Any(r => r.Name == filter.Role)).ToList();
             totalCount = userDtos.Count;
         }
 

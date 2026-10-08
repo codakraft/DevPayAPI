@@ -16,8 +16,8 @@ namespace LendingSolution.API.Controllers;
 [ApiController]
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/[controller]")]
-// [Authorize]
-[AllowAnonymous]
+// Uploads stay anonymous for borrower onboarding; everything else is SuperAdmin only
+[Authorize]
 public class DocumentController : ControllerBase
 {
     private readonly IDocumentService _documentService;
@@ -44,6 +44,7 @@ public class DocumentController : ControllerBase
     /// Test Firebase connectivity
     /// </summary>
     [HttpGet("test-firebase")]
+    [Authorize(Roles = "SuperAdmin")]
     public async Task<IActionResult> TestFirebase()
     {
         try
@@ -70,6 +71,7 @@ public class DocumentController : ControllerBase
     /// Upload a new document
     /// </summary>
     [HttpPost("upload")]
+    [AllowAnonymous]
     public async Task<ActionResult<DocumentUploadResultDto>> UploadDocument([FromBody] UploadDocumentDto uploadDto)
     {
         try
@@ -89,7 +91,7 @@ public class DocumentController : ControllerBase
         catch (AppException ex)
         {
             _logger.LogError(ex, "Error uploading document: {DocumentName}", uploadDto.DocumentName);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -103,6 +105,7 @@ public class DocumentController : ControllerBase
     /// Uploads documents immediately to Firebase
     /// </summary>
     [HttpPost("upload-multipart")]
+    [AllowAnonymous]
     [RequestSizeLimit(52428800)] // 50MB limit
     [RequestFormLimits(MultipartBodyLengthLimit = 52428800)]
     public async Task<ActionResult<MultipartUploadResponseDto>> UploadMultipartDocuments([FromForm] IFormFileCollection files)
@@ -194,6 +197,7 @@ public class DocumentController : ControllerBase
     /// Get document by database ID (use the 'id' field from upload response, not 'documentId')
     /// </summary>
     [HttpGet("{id}")]
+    [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult<DocumentDto>> GetDocument(string id)
     {
         try
@@ -212,7 +216,7 @@ public class DocumentController : ControllerBase
         catch (AppException ex)
         {
             _logger.LogError(ex, "Error retrieving document: {DocumentId}", id);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -225,6 +229,7 @@ public class DocumentController : ControllerBase
     /// Get all documents
     /// </summary>
     [HttpGet]
+    [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult<List<DocumentDto>>> GetAllDocuments()
     {
         try
@@ -239,7 +244,7 @@ public class DocumentController : ControllerBase
         catch (AppException ex)
         {
             _logger.LogError(ex, "Error retrieving all documents");
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -252,6 +257,7 @@ public class DocumentController : ControllerBase
     /// Delete document by ID
     /// </summary>
     [HttpDelete("{id}")]
+    [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult> DeleteDocument(string id)
     {
         try
@@ -271,7 +277,7 @@ public class DocumentController : ControllerBase
         catch (AppException ex)
         {
             _logger.LogError(ex, "Error deleting document: {DocumentId}", id);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {

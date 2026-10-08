@@ -34,13 +34,24 @@ public class PaystackService : IPaystackService
     {
         try
         {
-            var payload = new
+            var redirectUrl = callbackUrl ?? _paystackSettings.CallbackUrl;
+            var payload = new Dictionary<string, object?>
             {
-                email,
-                amount = (int)(amount * 100), // Paystack expects amount in kobo (for NGN)
-                reference,
-                callback_url = callbackUrl ?? _paystackSettings.CallbackUrl
+                ["email"] = email,
+                ["amount"] = (int)(amount * 100), // Paystack expects amount in kobo (for NGN)
+                ["reference"] = reference,
+                ["callback_url"] = redirectUrl
             };
+
+            // Paystack only follows callback_url after a completed payment; cancel_action is where its
+            // checkout sends the user when they cancel or the payment is declined
+            if (!string.IsNullOrEmpty(redirectUrl))
+            {
+                payload["metadata"] = new Dictionary<string, string>
+                {
+                    ["cancel_action"] = $"{redirectUrl}{(redirectUrl.Contains('?') ? '&' : '?')}status=cancelled"
+                };
+            }
 
             var json = JsonSerializer.Serialize(payload);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -81,6 +92,49 @@ public class PaystackService : IPaystackService
                 Status = false,
                 Message = "An error occurred while initializing payment"
             };
+        }
+    }
+
+    public async Task<PaystackVerificationResult> VerifyTransactionAsync(string reference)
+    {
+        try
+        {
+            var response = await _httpClient.GetAsync($"/transaction/verify/{Uri.EscapeDataString(reference)}");
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Paystack verify failed for reference {Reference}: {Status} {Response}",
+                    reference, response.StatusCode, responseContent);
+                return new PaystackVerificationResult { Verified = false };
+            }
+
+            using var document = JsonDocument.Parse(responseContent);
+            var root = document.RootElement;
+            if (!root.TryGetProperty("status", out var okElement) || !okElement.GetBoolean() ||
+                !root.TryGetProperty("data", out var data))
+            {
+                return new PaystackVerificationResult { Verified = false };
+            }
+
+            var result = new PaystackVerificationResult
+            {
+                Verified = true,
+                Status = data.TryGetProperty("status", out var status) ? status.GetString() : null,
+                AmountKobo = data.TryGetProperty("amount", out var amount) && amount.ValueKind == JsonValueKind.Number
+                    ? amount.GetInt64()
+                    : 0,
+                Currency = data.TryGetProperty("currency", out var currency) ? currency.GetString() : null
+            };
+
+            _logger.LogInformation("Paystack verify for reference {Reference}: {Status}, {Amount} {Currency}",
+                reference, result.Status, result.AmountKobo, result.Currency);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error verifying Paystack transaction {Reference}", reference);
+            return new PaystackVerificationResult { Verified = false };
         }
     }
 

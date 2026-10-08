@@ -1,4 +1,6 @@
+using LendingSolution.API.Auth;
 using LendingSolution.Application.Exceptions;
+using LendingSolution.Core.Auth;
 using LendingSolution.Application.Services.Interfaces;
 using LendingSolution.Core.Dtos;
 using LendingSolution.Core.Dtos.Response;
@@ -31,7 +33,7 @@ public class CompanyController(
     private readonly IAuthService _authService = authService;
     private readonly ILogger<CompanyController> _logger = logger;
 
-    [Authorize(Roles = "Admin")]
+    [HasPermission(Permissions.Products.Manage)]
     [HttpPost("product/create")]
     public async Task<IActionResult> CreateProduct([FromBody] CreateLoanProductRequestDto body)
     {
@@ -68,7 +70,7 @@ public class CompanyController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -77,12 +79,17 @@ public class CompanyController(
         }
     }
 
-    [Authorize(Roles = "SuperAdmin, Admin")]
+    [HasPermission(Permissions.Products.View)]
     [HttpGet("loan-products/{companyId}")]
     public async Task<IActionResult> GetLoanProductsByCmopanyId([FromRoute] Guid companyId)
     {
         try
         {
+            if (!User.CanAccessCompany(companyId))
+            {
+                return StatusCode(403, ApiResponse.Fail("You can only view your own company's loan products"));
+            }
+
             var result = await _loanProductService.GetLoanProductsByCompanyId(companyId);
             _logger.LogInformation("Loan products fetched successfully for company {CompanyId}", companyId);
             return Ok(ApiResponse.Ok("Loan products fetched successfully", result));
@@ -90,7 +97,7 @@ public class CompanyController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -112,7 +119,7 @@ public class CompanyController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -134,7 +141,7 @@ public class CompanyController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -156,7 +163,7 @@ public class CompanyController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -166,7 +173,7 @@ public class CompanyController(
     }
 
     // Admin can update their own company info
-    [Authorize(Roles = "Admin")]
+    [HasPermission(Permissions.Company.Manage)]
     [HttpPut("info")]
     public async Task<IActionResult> UpdateCompanyInfo([FromBody] UpdateCompanyRequestDto body)
     {
@@ -187,7 +194,7 @@ public class CompanyController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -197,12 +204,18 @@ public class CompanyController(
     }
 
     // Admin can update loan product info for their company
-    [Authorize(Roles = "Admin")]
+    [HasPermission(Permissions.Products.Manage)]
     [HttpPut("loan-product/{productId}")]
     public async Task<IActionResult> UpdateLoanProduct(Guid productId, [FromBody] UpdateLoanProductRequestDto body)
     {
         try
         {
+            var existingProduct = await _loanProductService.GetLoanProductById(productId);
+            if (!User.CanAccessCompany(existingProduct.CompanyId))
+            {
+                return NotFound(ApiResponse.Fail("Loan product not found"));
+            }
+
             // Validate tenor ranges
             if (body.MinTenor <= 0)
             {
@@ -234,7 +247,7 @@ public class CompanyController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -243,7 +256,7 @@ public class CompanyController(
         }
     }
 
-    [Authorize(Roles = "Admin")]
+    [HasPermission(Permissions.Company.View)]
     [HttpGet("dashboard")]
     public async Task<IActionResult> GetCompanyDashboard()
     {
@@ -264,7 +277,7 @@ public class CompanyController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -280,7 +293,7 @@ public class CompanyController(
     /// <returns>Paginated list of loan products for the admin's company</returns>
     // [GET] /api/company/loan-products
     [HttpGet("loan-products")]
-    [Authorize(Roles = "Admin")]
+    [HasPermission(Permissions.Products.View)]
     public async Task<IActionResult> GetCompanyLoanProducts([FromQuery] LoanProductFilterDto filter)
     {
         try
@@ -299,7 +312,7 @@ public class CompanyController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -315,7 +328,7 @@ public class CompanyController(
     /// <returns>Paginated list of loans for the admin's company</returns>
     // [GET] /api/company/loans[
     [HttpGet("loans")]
-    [Authorize(Roles = "Admin")]
+    [HasPermission(Permissions.Loans.View)]
     public async Task<IActionResult> GetCompanyLoans([FromQuery] LoanFilterDto filter)
     {
         try
@@ -334,7 +347,7 @@ public class CompanyController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -350,11 +363,16 @@ public class CompanyController(
     /// <returns>Loan details if it belongs to the admin's company</returns>
     // [GET] /api/company/loans/{loanId}
     [HttpGet("loans/{loanId}")]
-    [Authorize(Roles = "Admin")]
+    [HasPermission(Permissions.Loans.View)]
     public async Task<IActionResult> GetLoanById(Guid loanId)
     {
         try
         {
+            if (!await User.CanAccessLoanAsync(_loanService, loanId))
+            {
+                return NotFound(ApiResponse.Fail("Loan not found"));
+            }
+
             // Get company ID from JWT
             var companyIdClaim = User.FindFirstValue("CompanyId");
             if (string.IsNullOrEmpty(companyIdClaim) || !Guid.TryParse(companyIdClaim, out var companyId))
@@ -371,7 +389,7 @@ public class CompanyController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -401,7 +419,7 @@ public class CompanyController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -431,7 +449,7 @@ public class CompanyController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -446,7 +464,7 @@ public class CompanyController(
     /// <returns>Company details for the authenticated admin</returns>
     // [GET] /api/company/my-company
     [HttpGet("my-company")]
-    [Authorize(Roles = "Admin")]
+    [HasPermission(Permissions.Company.View)]
     public async Task<IActionResult> GetMyCompany()
     {
         try
@@ -483,7 +501,7 @@ public class CompanyController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -493,7 +511,7 @@ public class CompanyController(
     }
 
     // Admin can update their own company logo
-    [Authorize(Roles = "Admin")]
+    [HasPermission(Permissions.Company.Manage)]
     [HttpPatch("logo")]
     public async Task<IActionResult> UpdateCompanyLogo([FromBody] UpdateCompanyLogoDto body)
     {
@@ -533,7 +551,7 @@ public class CompanyController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -577,7 +595,7 @@ public class CompanyController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -592,8 +610,44 @@ public class CompanyController(
     /// <param name="filter">Filter parameters for searching and filtering users</param>
     /// <returns>Paginated list of company users with statistics</returns>
     // [GET] /api/company/users
+    /// <summary>
+    /// Gets one user by id, in the same shape as the users list. Users from other companies
+    /// return 404; SuperAdmin can read any user.
+    /// </summary>
+    // [GET] /api/company/users/{userId}
+    [HttpGet("users/{userId}")]
+    [HasPermission(Permissions.Users.View)]
+    public async Task<IActionResult> GetCompanyUserById(string userId)
+    {
+        try
+        {
+            Guid? companyScope = null;
+            if (!User.IsSuperAdmin())
+            {
+                companyScope = User.GetCompanyId();
+                if (companyScope is null)
+                {
+                    return BadRequest(ApiResponse.Fail("Company ID not found in token"));
+                }
+            }
+
+            var result = await _companyService.GetCompanyUserByIdAsync(userId, companyScope);
+            return Ok(ApiResponse.Ok("User fetched successfully", result));
+        }
+        catch (AppException ex)
+        {
+            _logger.LogError(ex, ex.Message);
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while fetching company user.");
+            return StatusCode(500, ApiResponse.Fail("An unexpected error occurred"));
+        }
+    }
+
     [HttpGet("users")]
-    [Authorize(Roles = "Admin")]
+    [HasPermission(Permissions.Users.View)]
     public async Task<IActionResult> GetCompanyUsers([FromQuery] CompanyUserFilterDto filter)
     {
         try
@@ -612,7 +666,7 @@ public class CompanyController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -629,7 +683,7 @@ public class CompanyController(
     /// <returns>Created user details with assigned role and company</returns>
     // [POST] /api/company/users/create
     [HttpPost("users/create")]
-    [Authorize(Roles = "Admin")]
+    [HasPermission(Permissions.Users.Manage)]
     public async Task<IActionResult> CreateCompanyUser([FromBody] CreateCompanyUserRequestDto body)
     {
         try
@@ -658,7 +712,7 @@ public class CompanyController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -687,7 +741,7 @@ public class CompanyController(
         catch (AppException ex)
         {
             _logger.LogError(ex, ex.Message);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -701,11 +755,16 @@ public class CompanyController(
     /// Admin/SuperAdmin can trigger this when existing documents are unclear or need updating
     /// </summary>
     [HttpPost("loans/{loanId}/request-image-reupload")]
-    [Authorize(Roles = "Admin, SuperAdmin")]
+    [HasPermission(Permissions.Loans.Manage)]
     public async Task<IActionResult> RequestImageReupload(Guid loanId, [FromBody] RequestImageReuploadDto request)
     {
         try
         {
+            if (!await User.CanAccessLoanAsync(_loanService, loanId))
+            {
+                return NotFound(ApiResponse.Fail("Loan not found"));
+            }
+
             // Ensure loanId matches the request
             if (request.LoanId != loanId)
             {
@@ -719,7 +778,7 @@ public class CompanyController(
         catch (AppException ex)
         {
             _logger.LogError(ex, "Error requesting image re-upload for loan {LoanId}", loanId);
-            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message));
+            return StatusCode(ex.StatusCode, ApiResponse.Fail(ex.Message).WithCode(ex.ErrorCode));
         }
         catch (Exception ex)
         {

@@ -4,8 +4,8 @@ namespace LendingSolution.Application.Services.Interfaces;
 
 public interface IFinanceService
 {
-    Task<List<DisbursementDto>> GetAllDisbursementsAsync();
-    Task<List<DisbursementDto>> GetCompanyDisbursementsAsync(Guid companyId);
+    /// <summary>Disbursements newest first; all companies when <paramref name="companyId"/> is null.</summary>
+    Task<PagedDisbursementListDto> GetDisbursementsAsync(Guid? companyId, int page, int pageSize);
     Task<PagedRepaymentDto> GetAllRepaymentsAsync(RepaymentFilterDto filters);
     Task<DisbursementDto> ProcessDisbursementAsync(string loanId, DisbursementRequestDto request, string? processedBy = null);
     Task<RepaymentDto> ProcessRepaymentAsync(RepaymentRequestDto request, string? processedBy = null);

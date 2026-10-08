@@ -5,6 +5,18 @@ namespace LendingSolution.Core.Dtos;
 public class BorrowerCurrentStepRequestDto
 {
     public string Email { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Code emailed by POST Borrower/resume/request-otp. Required to resume an application.
+    /// </summary>
+    public string Otp { get; set; } = string.Empty;
+}
+
+public class BorrowerResumeOtpRequestDto
+{
+    [System.ComponentModel.DataAnnotations.Required]
+    [System.ComponentModel.DataAnnotations.EmailAddress]
+    public string Email { get; set; } = string.Empty;
 }
 
 public class BorrowerCurrentStepResponseDto
